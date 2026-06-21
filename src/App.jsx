@@ -156,6 +156,19 @@ export default function App() {
 
   /* свайп по контенту */
   const sx = useRef(0); const sy = useRef(0); const swiped = useRef(false);
+
+  /* long-press вкладки -> контекстное меню */
+  const tabLp = useRef();
+  const tabDown = (ev, i) => {
+    clearTimeout(tabLp.current);
+    const t = tabs[i];
+    tabLp.current = setTimeout(() => {
+      buzz(15); setActive(i);
+      setCtx({ tab: t, x: ev.clientX, y: ev.clientY });
+    }, 450);
+  };
+  const tabUp = () => clearTimeout(tabLp.current);
+
   const onTS = (e) => { sx.current = e.touches[0].clientX; sy.current = e.touches[0].clientY; swiped.current = false; };
   const onTM = (e) => {
     const dx = e.touches[0].clientX - sx.current, dy = e.touches[0].clientY - sy.current;
@@ -184,14 +197,17 @@ export default function App() {
   const doDelete = async () => {
     const names = [...sel];
     setConfirmDel(false);
+    let ok = 0, err = null;
     for (const name of names) {
       const e = entries.find((x) => x.name === name);
       try {
         if (e?.type === "directory") await Filesystem.rmdir({ path: rel(name), directory: DIR, recursive: true });
         else await Filesystem.deleteFile({ path: rel(name), directory: DIR });
-      } catch (er) { alert("Не удалось удалить " + name + ": " + er.message); }
+        ok++;
+      } catch (er) { err = er.message || String(er); }
     }
     exitSel(); await refresh();
+    showToast(err ? "Ошибка удаления: " + err : "Удалено: " + ok);
   };
   const doRename = async () => {
     const name = [...sel][0];
@@ -213,15 +229,13 @@ export default function App() {
     setClip(null); await refresh();
   };
 
-  /* контекстное меню папки */
-  const folderStartup = () => {
-    const fp = join(path, ctx.item.name);
-    ls.set(SKEY, fp); buzz(15); setCtx(null);
-    showToast("Открывается при старте: " + ctx.item.name);
+  /* контекстное меню вкладки */
+  const tabStartup = () => {
+    ls.set(SKEY, ctx.tab.path); buzz(15); setCtx(null);
+    showToast("Открывается при старте: " + (ctx.tab.path ? baseName(ctx.tab.path) : "Storage"));
   };
-  const folderRemember = () => {
-    const fp = join(path, ctx.item.name);
-    setTabPath(fp); buzz(15); setCtx(null);
+  const tabRemember = () => {
+    saveTabs(tabs); buzz(15); setCtx(null);
     showToast("Вкладка сохранена");
   };
 
@@ -237,8 +251,7 @@ export default function App() {
     pX.current = ev.clientX; pY.current = ev.clientY;
     lpTimer.current = setTimeout(() => {
       lpFired.current = true; buzz(15);
-      if (e.type === "directory" && !selMode) setCtx({ item: e, x: ev.clientX, y: ev.clientY });
-      else toggle(e.name);
+      toggle(e.name);
     }, 450);
   };
   const rMove = (ev) => {
@@ -255,6 +268,8 @@ export default function App() {
         <div style={S.tabs}>
           {tabs.map((t, i) => (
             <div key={t.id} onClick={() => setActive(i)}
+              onPointerDown={(ev) => tabDown(ev, i)} onPointerUp={tabUp}
+              onPointerMove={tabUp} onPointerCancel={tabUp}
               style={{ ...S.tab, ...(i === active ? S.tabActive : {}) }}>
               <span style={{ overflow: "hidden", textOverflow: "ellipsis", maxWidth: 120 }}>
                 {t.path ? baseName(t.path) : "Storage"}
@@ -364,13 +379,13 @@ export default function App() {
             boxShadow: "0 8px 32px rgba(0,0,0,.6)", overflow: "hidden", minWidth: 210,
             animation: "dropGrow .2s cubic-bezier(.2,.9,.3,1.2)", transformOrigin: "top left",
           }}>
-            <div style={S.ctxTitle}>{ctx.item.name}</div>
-            <div style={S.ctxItem} onClick={folderStartup}>
+            <div style={S.ctxTitle}>{ctx.tab.path ? baseName(ctx.tab.path) : "Storage"}</div>
+            <div style={S.ctxItem} onClick={tabStartup}>
               <span style={{ color: GOLD, display: "flex" }}><Svg d={I.star} size={20} /></span>
               Открывать при старте
             </div>
             <div style={{ height: 1, background: LINE }} />
-            <div style={S.ctxItem} onClick={folderRemember}>
+            <div style={S.ctxItem} onClick={tabRemember}>
               <span style={{ color: ACC, display: "flex" }}><Svg d={I.pin} size={20} /></span>
               Запомнить расположение
             </div>
