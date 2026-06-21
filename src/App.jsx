@@ -197,17 +197,20 @@ export default function App() {
   const doDelete = async () => {
     const names = [...sel];
     setConfirmDel(false);
-    let ok = 0, err = null;
+    let ok = 0, fail = 0;
     for (const name of names) {
       const e = entries.find((x) => x.name === name);
       try {
         if (e?.type === "directory") await Filesystem.rmdir({ path: rel(name), directory: DIR, recursive: true });
         else await Filesystem.deleteFile({ path: rel(name), directory: DIR });
-        ok++;
-      } catch (er) { err = er.message || String(er); }
+      } catch (er) { /* проверим фактический результат ниже */ }
+      // реальная проверка: существует ли ещё
+      try { await Filesystem.stat({ path: rel(name), directory: DIR }); fail++; }
+      catch { ok++; }
     }
     exitSel(); await refresh();
-    showToast(err ? "Ошибка удаления: " + err : "Удалено: " + ok);
+    if (fail) showToast("Не удалось удалить " + fail + ". Включите «Доступ ко всем файлам» в настройках приложения");
+    else showToast("Удалено: " + ok);
   };
   const doRename = async () => {
     const name = [...sel][0];
@@ -305,11 +308,11 @@ export default function App() {
               <div key={e.name} style={{ ...S.row, ...(isSel ? S.rowSel : {}) }}
                 onPointerDown={(ev) => rDown(ev, e)} onPointerMove={rMove}
                 onPointerUp={() => rUp(e)} onPointerCancel={() => clearTimeout(lpTimer.current)}>
+                {selMode && <span style={{ ...S.check, ...(isSel ? S.checkOn : {}) }}>{isSel ? "✓" : ""}</span>}
+                <span style={S.name}>{e.name}</span>
                 <span style={{ color: e.type === "directory" ? GOLD : SUB, display: "flex" }}>
                   <Svg d={e.type === "directory" ? I.folder : I.file} size={26} />
                 </span>
-                <span style={S.name}>{e.name}</span>
-                {selMode && <span style={{ ...S.check, ...(isSel ? S.checkOn : {}) }}>{isSel ? "✓" : ""}</span>}
               </div>
             );
           })}
@@ -443,7 +446,7 @@ const S = {
   row: { display: "flex", alignItems: "center", gap: 14, padding: "13px 16px",
     borderBottom: "1px solid #241A11", touchAction: "pan-y" },
   rowSel: { background: "#3A2A18" },
-  name: { flex: 1, fontSize: 15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+  name: { flex: 1, fontSize: 15, textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
   check: { width: 24, height: 24, borderRadius: 12, border: "2px solid " + SUB,
     display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 },
   checkOn: { background: ACC, borderColor: ACC, color: "#fff" },
