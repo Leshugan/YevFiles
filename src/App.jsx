@@ -3,25 +3,34 @@ import { Filesystem, Directory, Encoding } from "@capacitor/filesystem";
 import { App as CapApp } from "@capacitor/app";
 
 /* ===== Files — leshugan.fm =====
-   Файловый менеджер реальной ФС телефона (Directory.ExternalStorage). */
+   Файловый менеджер реальной ФС телефона (Directory.ExternalStorage).
+   Стиль перенят из Notenger (шоколадная тема). */
 
-const BG = "#0e1621";
-const BAR = "#17212b";
-const ROW2 = "#1c2733";
-const ACC = "#5fa8ff";
-const RED = "#e06b6b";
-const TXT = "#e9eef3";
-const SUB = "#7d8e9e";
+const BG = "#1C140C";
+const BAR = "#2A2017";
+const ROW2 = "#2E251C";
+const ACC = "#EF6C00";
+const GOLD = "#F5A623";
+const RED = "#E05252";
+const TXT = "#F2EAE0";
+const SUB = "#B0A498";
+const LINE = "#4A3A2A";
 const DIR = Directory.ExternalStorage;
 const TKEY = "fm_tabs_v1";
+const SKEY = "fm_startup_v1";
 
 let mem = null;
-const loadTabs = () => { try { return JSON.parse(localStorage.getItem(TKEY)); } catch { return mem; } };
-const saveTabs = (t) => { mem = t; try { localStorage.setItem(TKEY, JSON.stringify(t)); } catch {} };
+const ls = {
+  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+};
+const loadTabs = () => { try { return JSON.parse(ls.get(TKEY)); } catch { return mem; } };
+const saveTabs = (t) => { mem = t; ls.set(TKEY, JSON.stringify(t)); };
 
 const join = (a, b) => (a ? a + "/" + b : b);
 const parent = (p) => (p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "");
 const baseName = (p) => (p.includes("/") ? p.slice(p.lastIndexOf("/") + 1) : p);
+const buzz = (ms) => { try { navigator.vibrate && navigator.vibrate(ms); } catch {} };
 
 const I = {
   back: <path d="M15 18l-6-6 6-6" />,
@@ -34,6 +43,8 @@ const I = {
   paste: <><rect x="6" y="4" width="12" height="16" rx="2" /><path d="M9 4h6v3H9z" /></>,
   folder: <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />,
   file: <><path d="M6 2h9l5 5v15H6z" /><path d="M14 2v6h6" /></>,
+  star: <path d="M12 3l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 18.8 6.2 21.8l1.1-6.5L2.6 10.7l6.5-.9z" />,
+  pin: <><path d="M9 4h6l-1 7 4 3v2H6v-2l4-3z" /><path d="M12 16v4" /></>,
 };
 const Svg = ({ d, size = 24 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
@@ -41,7 +52,13 @@ const Svg = ({ d, size = 24 }) => (
 );
 
 export default function App() {
-  const [tabs, setTabs] = useState(() => loadTabs() || [{ id: 1, path: "" }]);
+  const [tabs, setTabs] = useState(() => {
+    const saved = loadTabs();
+    const start = ls.get(SKEY);
+    let base = saved && saved.length ? saved : [{ id: 1, path: "" }];
+    if (start != null) base = [{ id: Date.now(), path: start }, ...base.filter((t) => t.path !== start)];
+    return base;
+  });
   const [active, setActive] = useState(0);
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -52,11 +69,14 @@ export default function App() {
   const [query, setQuery] = useState(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [confirmDel, setConfirmDel] = useState(false);
+  const [ctx, setCtx] = useState(null);   // контекстное меню {item,x,y}
+  const [toast, setToast] = useState(null);
   const [slide, setSlide] = useState(0);
 
   const cur = tabs[active];
   const path = cur?.path || "";
   const persist = (t) => { setTabs(t); saveTabs(t); };
+  const showToast = (m) => { setToast(m); setTimeout(() => setToast(null), 1800); };
 
   const list = useCallback(async () => {
     setLoading(true); setError(null);
@@ -75,8 +95,14 @@ export default function App() {
   useEffect(() => { Filesystem.requestPermissions().catch(() => {}); }, []);
   useEffect(() => { list(); exitSel(); setQuery(null); /* eslint-disable-next-line */ }, [active, path]);
 
-  const exitSel = () => { setSel(new Set()); setSelMode(false); setConfirmDel(false); };
+  /* обновлять при возврате в приложение */
+  useEffect(() => {
+    let h;
+    CapApp.addListener("resume", () => list()).then((l) => (h = l));
+    return () => { h && h.remove(); };
+  }, [list]);
 
+  const exitSel = () => { setSel(new Set()); setSelMode(false); setConfirmDel(false); };
   const setTabPath = (p) => persist(tabs.map((x, i) => (i === active ? { ...x, path: p } : x)));
   const goUp = () => { if (path) setTabPath(parent(path)); };
   const closeTab = (i) => {
@@ -85,10 +111,11 @@ export default function App() {
     persist(t); setActive(Math.max(0, Math.min(active, t.length - 1)));
   };
 
-  /* ---- аппаратная кнопка Назад ---- */
+  /* аппаратная кнопка Назад */
   useEffect(() => {
     let h;
     CapApp.addListener("backButton", () => {
+      if (ctx) { setCtx(null); return; }
       if (confirmDel) { setConfirmDel(false); return; }
       if (createOpen) { setCreateOpen(false); return; }
       if (query !== null) { setQuery(null); return; }
@@ -99,23 +126,20 @@ export default function App() {
     }).then((l) => (h = l));
     return () => { h && h.remove(); };
     // eslint-disable-next-line
-  }, [confirmDel, createOpen, query, selMode, path, tabs, active]);
+  }, [ctx, confirmDel, createOpen, query, selMode, path, tabs, active]);
 
-  /* ---- выделение (тоггл) ---- */
+  /* выделение */
   const toggle = (name) => {
     const n = new Set(sel);
     n.has(name) ? n.delete(name) : n.add(name);
-    setSel(n);
-    setSelMode(n.size > 0);
+    setSel(n); setSelMode(n.size > 0);
   };
   const selectAll = () => { setSelMode(true); setSel(new Set(visible.map((e) => e.name))); };
-
   const open = (e) => {
     if (selMode) { toggle(e.name); return; }
     if (e.type === "directory") setTabPath(join(path, e.name));
     else toggle(e.name);
   };
-  const longPress = (e) => toggle(e.name);
 
   /* вкладки */
   const addTab = () => {
@@ -134,14 +158,13 @@ export default function App() {
   const sx = useRef(0); const sy = useRef(0); const swiped = useRef(false);
   const onTS = (e) => { sx.current = e.touches[0].clientX; sy.current = e.touches[0].clientY; swiped.current = false; };
   const onTM = (e) => {
-    const dx = e.touches[0].clientX - sx.current;
-    const dy = e.touches[0].clientY - sy.current;
+    const dx = e.touches[0].clientX - sx.current, dy = e.touches[0].clientY - sy.current;
     if (!swiped.current && Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 1.5) {
       swiped.current = true; switchTab(dx > 0 ? -1 : 1);
     }
   };
 
-  /* файловые операции */
+  /* файловые операции — каждая завершается refresh */
   const rel = (name) => join(path, name);
   const refresh = () => list();
 
@@ -159,14 +182,16 @@ export default function App() {
     catch (e) { alert("Ошибка: " + e.message); }
   };
   const doDelete = async () => {
-    for (const name of sel) {
+    const names = [...sel];
+    setConfirmDel(false);
+    for (const name of names) {
       const e = entries.find((x) => x.name === name);
       try {
         if (e?.type === "directory") await Filesystem.rmdir({ path: rel(name), directory: DIR, recursive: true });
         else await Filesystem.deleteFile({ path: rel(name), directory: DIR });
-      } catch (er) { alert(name + ": " + er.message); }
+      } catch (er) { alert("Не удалось удалить " + name + ": " + er.message); }
     }
-    exitSel(); refresh();
+    exitSel(); await refresh();
   };
   const doRename = async () => {
     const name = [...sel][0];
@@ -185,20 +210,36 @@ export default function App() {
         else await Filesystem.rename({ from, to, directory: DIR, toDirectory: DIR });
       } catch (e) { alert(name + ": " + e.message); }
     }
-    setClip(null); refresh();
+    setClip(null); await refresh();
+  };
+
+  /* контекстное меню папки */
+  const folderStartup = () => {
+    const fp = join(path, ctx.item.name);
+    ls.set(SKEY, fp); buzz(15); setCtx(null);
+    showToast("Открывается при старте: " + ctx.item.name);
+  };
+  const folderRemember = () => {
+    const fp = join(path, ctx.item.name);
+    setTabPath(fp); buzz(15); setCtx(null);
+    showToast("Вкладка сохранена");
   };
 
   const visible = query
     ? entries.filter((e) => e.name.toLowerCase().includes(query.toLowerCase()))
     : entries;
 
-  /* tap / long-press через pointer (без двойного срабатывания) */
+  /* tap / long-press через pointer */
   const lpTimer = useRef(); const lpFired = useRef(false); const moved = useRef(false);
   const pX = useRef(0); const pY = useRef(0);
   const rDown = (ev, e) => {
     lpFired.current = false; moved.current = false;
     pX.current = ev.clientX; pY.current = ev.clientY;
-    lpTimer.current = setTimeout(() => { lpFired.current = true; longPress(e); }, 450);
+    lpTimer.current = setTimeout(() => {
+      lpFired.current = true; buzz(15);
+      if (e.type === "directory" && !selMode) setCtx({ item: e, x: ev.clientX, y: ev.clientY });
+      else toggle(e.name);
+    }, 450);
   };
   const rMove = (ev) => {
     if (Math.abs(ev.clientX - pX.current) > 10 || Math.abs(ev.clientY - pY.current) > 10) {
@@ -236,7 +277,7 @@ export default function App() {
         ) : <span style={{ color: SUB }}>/storage</span>}
       </div>
 
-      {/* СПИСОК */}
+      {/* СПИСОК — прижат к низу, растёт вверх */}
       <main style={S.list} onTouchStart={onTS} onTouchMove={onTM}>
         <div key={active} style={{ ...S.slideWrap, animation: slide ? `fm-in-${slide > 0 ? "r" : "l"} .22s ease` : "none" }}>
           {loading && <div style={S.note}>Загрузка…</div>}
@@ -249,7 +290,7 @@ export default function App() {
               <div key={e.name} style={{ ...S.row, ...(isSel ? S.rowSel : {}) }}
                 onPointerDown={(ev) => rDown(ev, e)} onPointerMove={rMove}
                 onPointerUp={() => rUp(e)} onPointerCancel={() => clearTimeout(lpTimer.current)}>
-                <span style={{ color: e.type === "directory" ? ACC : SUB, display: "flex" }}>
+                <span style={{ color: e.type === "directory" ? GOLD : SUB, display: "flex" }}>
                   <Svg d={e.type === "directory" ? I.folder : I.file} size={26} />
                 </span>
                 <span style={S.name}>{e.name}</span>
@@ -269,7 +310,7 @@ export default function App() {
         </div>
       )}
 
-      {/* НИЖНЯЯ ПАНЕЛЬ — три зоны, центр всегда совпадает */}
+      {/* НИЖНЯЯ ПАНЕЛЬ — три зоны, центр совпадает */}
       <nav style={S.bottom}>
         {!selMode ? (
           <>
@@ -282,9 +323,10 @@ export default function App() {
                     <Btn onClick={() => setCreateOpen((v) => !v)} icon={I.plus} label="Создать" accent />
                     {createOpen && (
                       <>
-                        <div style={S.menuOverlay} onClick={() => setCreateOpen(false)} />
+                        <div style={S.overlay} onClick={() => setCreateOpen(false)} />
                         <div style={S.createMenu}>
                           <div style={S.createItem} onClick={doCreateFolder}>Папка</div>
+                          <div style={{ height: 1, background: LINE }} />
                           <div style={S.createItem} onClick={doCreateTxt}>TXT</div>
                         </div>
                       </>
@@ -310,9 +352,40 @@ export default function App() {
         )}
       </nav>
 
+      {/* КОНТЕКСТНОЕ МЕНЮ ПАПКИ */}
+      {ctx && (
+        <>
+          <div style={{ position: "fixed", inset: 0, zIndex: 1190 }} onClick={() => setCtx(null)} />
+          <div style={{
+            position: "fixed", zIndex: 1200,
+            top: Math.min(ctx.y, window.innerHeight - 150),
+            left: Math.min(ctx.x, window.innerWidth - 230),
+            background: BAR, borderRadius: 12, border: "1px solid " + LINE,
+            boxShadow: "0 8px 32px rgba(0,0,0,.6)", overflow: "hidden", minWidth: 210,
+            animation: "dropGrow .2s cubic-bezier(.2,.9,.3,1.2)", transformOrigin: "top left",
+          }}>
+            <div style={S.ctxTitle}>{ctx.item.name}</div>
+            <div style={S.ctxItem} onClick={folderStartup}>
+              <span style={{ color: GOLD, display: "flex" }}><Svg d={I.star} size={20} /></span>
+              Открывать при старте
+            </div>
+            <div style={{ height: 1, background: LINE }} />
+            <div style={S.ctxItem} onClick={folderRemember}>
+              <span style={{ color: ACC, display: "flex" }}><Svg d={I.pin} size={20} /></span>
+              Запомнить расположение
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ТОСТ */}
+      {toast && <div style={S.toast}>{toast}</div>}
+
       <style>{`
         @keyframes fm-in-r{from{transform:translateX(-14%);opacity:.4}to{transform:none;opacity:1}}
         @keyframes fm-in-l{from{transform:translateX(14%);opacity:.4}to{transform:none;opacity:1}}
+        @keyframes dropGrow{from{opacity:0;transform:scale(.88)}to{opacity:1;transform:scale(1)}}
+        @keyframes fS{from{opacity:0}to{opacity:1}}
         *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none}
         input{-webkit-user-select:text;user-select:text}
         body{margin:0}
@@ -325,7 +398,7 @@ export default function App() {
 const Zone = ({ children }) => <div style={{ flex: 1, display: "flex" }}>{children}</div>;
 
 function Btn({ onClick, icon, text, label, accent, red, underline, disabled }) {
-  const color = disabled ? "#445" : red ? RED : accent ? ACC : TXT;
+  const color = disabled ? "#5c4d3e" : red ? RED : accent ? ACC : TXT;
   return (
     <button onClick={disabled ? undefined : onClick} style={{ ...S.btn, color }}>
       <span style={{ display: "flex", height: 26, alignItems: "center",
@@ -340,7 +413,7 @@ function Btn({ onClick, icon, text, label, accent, red, underline, disabled }) {
 const S = {
   app: { display: "flex", flexDirection: "column", height: "100vh", background: BG,
     color: TXT, fontFamily: "system-ui,-apple-system,Roboto,sans-serif", overflow: "hidden" },
-  tabsbar: { display: "flex", alignItems: "center", background: BAR, borderBottom: "1px solid #0a0f15", flexShrink: 0 },
+  tabsbar: { display: "flex", alignItems: "center", background: BAR, borderBottom: "1px solid #16100A", flexShrink: 0 },
   tabs: { display: "flex", overflowX: "auto", flex: 1 },
   tab: { display: "flex", alignItems: "center", gap: 6, padding: "12px 14px", fontSize: 14,
     color: SUB, whiteSpace: "nowrap", borderBottom: "2px solid transparent" },
@@ -348,28 +421,36 @@ const S = {
   tabX: { fontSize: 17, color: SUB, padding: "0 2px" },
   tabAdd: { border: "none", background: "transparent", color: ACC, fontSize: 22, width: 46, height: 46, flexShrink: 0 },
   crumb: { padding: "8px 16px", fontSize: 13, background: BG, flexShrink: 0,
-    borderBottom: "1px solid #11202c", overflow: "hidden", whiteSpace: "nowrap" },
-  list: { flex: 1, overflowY: "auto", overflowX: "hidden" },
-  slideWrap: { minHeight: "100%" },
+    borderBottom: "1px solid #241A11", overflow: "hidden", whiteSpace: "nowrap" },
+  list: { flex: 1, overflowY: "auto", overflowX: "hidden", display: "flex", flexDirection: "column" },
+  slideWrap: { marginTop: "auto" },
   note: { color: SUB, textAlign: "center", padding: "60px 24px", lineHeight: 1.6 },
   row: { display: "flex", alignItems: "center", gap: 14, padding: "13px 16px",
-    borderBottom: "1px solid #131e28", touchAction: "pan-y" },
-  rowSel: { background: "#1d3650" },
+    borderBottom: "1px solid #241A11", touchAction: "pan-y" },
+  rowSel: { background: "#3A2A18" },
   name: { flex: 1, fontSize: 15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
   check: { width: 24, height: 24, borderRadius: 12, border: "2px solid " + SUB,
     display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 },
   checkOn: { background: ACC, borderColor: ACC, color: "#fff" },
   searchBar: { display: "flex", alignItems: "center", background: ROW2, padding: 8, gap: 8, flexShrink: 0 },
-  searchInput: { flex: 1, padding: "10px 12px", borderRadius: 8, border: "1px solid #2a3a47",
+  searchInput: { flex: 1, padding: "10px 12px", borderRadius: 8, border: "1px solid " + LINE,
     background: BAR, color: TXT, fontSize: 15, outline: "none" },
   searchClose: { border: "none", background: "transparent", color: SUB, fontSize: 24, width: 40 },
-  bottom: { display: "flex", background: BAR, borderTop: "1px solid #0a0f15",
+  bottom: { display: "flex", background: BAR, borderTop: "1px solid #16100A",
     paddingBottom: "env(safe-area-inset-bottom)", flexShrink: 0 },
   btn: { flex: 1, border: "none", background: "transparent", padding: "10px 4px 12px",
     display: "flex", flexDirection: "column", alignItems: "center", gap: 4 },
   btnLabel: { fontSize: 11, color: SUB },
-  menuOverlay: { position: "fixed", inset: 0, zIndex: 8 },
-  createMenu: { position: "absolute", bottom: 60, right: 0, zIndex: 9, background: ROW2,
-    borderRadius: 10, overflow: "hidden", border: "1px solid #2a3a47", boxShadow: "0 6px 24px #0009", minWidth: 130 },
+  overlay: { position: "fixed", inset: 0, zIndex: 8 },
+  createMenu: { position: "absolute", bottom: 60, right: 0, zIndex: 9, background: BAR,
+    borderRadius: 12, overflow: "hidden", border: "1px solid " + LINE,
+    boxShadow: "0 8px 32px rgba(0,0,0,.6)", minWidth: 130, animation: "dropGrow .2s cubic-bezier(.2,.9,.3,1.2)" },
   createItem: { padding: "14px 22px", fontSize: 15, color: TXT },
+  ctxTitle: { padding: "10px 14px", fontSize: 12, color: SUB, borderBottom: "1px solid " + LINE,
+    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 210 },
+  ctxItem: { display: "flex", alignItems: "center", gap: 12, padding: "13px 14px", fontSize: 14, color: TXT },
+  toast: { position: "fixed", left: "50%", bottom: 90, transform: "translateX(-50%)",
+    background: ROW2, color: TXT, padding: "10px 18px", borderRadius: 20, fontSize: 13,
+    border: "1px solid " + LINE, boxShadow: "0 6px 24px rgba(0,0,0,.5)", zIndex: 1300,
+    animation: "fS .2s ease", maxWidth: "80%" },
 };
