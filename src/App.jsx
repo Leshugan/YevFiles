@@ -1,66 +1,102 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Filesystem, Directory, Encoding } from "@capacitor/filesystem";
 import { App as CapApp } from "@capacitor/app";
+import { FileOpener } from "@capacitor-community/file-opener";
 
-/* ===== Files — leshugan.fm =====
-   Файловый менеджер реальной ФС телефона (Directory.ExternalStorage).
-   Стиль перенят из Notenger (шоколадная тема). */
+/* ===== YevFiles — leshugan.fm =====  стиль Notenger (шоколад) */
 
-const BG = "#1C140C";
-const BAR = "#2A2017";
-const ROW2 = "#2E251C";
-const ACC = "#EF6C00";
-const GOLD = "#F5A623";
-const RED = "#E05252";
-const TXT = "#F2EAE0";
-const SUB = "#B0A498";
-const LINE = "#4A3A2A";
+const BG = "#1C140C", BAR = "#2A2017", ROW2 = "#2E251C", ACC = "#EF6C00";
+const GOLD = "#F5A623", RED = "#E05252", TXT = "#F2EAE0", SUB = "#B0A498", LINE = "#4A3A2A";
 const DIR = Directory.ExternalStorage;
-const TKEY = "fm_tabs_v1";
-const SKEY = "fm_startup_v1";
+const TKEY = "fm_tabs_v1", SKEY = "fm_startup_v1", METAKEY = "fm_meta_v1", SORTKEY = "fm_sort_v1";
 
 let mem = null;
-const ls = {
-  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
-  set(k, v) { try { localStorage.setItem(k, v); } catch {} },
-};
+const ls = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } },
+  set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
 const loadTabs = () => { try { return JSON.parse(ls.get(TKEY)); } catch { return mem; } };
 const saveTabs = (t) => { mem = t; ls.set(TKEY, JSON.stringify(t)); };
+const loadMeta = () => { try { const m = JSON.parse(ls.get(METAKEY)) || {}; return { hidden: new Set(m.hidden || []), pinTop: new Set(m.pinTop || []), pinBot: new Set(m.pinBot || []) }; } catch { return { hidden: new Set(), pinTop: new Set(), pinBot: new Set() }; } };
+const saveMeta = (m) => ls.set(METAKEY, JSON.stringify({ hidden: [...m.hidden], pinTop: [...m.pinTop], pinBot: [...m.pinBot] }));
 
 const join = (a, b) => (a ? a + "/" + b : b);
 const parent = (p) => (p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "");
 const baseName = (p) => (p.includes("/") ? p.slice(p.lastIndexOf("/") + 1) : p);
 const buzz = (ms) => { try { navigator.vibrate && navigator.vibrate(ms); } catch {} };
+const splitExt = (name, isDir) => {
+  if (isDir) return { base: name, ext: "" };
+  const i = name.lastIndexOf(".");
+  if (i <= 0) return { base: name, ext: "" };
+  return { base: name.slice(0, i), ext: name.slice(i + 1) };
+};
+const fmtSize = (b) => { if (b == null) return "—"; const u = ["Б", "КБ", "МБ", "ГБ"]; let i = 0, n = b; while (n >= 1024 && i < 3) { n /= 1024; i++; } return (i ? n.toFixed(1) : n) + " " + u[i] + (i ? " (" + b.toLocaleString("ru") + " Б)" : ""); };
+const ago = (ms) => { if (!ms) return "—"; const d = new Date(ms), diff = (Date.now() - ms) / 60000; const rel = diff < 1 ? "только что" : diff < 60 ? Math.floor(diff) + " мин назад" : diff < 1440 ? Math.floor(diff / 60) + " ч назад" : Math.floor(diff / 1440) + " дн назад"; const p = (n) => String(n).padStart(2, "0"); return `${p(d.getHours())}:${p(d.getMinutes())}, ${p(d.getDate())}.${p(d.getMonth() + 1)}.${String(d.getFullYear()).slice(2)} · ${rel}`; };
+
+const MIME = { txt: "text/plain", md: "text/plain", log: "text/plain", csv: "text/csv", html: "text/html", json: "application/json", xml: "text/xml", pdf: "application/pdf", jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", gif: "image/gif", webp: "image/webp", bmp: "image/bmp", svg: "image/svg+xml", mp4: "video/mp4", mkv: "video/x-matroska", avi: "video/x-msvideo", mov: "video/quicktime", webm: "video/webm", "3gp": "video/3gpp", mp3: "audio/mpeg", wav: "audio/wav", ogg: "audio/ogg", flac: "audio/flac", m4a: "audio/mp4", aac: "audio/aac", zip: "application/zip", rar: "application/vnd.rar", "7z": "application/x-7z-compressed", apk: "application/vnd.android.package-archive" };
+const mimeOf = (name) => MIME[(name.split(".").pop() || "").toLowerCase()] || "*/*";
 
 const I = {
   back: <path d="M15 18l-6-6 6-6" />,
   search: <><circle cx="11" cy="11" r="7" /><path d="M21 21l-4-4" /></>,
   selectAll: <><rect x="3" y="3" width="18" height="18" rx="3" /><path d="M8 12l3 3 5-6" /></>,
   plus: <><path d="M12 5v14" /><path d="M5 12h14" /></>,
+  x: <><path d="M6 6l12 12" /><path d="M18 6L6 18" /></>,
   cut: <><circle cx="6" cy="6" r="3" /><circle cx="6" cy="18" r="3" /><path d="M20 4L8.5 15.5" /><path d="M20 20L8.5 8.5" /></>,
   copy: <><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V5a2 2 0 0 1 2-2h8" /></>,
   trash: <><path d="M3 6h18" /><path d="M8 6V4h8v2" /><path d="M6 6l1 14h10l1-14" /></>,
+  rename: <><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /></>,
   paste: <><rect x="6" y="4" width="12" height="16" rx="2" /><path d="M9 4h6v3H9z" /></>,
+  info: <><circle cx="12" cy="12" r="9" /><path d="M12 11v5M12 8h.01" /></>,
+  dots: <><circle cx="12" cy="5" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="12" cy="19" r="1.6" /></>,
+  sort: <><path d="M7 4v16M7 20l-3-3M7 4l3 3" /><path d="M17 20V4M17 4l3 3M17 20l-3-3" /></>,
+  eye: <><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" /><circle cx="12" cy="12" r="3" /></>,
+  eyeOff: <><path d="M3 3l18 18" /><path d="M10.6 10.6a3 3 0 0 0 4.2 4.2" /><path d="M9.9 5.1A9.7 9.7 0 0 1 12 5c6.5 0 10 7 10 7a16 16 0 0 1-3.2 3.9M6.2 6.2A16 16 0 0 0 2 12s3.5 7 10 7a9.7 9.7 0 0 0 3.1-.5" /></>,
+  pinT: <><path d="M12 3v8M8 7l4-4 4 4" /><path d="M5 14h14M5 14v6h14v-6" /></>,
+  pinB: <><path d="M12 21v-8M8 17l4 4 4-4" /><path d="M5 10h14M5 10V4h14v6" /></>,
   folder: <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />,
   file: <><path d="M6 2h9l5 5v15H6z" /><path d="M14 2v6h6" /></>,
+  img: <><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><path d="M21 15l-5-5L5 21" /></>,
+  video: <><rect x="2" y="5" width="14" height="14" rx="2" /><path d="M16 10l6-3v10l-6-3z" /></>,
+  audio: <><path d="M9 18V5l10-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="16" cy="16" r="3" /></>,
+  archive: <><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M12 3v18M9 7h6M9 11h6" /></>,
+  code: <><path d="M8 9l-4 3 4 3" /><path d="M16 9l4 3-4 3" /></>,
   star: <path d="M12 3l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 18.8 6.2 21.8l1.1-6.5L2.6 10.7l6.5-.9z" />,
   pin: <><path d="M9 4h6l-1 7 4 3v2H6v-2l4-3z" /><path d="M12 16v4" /></>,
 };
 const Svg = ({ d, size = 24 }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
-    stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{d}</svg>
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{d}</svg>
 );
+const EXT = {
+  img: ["jpg", "jpeg", "png", "gif", "webp", "bmp", "svg", "heic"],
+  video: ["mp4", "mkv", "avi", "mov", "webm", "3gp", "flv"],
+  audio: ["mp3", "wav", "ogg", "flac", "m4a", "aac"],
+  archive: ["zip", "rar", "7z", "tar", "gz", "apk", "obb"],
+  code: ["js", "jsx", "ts", "json", "html", "css", "xml", "py", "java", "kt", "c", "cpp", "sh"],
+};
+const fileIcon = (name) => {
+  const ext = (name.split(".").pop() || "").toLowerCase();
+  if (EXT.img.includes(ext)) return { d: I.img, c: "#7FB3FF" };
+  if (EXT.video.includes(ext)) return { d: I.video, c: "#C98BFF" };
+  if (EXT.audio.includes(ext)) return { d: I.audio, c: "#FF9D6B" };
+  if (EXT.archive.includes(ext)) return { d: I.archive, c: GOLD };
+  if (EXT.code.includes(ext)) return { d: I.code, c: "#6FD3A8" };
+  return { d: I.file, c: SUB };
+};
+const SORTS = [
+  ["az", "Имя: А-Я / A-Z"], ["za", "Имя: Я-А / Z-A"],
+  ["sizeD", "Размер: больше → меньше"], ["sizeA", "Размер: меньше → больше"],
+  ["dateN", "Дата: новые сверху"], ["dateO", "Дата: старые сверху"],
+];
 
 export default function App() {
   const [tabs, setTabs] = useState(() => {
-    const saved = loadTabs();
-    const start = ls.get(SKEY);
+    const saved = loadTabs(), start = ls.get(SKEY);
     let base = saved && saved.length ? saved : [{ id: 1, path: "" }];
     if (start != null) base = [{ id: Date.now(), path: start }, ...base.filter((t) => t.path !== start)];
     return base;
   });
   const [active, setActive] = useState(0);
   const [entries, setEntries] = useState([]);
+  const [curUri, setCurUri] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [sel, setSel] = useState(() => new Set());
@@ -69,24 +105,32 @@ export default function App() {
   const [query, setQuery] = useState(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [confirmDel, setConfirmDel] = useState(false);
-  const [ctx, setCtx] = useState(null);   // контекстное меню {item,x,y}
+  const [ctx, setCtx] = useState(null);
+  const [sheet, setSheet] = useState(null);
   const [toast, setToast] = useState(null);
   const [slide, setSlide] = useState(0);
+  const [meta, setMeta] = useState(loadMeta);
+  const [showHidden, setShowHidden] = useState(false);
+  const [sortMode, setSortMode] = useState(() => ls.get(SORTKEY) || "az");
+  const [headMenu, setHeadMenu] = useState(false);
+  const [selMenu, setSelMenu] = useState(false);
+  const [props, setProps] = useState(null);
+  const [propCount, setPropCount] = useState(null);
 
-  const cur = tabs[active];
-  const path = cur?.path || "";
+  const cur = tabs[active], path = cur?.path || "";
   const persist = (t) => { setTabs(t); saveTabs(t); };
-  const showToast = (m) => { setToast(m); setTimeout(() => setToast(null), 1800); };
+  const showToast = (m) => { setToast(m); setTimeout(() => setToast(null), 1900); };
+  const byName = (n) => entries.find((x) => x.name === n);
+  const keyOf = (name) => join(path, name);
+  const isHidden = (e) => meta.hidden.has(keyOf(e.name)) || e.name.startsWith(".");
+
+  const applyMeta = (m) => { setMeta({ ...m }); saveMeta(m); };
 
   const list = useCallback(async () => {
     setLoading(true); setError(null);
     try {
+      try { const u = await Filesystem.getUri({ path, directory: DIR }); setCurUri(u.uri); } catch {}
       const { files } = await Filesystem.readdir({ path, directory: DIR });
-      files.sort((a, b) => {
-        const ad = a.type === "directory", bd = b.type === "directory";
-        if (ad !== bd) return ad ? -1 : 1;
-        return a.name.localeCompare(b.name);
-      });
       setEntries(files);
     } catch (e) { setError(e.message || "Нет доступа к хранилищу"); setEntries([]); }
     setLoading(false);
@@ -94,27 +138,25 @@ export default function App() {
 
   useEffect(() => { Filesystem.requestPermissions().catch(() => {}); }, []);
   useEffect(() => { list(); exitSel(); setQuery(null); /* eslint-disable-next-line */ }, [active, path]);
-
-  /* обновлять при возврате в приложение */
+  useEffect(() => { let h; CapApp.addListener("resume", () => list()).then((l) => (h = l)); return () => h && h.remove(); }, [list]);
+  useEffect(() => { ls.set(SORTKEY, sortMode); }, [sortMode]);
   useEffect(() => {
-    let h;
-    CapApp.addListener("resume", () => list()).then((l) => (h = l));
-    return () => { h && h.remove(); };
-  }, [list]);
+    if (!props || props.type !== "directory") { setPropCount(null); return; }
+    (async () => { try { const { files } = await Filesystem.readdir({ path: props.uri }); setPropCount({ d: files.filter((f) => f.type === "directory").length, f: files.filter((f) => f.type !== "directory").length }); } catch { setPropCount(null); } })();
+  }, [props]);
 
-  const exitSel = () => { setSel(new Set()); setSelMode(false); setConfirmDel(false); };
+  const exitSel = () => { setSel(new Set()); setSelMode(false); setConfirmDel(false); setSelMenu(false); };
   const setTabPath = (p) => persist(tabs.map((x, i) => (i === active ? { ...x, path: p } : x)));
   const goUp = () => { if (path) setTabPath(parent(path)); };
-  const closeTab = (i) => {
-    if (tabs.length === 1) return;
-    const t = tabs.filter((_, idx) => idx !== i);
-    persist(t); setActive(Math.max(0, Math.min(active, t.length - 1)));
-  };
+  const closeTab = (i) => { if (tabs.length === 1) return; const t = tabs.filter((_, idx) => idx !== i); persist(t); setActive(Math.max(0, Math.min(active, t.length - 1))); };
 
-  /* аппаратная кнопка Назад */
   useEffect(() => {
     let h;
     CapApp.addListener("backButton", () => {
+      if (props) { setProps(null); return; }
+      if (sheet) { setSheet(null); return; }
+      if (selMenu) { setSelMenu(false); return; }
+      if (headMenu) { setHeadMenu(false); return; }
       if (ctx) { setCtx(null); return; }
       if (confirmDel) { setConfirmDel(false); return; }
       if (createOpen) { setCreateOpen(false); return; }
@@ -124,195 +166,152 @@ export default function App() {
       if (tabs.length > 1) { closeTab(active); return; }
       CapApp.exitApp();
     }).then((l) => (h = l));
-    return () => { h && h.remove(); };
+    return () => h && h.remove();
     // eslint-disable-next-line
-  }, [ctx, confirmDel, createOpen, query, selMode, path, tabs, active]);
+  }, [props, sheet, selMenu, headMenu, ctx, confirmDel, createOpen, query, selMode, path, tabs, active]);
 
-  /* выделение */
-  const toggle = (name) => {
-    const n = new Set(sel);
-    n.has(name) ? n.delete(name) : n.add(name);
-    setSel(n); setSelMode(n.size > 0);
-  };
+  const toggle = (name) => { const n = new Set(sel); n.has(name) ? n.delete(name) : n.add(name); setSel(n); setSelMode(n.size > 0); };
   const selectAll = () => { setSelMode(true); setSel(new Set(visible.map((e) => e.name))); };
+
+  const openExternal = async (e) => {
+    try { await FileOpener.open({ filePath: e.uri, contentType: mimeOf(e.name) }); }
+    catch (err) { showToast("Не удалось открыть: " + (err?.message || "нет приложения для типа")); }
+  };
   const open = (e) => {
     if (selMode) { toggle(e.name); return; }
     if (e.type === "directory") setTabPath(join(path, e.name));
-    else toggle(e.name);
+    else openExternal(e);
   };
 
-  /* вкладки */
-  const addTab = () => {
-    const id = Date.now();
-    const t = [...tabs, { id, path: "" }];
-    persist(t); setActive(t.length - 1);
-  };
-  const switchTab = (dir) => {
-    const ni = active + dir;
-    if (ni < 0 || ni >= tabs.length) return;
-    setSlide(dir); setActive(ni);
-    setTimeout(() => setSlide(0), 220);
-  };
-
-  /* свайп по контенту */
-  const sx = useRef(0); const sy = useRef(0); const swiped = useRef(false);
-
-  /* long-press вкладки -> контекстное меню */
+  const addTab = () => { const id = Date.now(); const t = [...tabs, { id, path: "" }]; persist(t); setActive(t.length - 1); };
+  const switchTab = (dir) => { const ni = active + dir; if (ni < 0 || ni >= tabs.length) return; setSlide(dir); setActive(ni); setTimeout(() => setSlide(0), 220); };
+  const sx = useRef(0), sy = useRef(0), swiped = useRef(false);
+  const onTS = (e) => { sx.current = e.touches[0].clientX; sy.current = e.touches[0].clientY; swiped.current = false; };
+  const onTM = (e) => { const dx = e.touches[0].clientX - sx.current, dy = e.touches[0].clientY - sy.current; if (!swiped.current && Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 1.5) { swiped.current = true; switchTab(dx > 0 ? -1 : 1); } };
   const tabLp = useRef();
-  const tabDown = (ev, i) => {
-    clearTimeout(tabLp.current);
-    const t = tabs[i];
-    tabLp.current = setTimeout(() => {
-      buzz(15); setActive(i);
-      setCtx({ tab: t, x: ev.clientX, y: ev.clientY });
-    }, 450);
-  };
+  const tabDown = (ev, i) => { clearTimeout(tabLp.current); const t = tabs[i]; tabLp.current = setTimeout(() => { buzz(15); setActive(i); setCtx({ tab: t, x: ev.clientX, y: ev.clientY }); }, 450); };
   const tabUp = () => clearTimeout(tabLp.current);
 
-  const onTS = (e) => { sx.current = e.touches[0].clientX; sy.current = e.touches[0].clientY; swiped.current = false; };
-  const onTM = (e) => {
-    const dx = e.touches[0].clientX - sx.current, dy = e.touches[0].clientY - sy.current;
-    if (!swiped.current && Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 1.5) {
-      swiped.current = true; switchTab(dx > 0 ? -1 : 1);
-    }
-  };
-
-  /* файловые операции — каждая завершается refresh */
-  const rel = (name) => join(path, name);
+  /* операции через .uri */
   const refresh = () => list();
-
-  const doCreateFolder = async () => {
-    setCreateOpen(false);
-    const name = prompt("Имя папки"); if (!name) return;
-    try { await Filesystem.mkdir({ path: rel(name), directory: DIR }); refresh(); }
-    catch (e) { alert("Ошибка: " + e.message); }
-  };
-  const doCreateTxt = async () => {
-    setCreateOpen(false);
-    let name = prompt("Имя файла (.txt)"); if (!name) return;
-    if (!/\.txt$/i.test(name)) name += ".txt";
-    try { await Filesystem.writeFile({ path: rel(name), directory: DIR, data: "", encoding: Encoding.UTF8 }); refresh(); }
-    catch (e) { alert("Ошибка: " + e.message); }
-  };
+  const targetUri = (name) => (curUri ? curUri + "/" + name : null);
+  const doCreateFolder = async (name) => { setSheet(null); if (!name) return; try { await Filesystem.mkdir({ path: targetUri(name) }); refresh(); } catch (e) { showToast("Ошибка: " + e.message); } };
+  const doCreateTxt = async (name) => { setSheet(null); if (!name) return; if (!/\.txt$/i.test(name)) name += ".txt"; try { await Filesystem.writeFile({ path: targetUri(name), data: "", encoding: Encoding.UTF8 }); refresh(); } catch (e) { showToast("Ошибка: " + e.message); } };
+  const doRename = async (oldName, newName) => { setSheet(null); if (!newName || newName === oldName) return; const e = byName(oldName); if (!e) return; try { await Filesystem.rename({ from: e.uri, to: targetUri(newName) }); exitSel(); refresh(); } catch (er) { showToast("Ошибка: " + er.message); } };
   const doDelete = async () => {
-    const names = [...sel];
-    setConfirmDel(false);
-    let ok = 0, fail = 0;
-    for (const name of names) {
-      const e = entries.find((x) => x.name === name);
-      try {
-        if (e?.type === "directory") await Filesystem.rmdir({ path: rel(name), directory: DIR, recursive: true });
-        else await Filesystem.deleteFile({ path: rel(name), directory: DIR });
-      } catch (er) { /* проверим фактический результат ниже */ }
-      // реальная проверка: существует ли ещё
-      try { await Filesystem.stat({ path: rel(name), directory: DIR }); fail++; }
-      catch { ok++; }
-    }
+    const names = [...sel]; setConfirmDel(false); let ok = 0, fail = 0;
+    for (const name of names) { const e = byName(name); if (!e) { fail++; continue; } try { if (e.type === "directory") await Filesystem.rmdir({ path: e.uri, recursive: true }); else await Filesystem.deleteFile({ path: e.uri }); ok++; } catch { fail++; } }
     exitSel(); await refresh();
-    if (fail) showToast("Не удалось удалить " + fail + ". Включите «Доступ ко всем файлам» в настройках приложения");
-    else showToast("Удалено: " + ok);
+    showToast(fail ? "Не удалено: " + fail + (ok ? ", удалено: " + ok : "") : "Удалено: " + ok);
   };
-  const doRename = async () => {
-    const name = [...sel][0];
-    const nn = prompt("Новое имя", name); if (!nn || nn === name) return;
-    try { await Filesystem.rename({ from: rel(name), to: rel(nn), directory: DIR, toDirectory: DIR }); exitSel(); refresh(); }
-    catch (e) { alert("Ошибка: " + e.message); }
-  };
-  const grab = (mode) => { setClip({ mode, dir: path, items: [...sel] }); exitSel(); };
-  const paste = async () => {
-    if (!clip) return;
-    for (const name of clip.items) {
-      const from = join(clip.dir, name), to = rel(name);
-      if (from === to) continue;
-      try {
-        if (clip.mode === "copy") await Filesystem.copy({ from, to, directory: DIR, toDirectory: DIR });
-        else await Filesystem.rename({ from, to, directory: DIR, toDirectory: DIR });
-      } catch (e) { alert(name + ": " + e.message); }
+  const grab = (mode) => { const items = [...sel].map((n) => { const e = byName(n); return e ? { name: n, uri: e.uri, type: e.type } : null; }).filter(Boolean); setClip({ mode, items }); exitSel(); };
+  const paste = async () => { if (!clip) return; for (const it of clip.items) { const to = targetUri(it.name); if (!to || it.uri === to) continue; try { if (clip.mode === "copy") await Filesystem.copy({ from: it.uri, to }); else await Filesystem.rename({ from: it.uri, to }); } catch (e) { showToast(it.name + ": " + e.message); } } setClip(null); await refresh(); };
+
+  /* три точки тулбара: скрыть / закрепить */
+  const metaToggle = (which) => {
+    const m = loadMeta();
+    for (const n of sel) { const k = keyOf(n);
+      if (which === "hidden") { m.hidden.has(k) ? m.hidden.delete(k) : m.hidden.add(k); }
+      if (which === "top") { m.pinBot.delete(k); m.pinTop.has(k) ? m.pinTop.delete(k) : m.pinTop.add(k); }
+      if (which === "bot") { m.pinTop.delete(k); m.pinBot.has(k) ? m.pinBot.delete(k) : m.pinBot.add(k); }
     }
-    setClip(null); await refresh();
+    applyMeta(m); setSelMenu(false); exitSel();
+    showToast(which === "hidden" ? "Готово (скрытые)" : "Закреплено");
   };
 
-  /* контекстное меню вкладки */
-  const tabStartup = () => {
-    ls.set(SKEY, ctx.tab.path); buzz(15); setCtx(null);
-    showToast("Открывается при старте: " + (ctx.tab.path ? baseName(ctx.tab.path) : "Storage"));
-  };
-  const tabRemember = () => {
-    saveTabs(tabs); buzz(15); setCtx(null);
-    showToast("Вкладка сохранена");
-  };
+  const tabStartup = () => { ls.set(SKEY, ctx.tab.path); buzz(15); setCtx(null); showToast("Открывается при старте: " + (ctx.tab.path ? baseName(ctx.tab.path) : "Storage")); };
+  const tabRemember = () => { saveTabs(tabs); buzz(15); setCtx(null); showToast("Вкладка сохранена"); };
 
-  const visible = query
-    ? entries.filter((e) => e.name.toLowerCase().includes(query.toLowerCase()))
-    : entries;
+  const copyPath = async (p) => { try { await navigator.clipboard.writeText(p); showToast("Путь скопирован"); } catch { showToast("Не удалось скопировать"); } };
 
-  /* tap / long-press через pointer */
-  const lpTimer = useRef(); const lpFired = useRef(false); const moved = useRef(false);
-  const pX = useRef(0); const pY = useRef(0);
-  const rDown = (ev, e) => {
-    lpFired.current = false; moved.current = false;
-    pX.current = ev.clientX; pY.current = ev.clientY;
-    lpTimer.current = setTimeout(() => {
-      lpFired.current = true; buzz(15);
-      toggle(e.name);
-    }, 450);
+  /* отображаемый список: фильтр скрытых -> поиск -> сортировка -> папки сверху -> пины */
+  const cmp = (a, b) => {
+    if (sortMode === "az") return a.name.localeCompare(b.name, "ru");
+    if (sortMode === "za") return b.name.localeCompare(a.name, "ru");
+    if (sortMode === "sizeA") return (a.size || 0) - (b.size || 0);
+    if (sortMode === "sizeD") return (b.size || 0) - (a.size || 0);
+    if (sortMode === "dateN") return (b.mtime || 0) - (a.mtime || 0);
+    if (sortMode === "dateO") return (a.mtime || 0) - (b.mtime || 0);
+    return 0;
   };
-  const rMove = (ev) => {
-    if (Math.abs(ev.clientX - pX.current) > 10 || Math.abs(ev.clientY - pY.current) > 10) {
-      moved.current = true; clearTimeout(lpTimer.current);
-    }
-  };
+  let visible = entries.filter((e) => showHidden || !isHidden(e));
+  if (query) visible = visible.filter((e) => e.name.toLowerCase().includes(query.toLowerCase()));
+  visible = [...visible].sort((a, b) => {
+    const ad = a.type === "directory", bd = b.type === "directory";
+    if (ad !== bd) return ad ? -1 : 1;
+    return cmp(a, b);
+  });
+  const rank = (e) => (meta.pinTop.has(keyOf(e.name)) ? -1 : meta.pinBot.has(keyOf(e.name)) ? 1 : 0);
+  visible = [...visible].sort((a, b) => rank(a) - rank(b));
+
+  const lpTimer = useRef(), lpFired = useRef(false), moved = useRef(false), pX = useRef(0), pY = useRef(0);
+  const rDown = (ev, e) => { lpFired.current = false; moved.current = false; pX.current = ev.clientX; pY.current = ev.clientY; lpTimer.current = setTimeout(() => { lpFired.current = true; buzz(15); toggle(e.name); }, 450); };
+  const rMove = (ev) => { if (Math.abs(ev.clientX - pX.current) > 10 || Math.abs(ev.clientY - pY.current) > 10) { moved.current = true; clearTimeout(lpTimer.current); } };
   const rUp = (e) => { clearTimeout(lpTimer.current); if (lpFired.current || moved.current) return; open(e); };
+
+  const one = sel.size === 1 ? byName([...sel][0]) : null;
 
   return (
     <div style={S.app}>
-      {/* ВКЛАДКИ */}
+      {/* ВКЛАДКИ + действия шапки */}
       <div style={S.tabsbar}>
         <div style={S.tabs}>
           {tabs.map((t, i) => (
             <div key={t.id} onClick={() => setActive(i)}
-              onPointerDown={(ev) => tabDown(ev, i)} onPointerUp={tabUp}
-              onPointerMove={tabUp} onPointerCancel={tabUp}
+              onPointerDown={(ev) => tabDown(ev, i)} onPointerUp={tabUp} onPointerMove={tabUp} onPointerCancel={tabUp}
               style={{ ...S.tab, ...(i === active ? S.tabActive : {}) }}>
-              <span style={{ overflow: "hidden", textOverflow: "ellipsis", maxWidth: 120 }}>
-                {t.path ? baseName(t.path) : "Storage"}
-              </span>
-              {tabs.length > 1 && (
-                <span style={S.tabX} onClick={(e) => { e.stopPropagation(); closeTab(i); }}>×</span>
-              )}
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis", maxWidth: 110 }}>{t.path ? baseName(t.path) : "Storage"}</span>
+              {tabs.length > 1 && <span style={S.tabX} onClick={(e) => { e.stopPropagation(); closeTab(i); }}>×</span>}
             </div>
           ))}
         </div>
-        <button style={S.tabAdd} onClick={addTab}>＋</button>
+        <button style={S.hbtn} onClick={addTab}><Svg d={I.plus} size={22} /></button>
+        <div style={{ position: "relative" }}>
+          <button style={S.hbtn} onClick={() => setHeadMenu((v) => !v)}><Svg d={I.dots} size={22} /></button>
+          {headMenu && (
+            <>
+              <div style={S.overlay} onClick={() => setHeadMenu(false)} />
+              <div style={{ ...S.menu, top: 46, right: 4 }}>
+                <div style={S.menuItem} onClick={() => { setHeadMenu(false); setSheet({ kind: "sort" }); }}>
+                  <span style={{ color: ACC, display: "flex" }}><Svg d={I.sort} size={20} /></span>Сортировка
+                </div>
+                <div style={{ height: 1, background: LINE }} />
+                <div style={S.menuItem} onClick={() => { setShowHidden((v) => !v); setHeadMenu(false); }}>
+                  <span style={{ color: showHidden ? ACC : SUB, display: "flex" }}><Svg d={showHidden ? I.eye : I.eyeOff} size={20} /></span>
+                  Скрытые объекты
+                  <span style={{ marginLeft: "auto", ...S.tgl, ...(showHidden ? S.tglOn : {}) }}><span style={{ ...S.knob, ...(showHidden ? S.knobOn : {}) }} /></span>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
       {/* ПУТЬ */}
       <div style={S.crumb}>
-        {path ? (
-          <span onClick={goUp} style={{ display: "flex", alignItems: "center", gap: 6, color: ACC }}>
-            <Svg d={I.back} size={18} /> {path}
-          </span>
-        ) : <span style={{ color: SUB }}>/storage</span>}
+        {path ? <span onClick={goUp} style={{ display: "flex", alignItems: "center", gap: 6, color: ACC }}><Svg d={I.back} size={18} /> {path}</span>
+          : <span style={{ color: SUB }}>/storage</span>}
       </div>
 
-      {/* СПИСОК — прижат к низу, растёт вверх */}
+      {/* СПИСОК */}
       <main style={S.list} onTouchStart={onTS} onTouchMove={onTM}>
         <div key={active} style={{ ...S.slideWrap, animation: slide ? `fm-in-${slide > 0 ? "r" : "l"} .22s ease` : "none" }}>
           {loading && <div style={S.note}>Загрузка…</div>}
-          {error && <div style={{ ...S.note, color: RED }}>{error}<br />
-            <span style={{ fontSize: 12 }}>Разрешите «Доступ ко всем файлам» в настройках приложения.</span></div>}
+          {error && <div style={{ ...S.note, color: RED }}>{error}<br /><span style={{ fontSize: 12 }}>Разрешите «Доступ ко всем файлам» в настройках приложения.</span></div>}
           {!loading && !error && visible.length === 0 && <div style={S.note}>Пусто</div>}
           {visible.map((e) => {
-            const isSel = sel.has(e.name);
+            const isSel = sel.has(e.name), hid = isHidden(e);
+            const ic = e.type === "directory" ? { d: I.folder, c: GOLD } : fileIcon(e.name);
+            const pinned = meta.pinTop.has(keyOf(e.name)) || meta.pinBot.has(keyOf(e.name));
             return (
-              <div key={e.name} style={{ ...S.row, ...(isSel ? S.rowSel : {}) }}
-                onPointerDown={(ev) => rDown(ev, e)} onPointerMove={rMove}
-                onPointerUp={() => rUp(e)} onPointerCancel={() => clearTimeout(lpTimer.current)}>
-                {selMode && <span style={{ ...S.check, ...(isSel ? S.checkOn : {}) }}>{isSel ? "✓" : ""}</span>}
-                <span style={S.name}>{e.name}</span>
-                <span style={{ color: e.type === "directory" ? GOLD : SUB, display: "flex" }}>
-                  <Svg d={e.type === "directory" ? I.folder : I.file} size={26} />
+              <div key={e.name} style={{ ...S.row, ...(isSel ? S.rowSel : {}), opacity: hid ? 0.5 : 1 }}
+                onPointerDown={(ev) => rDown(ev, e)} onPointerMove={rMove} onPointerUp={() => rUp(e)} onPointerCancel={() => clearTimeout(lpTimer.current)}>
+                <span style={{ color: isSel ? ACC : ic.c, display: "flex" }}
+                  onPointerDown={(ev) => ev.stopPropagation()} onClick={(ev) => { ev.stopPropagation(); toggle(e.name); }}>
+                  {isSel ? <span style={S.checkOn}>✓</span> : <Svg d={ic.d} size={26} />}
                 </span>
+                <span style={S.name}>{e.name}</span>
+                {pinned && <span style={{ color: SUB, display: "flex" }}><Svg d={meta.pinTop.has(keyOf(e.name)) ? I.pinT : I.pinB} size={16} /></span>}
               </div>
             );
           })}
@@ -322,153 +321,219 @@ export default function App() {
       {/* ПОИСК */}
       {query !== null && (
         <div style={S.searchBar}>
-          <input autoFocus value={query} placeholder="Поиск в папке…"
-            onChange={(e) => setQuery(e.target.value)} style={S.searchInput} />
+          <input autoFocus value={query} placeholder="Поиск в папке…" onChange={(e) => setQuery(e.target.value)} style={S.searchInput} />
           <button style={S.searchClose} onClick={() => setQuery(null)}>×</button>
         </div>
       )}
 
-      {/* НИЖНЯЯ ПАНЕЛЬ — три зоны, центр совпадает */}
-      <nav style={S.bottom}>
-        {!selMode ? (
-          <>
-            <Zone><Btn onClick={() => setQuery(query === null ? "" : null)} icon={I.search} label="Поиск" /></Zone>
-            <Zone><Btn onClick={selectAll} icon={I.selectAll} label="Все" /></Zone>
-            <Zone>
-              {clip
-                ? <Btn onClick={paste} icon={I.paste} label={"Вставить (" + clip.items.length + ")"} accent />
-                : <div style={{ position: "relative", flex: 1, display: "flex" }}>
-                    <Btn onClick={() => setCreateOpen((v) => !v)} icon={I.plus} label="Создать" accent />
-                    {createOpen && (
-                      <>
-                        <div style={S.overlay} onClick={() => setCreateOpen(false)} />
-                        <div style={S.createMenu}>
-                          <div style={S.createItem} onClick={doCreateFolder}>Папка</div>
-                          <div style={{ height: 1, background: LINE }} />
-                          <div style={S.createItem} onClick={doCreateTxt}>TXT</div>
-                        </div>
-                      </>
-                    )}
-                  </div>}
-            </Zone>
-          </>
-        ) : confirmDel ? (
-          <>
-            <Zone />
-            <Zone><Btn onClick={doDelete} text="Да" label="Удалить" red /></Zone>
-            <Zone><Btn onClick={() => setConfirmDel(false)} text="Нет" label="Отмена" /></Zone>
-          </>
-        ) : (
-          <>
-            <Zone>
-              <Btn onClick={() => grab("cut")} icon={I.cut} label="Вырезать" />
-              <Btn onClick={() => grab("copy")} icon={I.copy} label="Копир." />
-            </Zone>
-            <Zone><Btn onClick={() => setConfirmDel(true)} icon={I.trash} label="Удалить" red /></Zone>
-            <Zone><Btn onClick={doRename} text="A" label="Имя" underline disabled={sel.size !== 1} /></Zone>
-          </>
-        )}
-      </nav>
+      {/* НИЖНЯЯ ПАНЕЛЬ */}
+      {selMode ? (
+        <nav style={{ ...S.bottom, justifyContent: "space-between" }}>
+          <Btn onClick={exitSel} icon={I.x} label="Отмена" flexNone />
+          <div style={{ display: "flex", overflowX: "auto" }}>
+            {confirmDel ? (
+              <>
+                <Btn onClick={doDelete} text="Да" label="Удалить" red flexNone />
+                <Btn onClick={() => setConfirmDel(false)} text="Нет" label="" flexNone />
+              </>
+            ) : (
+              <>
+                <Btn onClick={() => setConfirmDel(true)} icon={I.trash} label="Удалить" red flexNone />
+                <Btn onClick={() => grab("cut")} icon={I.cut} label="Вырезать" flexNone />
+                <Btn onClick={() => grab("copy")} icon={I.copy} label="Копир." flexNone />
+                <Btn onClick={() => { const e = one; const sp = splitExt(e.name, e.type === "directory"); setSheet({ kind: "rename", old: e.name, base: sp.base, ext: sp.ext, editExt: false }); }} icon={I.rename} label="Имя" flexNone disabled={sel.size !== 1} />
+                <Btn onClick={() => setProps(one)} icon={I.info} label="Свойства" flexNone disabled={sel.size !== 1} />
+                <div style={{ position: "relative", display: "flex" }}>
+                  <Btn onClick={() => setSelMenu((v) => !v)} icon={I.dots} label="Ещё" flexNone />
+                  {selMenu && (
+                    <>
+                      <div style={S.overlay} onClick={() => setSelMenu(false)} />
+                      <div style={{ ...S.menu, bottom: 58, right: 4 }}>
+                        <div style={S.menuItem} onClick={() => metaToggle("hidden")}><span style={{ color: SUB, display: "flex" }}><Svg d={I.eyeOff} size={20} /></span>Скрыть</div>
+                        <div style={{ height: 1, background: LINE }} />
+                        <div style={S.menuItem} onClick={() => metaToggle("top")}><span style={{ color: ACC, display: "flex" }}><Svg d={I.pinT} size={20} /></span>Закрепить сверху</div>
+                        <div style={{ height: 1, background: LINE }} />
+                        <div style={S.menuItem} onClick={() => metaToggle("bot")}><span style={{ color: ACC, display: "flex" }}><Svg d={I.pinB} size={20} /></span>Закрепить снизу</div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        </nav>
+      ) : (
+        <nav style={S.bottom}>
+          <Zone><Btn onClick={() => setQuery(query === null ? "" : null)} icon={I.search} label="Поиск" /></Zone>
+          <Zone><Btn onClick={selectAll} icon={I.selectAll} label="Все" /></Zone>
+          <Zone>
+            {clip ? (
+              <div style={{ display: "flex", flex: 1 }}>
+                <Btn onClick={paste} icon={I.paste} label={"Вставить (" + clip.items.length + ")"} accent />
+                <Btn onClick={() => setClip(null)} icon={I.x} label="Отмена" flexNone />
+              </div>
+            ) : (
+              <div style={{ position: "relative", flex: 1, display: "flex" }}>
+                <Btn onClick={() => setCreateOpen((v) => !v)} icon={I.plus} label="Создать" accent />
+                {createOpen && (
+                  <>
+                    <div style={S.overlay} onClick={() => setCreateOpen(false)} />
+                    <div style={{ ...S.menu, bottom: 58, right: 0 }}>
+                      <div style={S.createItem} onClick={() => { setCreateOpen(false); setSheet({ kind: "folder", val: "" }); }}>Папка</div>
+                      <div style={{ height: 1, background: LINE }} />
+                      <div style={S.createItem} onClick={() => { setCreateOpen(false); setSheet({ kind: "txt", val: "" }); }}>TXT</div>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </Zone>
+        </nav>
+      )}
 
-      {/* КОНТЕКСТНОЕ МЕНЮ ПАПКИ */}
+      {/* КОНТЕКСТНОЕ МЕНЮ ВКЛАДКИ */}
       {ctx && (
         <>
           <div style={{ position: "fixed", inset: 0, zIndex: 1190 }} onClick={() => setCtx(null)} />
-          <div style={{
-            position: "fixed", zIndex: 1200,
-            top: Math.min(ctx.y, window.innerHeight - 150),
-            left: Math.min(ctx.x, window.innerWidth - 230),
-            background: BAR, borderRadius: 12, border: "1px solid " + LINE,
-            boxShadow: "0 8px 32px rgba(0,0,0,.6)", overflow: "hidden", minWidth: 210,
-            animation: "dropGrow .2s cubic-bezier(.2,.9,.3,1.2)", transformOrigin: "top left",
-          }}>
+          <div style={{ position: "fixed", zIndex: 1200, top: Math.min(ctx.y, window.innerHeight - 150), left: Math.min(ctx.x, window.innerWidth - 230), background: BAR, borderRadius: 12, border: "1px solid " + LINE, boxShadow: "0 8px 32px rgba(0,0,0,.6)", overflow: "hidden", minWidth: 210, animation: "dropGrow .2s cubic-bezier(.2,.9,.3,1.2)", transformOrigin: "top left" }}>
             <div style={S.ctxTitle}>{ctx.tab.path ? baseName(ctx.tab.path) : "Storage"}</div>
-            <div style={S.ctxItem} onClick={tabStartup}>
-              <span style={{ color: GOLD, display: "flex" }}><Svg d={I.star} size={20} /></span>
-              Открывать при старте
-            </div>
+            <div style={S.menuItem} onClick={tabStartup}><span style={{ color: GOLD, display: "flex" }}><Svg d={I.star} size={20} /></span>Открывать при старте</div>
             <div style={{ height: 1, background: LINE }} />
-            <div style={S.ctxItem} onClick={tabRemember}>
-              <span style={{ color: ACC, display: "flex" }}><Svg d={I.pin} size={20} /></span>
-              Запомнить расположение
-            </div>
+            <div style={S.menuItem} onClick={tabRemember}><span style={{ color: ACC, display: "flex" }}><Svg d={I.pin} size={20} /></span>Запомнить расположение</div>
           </div>
         </>
       )}
 
-      {/* ТОСТ */}
+      {/* НИЖНИЕ ПОПАПЫ */}
+      {sheet && (
+        <div style={S.backdrop} onClick={() => setSheet(null)}>
+          <div style={S.sheet} onClick={(e) => e.stopPropagation()}>
+            {sheet.kind === "folder" && <SheetInput title="Новая папка" value={sheet.val} placeholder="Имя папки" onChange={(v) => setSheet({ ...sheet, val: v })} onCancel={() => setSheet(null)} onOk={() => doCreateFolder(sheet.val.trim())} okText="Создать" />}
+            {sheet.kind === "txt" && <SheetInput title="Новый TXT-файл" value={sheet.val} placeholder="Имя файла" onChange={(v) => setSheet({ ...sheet, val: v })} onCancel={() => setSheet(null)} onOk={() => doCreateTxt(sheet.val.trim())} okText="Создать" />}
+            {sheet.kind === "rename" && (
+              <>
+                <div style={S.sheetTitle}>Переименовать</div>
+                <input autoFocus value={sheet.editExt ? sheet.ext : sheet.base} placeholder={sheet.editExt ? "расширение" : "имя"}
+                  onChange={(e) => setSheet({ ...sheet, [sheet.editExt ? "ext" : "base"]: e.target.value })} style={S.sheetField} />
+                <div style={{ display: "flex", gap: 10 }}>
+                  <button style={S.sheetGhost} onClick={() => setSheet({ ...sheet, editExt: !sheet.editExt })}>{sheet.editExt ? "Имя" : "Расширение"}</button>
+                  <button style={S.sheetGhost} onClick={() => setSheet(null)}>Отмена</button>
+                  <button style={S.sheetOk} onClick={() => { const nn = sheet.base.trim() + (sheet.ext.trim() ? "." + sheet.ext.trim() : ""); doRename(sheet.old, nn); }}>ОК</button>
+                </div>
+              </>
+            )}
+            {sheet.kind === "sort" && (
+              <>
+                <div style={S.sheetTitle}>Сортировка</div>
+                {SORTS.map(([k, lbl]) => (
+                  <div key={k} style={{ ...S.sortRow, ...(sortMode === k ? { color: ACC } : {}) }} onClick={() => { setSortMode(k); setSheet(null); }}>
+                    {lbl}{sortMode === k && <span style={{ marginLeft: "auto" }}>✓</span>}
+                  </div>
+                ))}
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* СВОЙСТВА */}
+      {props && (
+        <div style={S.backdrop} onClick={() => setProps(null)}>
+          <div style={S.sheet} onClick={(e) => e.stopPropagation()}>
+            <div style={S.sheetTitle}>{props.name}</div>
+            <Prop k="Путь (нажмите, чтобы скопировать)" v={path ? "/" + keyOf(props.name) : "/" + props.name} onClick={() => copyPath(props.uri)} link />
+            {props.type === "directory" && <Prop k="Содержимое" v={propCount ? propCount.d + " папок, " + propCount.f + " файлов" : "…"} />}
+            <Prop k="Вес" v={props.type === "directory" ? "—" : fmtSize(props.size)} />
+            <Prop k="Изменено" v={ago(props.mtime)} />
+            <Prop k="Тип" v={props.type === "directory" ? "Папка" : (props.name.includes(".") ? props.name.split(".").pop().toUpperCase() : "Файл")} />
+            <Prop k="Скрытый" v={isHidden(props) ? "Да" : "Нет"} />
+            <button style={{ ...S.sheetGhost, width: "100%", marginTop: 14 }} onClick={() => setProps(null)}>Закрыть</button>
+          </div>
+        </div>
+      )}
+
       {toast && <div style={S.toast}>{toast}</div>}
 
       <style>{`
         @keyframes fm-in-r{from{transform:translateX(-14%);opacity:.4}to{transform:none;opacity:1}}
         @keyframes fm-in-l{from{transform:translateX(14%);opacity:.4}to{transform:none;opacity:1}}
         @keyframes dropGrow{from{opacity:0;transform:scale(.88)}to{opacity:1;transform:scale(1)}}
+        @keyframes sUp{from{transform:translateY(60px);opacity:0}to{transform:translateY(0);opacity:1}}
         @keyframes fS{from{opacity:0}to{opacity:1}}
         *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none}
         input{-webkit-user-select:text;user-select:text}
-        body{margin:0}
-        ::-webkit-scrollbar{width:0}
+        body{margin:0}::-webkit-scrollbar{width:0}
       `}</style>
     </div>
   );
 }
 
 const Zone = ({ children }) => <div style={{ flex: 1, display: "flex" }}>{children}</div>;
-
-function Btn({ onClick, icon, text, label, accent, red, underline, disabled }) {
+const Prop = ({ k, v, onClick, link }) => (
+  <div onClick={onClick} style={{ padding: "10px 0", borderBottom: "1px solid " + LINE }}>
+    <div style={{ fontSize: 12, color: SUB, marginBottom: 3 }}>{k}</div>
+    <div style={{ fontSize: 14, color: link ? ACC : TXT, wordBreak: "break-all" }}>{v}</div>
+  </div>
+);
+function SheetInput({ title, value, placeholder, onChange, onCancel, onOk, okText }) {
+  return (
+    <>
+      <div style={S.sheetTitle}>{title}</div>
+      <input autoFocus value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} onKeyDown={(e) => e.key === "Enter" && onOk()} style={S.sheetField} />
+      <div style={{ display: "flex", gap: 10 }}>
+        <button style={S.sheetGhost} onClick={onCancel}>Отмена</button>
+        <button style={S.sheetOk} onClick={onOk}>{okText}</button>
+      </div>
+    </>
+  );
+}
+function Btn({ onClick, icon, text, label, accent, red, flexNone, disabled }) {
   const color = disabled ? "#5c4d3e" : red ? RED : accent ? ACC : TXT;
   return (
-    <button onClick={disabled ? undefined : onClick} style={{ ...S.btn, color }}>
-      <span style={{ display: "flex", height: 26, alignItems: "center",
-        fontSize: 22, fontWeight: 700, textDecoration: underline ? "underline" : "none" }}>
-        {icon ? <Svg d={icon} size={26} /> : text}
-      </span>
-      <span style={S.btnLabel}>{label}</span>
+    <button onClick={disabled ? undefined : onClick} style={{ ...S.btn, flex: flexNone ? "none" : 1, minWidth: flexNone ? 60 : undefined, color }}>
+      <span style={{ display: "flex", height: 26, alignItems: "center", fontSize: 22, fontWeight: 700 }}>{icon ? <Svg d={icon} size={25} /> : text}</span>
+      {label ? <span style={S.btnLabel}>{label}</span> : null}
     </button>
   );
 }
 
 const S = {
-  app: { display: "flex", flexDirection: "column", height: "100vh", background: BG,
-    color: TXT, fontFamily: "system-ui,-apple-system,Roboto,sans-serif", overflow: "hidden" },
+  app: { display: "flex", flexDirection: "column", height: "100vh", background: BG, color: TXT, fontFamily: "system-ui,-apple-system,Roboto,sans-serif", overflow: "hidden" },
   tabsbar: { display: "flex", alignItems: "center", background: BAR, borderBottom: "1px solid #16100A", flexShrink: 0 },
   tabs: { display: "flex", overflowX: "auto", flex: 1 },
-  tab: { display: "flex", alignItems: "center", gap: 6, padding: "12px 14px", fontSize: 14,
-    color: SUB, whiteSpace: "nowrap", borderBottom: "2px solid transparent" },
+  tab: { display: "flex", alignItems: "center", gap: 6, padding: "12px 14px", fontSize: 14, color: SUB, whiteSpace: "nowrap", borderBottom: "2px solid transparent" },
   tabActive: { color: TXT, borderBottom: "2px solid " + ACC },
   tabX: { fontSize: 17, color: SUB, padding: "0 2px" },
-  tabAdd: { border: "none", background: "transparent", color: ACC, fontSize: 22, width: 46, height: 46, flexShrink: 0 },
-  crumb: { padding: "8px 16px", fontSize: 13, background: BG, flexShrink: 0,
-    borderBottom: "1px solid #241A11", overflow: "hidden", whiteSpace: "nowrap" },
+  hbtn: { border: "none", background: "transparent", color: ACC, width: 42, height: 46, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" },
+  crumb: { padding: "8px 16px", fontSize: 13, background: BG, flexShrink: 0, borderBottom: "1px solid #241A11", overflow: "hidden", whiteSpace: "nowrap" },
   list: { flex: 1, overflowY: "auto", overflowX: "hidden", display: "flex", flexDirection: "column" },
   slideWrap: { marginTop: "auto" },
   note: { color: SUB, textAlign: "center", padding: "60px 24px", lineHeight: 1.6 },
-  row: { display: "flex", alignItems: "center", gap: 14, padding: "13px 16px",
-    borderBottom: "1px solid #241A11", touchAction: "pan-y" },
+  row: { display: "flex", alignItems: "center", gap: 14, padding: "13px 16px", borderBottom: "1px solid #241A11", touchAction: "pan-y" },
   rowSel: { background: "#3A2A18" },
-  name: { flex: 1, fontSize: 15, textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
-  check: { width: 24, height: 24, borderRadius: 12, border: "2px solid " + SUB,
-    display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 },
-  checkOn: { background: ACC, borderColor: ACC, color: "#fff" },
+  name: { flex: 1, fontSize: 15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+  checkOn: { width: 26, height: 26, borderRadius: 13, background: ACC, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15 },
   searchBar: { display: "flex", alignItems: "center", background: ROW2, padding: 8, gap: 8, flexShrink: 0 },
-  searchInput: { flex: 1, padding: "10px 12px", borderRadius: 8, border: "1px solid " + LINE,
-    background: BAR, color: TXT, fontSize: 15, outline: "none" },
+  searchInput: { flex: 1, padding: "10px 12px", borderRadius: 8, border: "1px solid " + LINE, background: BAR, color: TXT, fontSize: 15, outline: "none" },
   searchClose: { border: "none", background: "transparent", color: SUB, fontSize: 24, width: 40 },
-  bottom: { display: "flex", background: BAR, borderTop: "1px solid #16100A",
-    paddingBottom: "env(safe-area-inset-bottom)", flexShrink: 0 },
-  btn: { flex: 1, border: "none", background: "transparent", padding: "10px 4px 12px",
-    display: "flex", flexDirection: "column", alignItems: "center", gap: 4 },
-  btnLabel: { fontSize: 11, color: SUB },
+  bottom: { display: "flex", alignItems: "center", background: BAR, borderTop: "1px solid #16100A", paddingBottom: "env(safe-area-inset-bottom)", flexShrink: 0 },
+  btn: { border: "none", background: "transparent", padding: "10px 7px 12px", display: "flex", flexDirection: "column", alignItems: "center", gap: 4 },
+  btnLabel: { fontSize: 11, color: SUB, whiteSpace: "nowrap" },
   overlay: { position: "fixed", inset: 0, zIndex: 8 },
-  createMenu: { position: "absolute", bottom: 60, right: 0, zIndex: 9, background: BAR,
-    borderRadius: 12, overflow: "hidden", border: "1px solid " + LINE,
-    boxShadow: "0 8px 32px rgba(0,0,0,.6)", minWidth: 130, animation: "dropGrow .2s cubic-bezier(.2,.9,.3,1.2)" },
+  menu: { position: "absolute", zIndex: 9, background: BAR, borderRadius: 12, overflow: "hidden", border: "1px solid " + LINE, boxShadow: "0 8px 32px rgba(0,0,0,.6)", minWidth: 200, animation: "dropGrow .2s cubic-bezier(.2,.9,.3,1.2)" },
+  menuItem: { display: "flex", alignItems: "center", gap: 12, padding: "13px 14px", fontSize: 14, color: TXT, whiteSpace: "nowrap" },
   createItem: { padding: "14px 22px", fontSize: 15, color: TXT },
-  ctxTitle: { padding: "10px 14px", fontSize: 12, color: SUB, borderBottom: "1px solid " + LINE,
-    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 210 },
-  ctxItem: { display: "flex", alignItems: "center", gap: 12, padding: "13px 14px", fontSize: 14, color: TXT },
-  toast: { position: "fixed", left: "50%", bottom: 90, transform: "translateX(-50%)",
-    background: ROW2, color: TXT, padding: "10px 18px", borderRadius: 20, fontSize: 13,
-    border: "1px solid " + LINE, boxShadow: "0 6px 24px rgba(0,0,0,.5)", zIndex: 1300,
-    animation: "fS .2s ease", maxWidth: "80%" },
+  ctxTitle: { padding: "10px 14px", fontSize: 12, color: SUB, borderBottom: "1px solid " + LINE, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 210 },
+  tgl: { width: 38, height: 22, borderRadius: 11, background: LINE, position: "relative", flexShrink: 0, transition: "background .15s" },
+  tglOn: { background: ACC },
+  knob: { position: "absolute", top: 2, left: 2, width: 18, height: 18, borderRadius: 9, background: "#fff", transition: "left .15s" },
+  knobOn: { left: 18 },
+  backdrop: { position: "fixed", inset: 0, background: "rgba(0,0,0,.55)", display: "flex", alignItems: "flex-end", zIndex: 1400, backdropFilter: "blur(3px)" },
+  sheet: { width: "100%", maxWidth: 420, margin: "0 auto", background: BAR, borderRadius: "20px 20px 0 0", padding: "20px 20px 36px", animation: "sUp .34s cubic-bezier(.2,.9,.3,1)", maxHeight: "88vh", overflowY: "auto" },
+  sheetTitle: { fontWeight: 700, fontSize: 17, marginBottom: 16 },
+  sheetField: { width: "100%", background: ROW2, border: "1px solid " + LINE, borderRadius: 12, padding: "12px 14px", color: TXT, fontSize: 15, marginBottom: 16, outline: "none" },
+  sheetGhost: { flex: 1, background: ROW2, border: "1px solid " + LINE, borderRadius: 12, padding: 13, color: SUB, fontSize: 14, cursor: "pointer" },
+  sheetOk: { flex: 1, background: ACC, border: "none", borderRadius: 12, padding: 13, color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer" },
+  sortRow: { padding: "13px 4px", fontSize: 15, color: TXT, borderBottom: "1px solid " + LINE, display: "flex", alignItems: "center" },
+  toast: { position: "fixed", left: "50%", bottom: 90, transform: "translateX(-50%)", background: ROW2, color: TXT, padding: "10px 18px", borderRadius: 20, fontSize: 13, border: "1px solid " + LINE, boxShadow: "0 6px 24px rgba(0,0,0,.5)", zIndex: 1500, animation: "fS .2s ease", maxWidth: "80%", textAlign: "center" },
 };
