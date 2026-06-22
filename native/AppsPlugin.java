@@ -38,8 +38,7 @@ public class AppsPlugin extends Plugin {
         boolean dataSet = false;
         if (uriStr != null) {
             try {
-                File f = toFile(uriStr);
-                Uri content = FileProvider.getUriForFile(getContext(), getContext().getPackageName() + ".appsfp", f);
+                Uri content = contentUri(toFile(uriStr));
                 intent.setDataAndType(content, mime);
                 intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
                 dataSet = true;
@@ -48,7 +47,7 @@ public class AppsPlugin extends Plugin {
         if (!dataSet) intent.setType(mime);
 
         List<ResolveInfo> list = pm.queryIntentActivities(intent, PackageManager.MATCH_ALL);
-        if (list.isEmpty() && dataSet) {
+        if (list.isEmpty()) {
             Intent alt = new Intent(Intent.ACTION_VIEW);
             alt.setType(mime);
             list = pm.queryIntentActivities(alt, PackageManager.MATCH_ALL);
@@ -83,7 +82,9 @@ public class AppsPlugin extends Plugin {
         if (uriStr == null) { call.reject("no uri"); return; }
         try {
             File f = toFile(uriStr);
-            Uri content = FileProvider.getUriForFile(getContext(), getContext().getPackageName() + ".appsfp", f);
+            if (!f.exists()) { call.reject("Файл не найден: " + f.getAbsolutePath()); return; }
+            if (f.isDirectory()) { call.reject("Это папка: " + f.getAbsolutePath()); return; }
+            Uri content = contentUri(f);
             Intent i = new Intent(Intent.ACTION_VIEW);
             i.setDataAndType(content, mime);
             i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
@@ -134,14 +135,6 @@ public class AppsPlugin extends Plugin {
         call.resolve(ret);
     }
 
-    private boolean deleteRecursive(File f) {
-        if (f.isDirectory()) {
-            File[] kids = f.listFiles();
-            if (kids != null) for (File k : kids) deleteRecursive(k);
-        }
-        return f.delete();
-    }
-
     @PluginMethod
     public void hasAllFiles(PluginCall call) {
         boolean granted;
@@ -171,13 +164,23 @@ public class AppsPlugin extends Plugin {
         }
     }
 
-    private File toFile(String u) {
-        if (u.startsWith("file://")) {
-            String p = u.substring(7);
-            if (p.indexOf('%') >= 0) { try { p = java.net.URLDecoder.decode(p, "UTF-8"); } catch (Exception ignored) {} }
-            return new File(p);
+    private Uri contentUri(File f) {
+        return FileProvider.getUriForFile(getContext(), getContext().getPackageName() + ".appsfp", f);
+    }
+
+    private boolean deleteRecursive(File f) {
+        if (f.isDirectory()) {
+            File[] kids = f.listFiles();
+            if (kids != null) for (File k : kids) deleteRecursive(k);
         }
-        return new File(u);
+        return f.delete();
+    }
+
+    private File toFile(String u) {
+        String p = u;
+        if (p.startsWith("file://")) p = p.substring(7);
+        if (p.indexOf('%') >= 0) { try { p = java.net.URLDecoder.decode(p, "UTF-8"); } catch (Exception ignored) {} }
+        return new File(p);
     }
 
     private String drawableToBase64(Drawable d) {
