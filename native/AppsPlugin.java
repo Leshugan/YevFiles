@@ -2,6 +2,7 @@ package leshugan.fm;
 
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.content.pm.PackageInfo;
 import android.content.pm.ResolveInfo;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
@@ -109,7 +110,9 @@ public class AppsPlugin extends Plugin {
                 for (File k : kids) {
                     JSObject o = new JSObject();
                     o.put("name", k.getName());
-                    o.put("type", k.isDirectory() ? "directory" : "file");
+                    boolean dir = k.isDirectory();
+                    o.put("type", dir ? "directory" : "file");
+                    if (dir) { File[] sub = k.listFiles(); o.put("count", sub != null ? sub.length : 0); }
                     o.put("size", k.length());
                     o.put("mtime", k.lastModified());
                     o.put("uri", "file://" + k.getAbsolutePath());
@@ -162,6 +165,36 @@ public class AppsPlugin extends Plugin {
         } catch (Exception e) {
             call.reject(e.getMessage());
         }
+    }
+
+    @PluginMethod
+    public void installApk(PluginCall call) {
+        String uriStr = call.getString("uri");
+        if (uriStr == null) { call.reject("no uri"); return; }
+        try {
+            File f = toFile(uriStr);
+            try { StrictMode.setVmPolicy(new StrictMode.VmPolicy.Builder().build()); } catch (Exception ignored) {}
+            Intent i = new Intent(Intent.ACTION_VIEW);
+            i.setDataAndType(Uri.fromFile(f), "application/vnd.android.package-archive");
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            getContext().startActivity(i);
+            call.resolve();
+        } catch (Exception e) { call.reject(e.getMessage()); }
+    }
+
+    @PluginMethod
+    public void uninstall(PluginCall call) {
+        String uriStr = call.getString("uri");
+        if (uriStr == null) { call.reject("no uri"); return; }
+        try {
+            File f = toFile(uriStr);
+            PackageInfo info = getContext().getPackageManager().getPackageArchiveInfo(f.getAbsolutePath(), 0);
+            if (info == null) { call.reject("Не удалось прочитать пакет"); return; }
+            Intent i = new Intent(Intent.ACTION_DELETE, Uri.parse("package:" + info.packageName));
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(i);
+            call.resolve();
+        } catch (Exception e) { call.reject(e.getMessage()); }
     }
 
     private boolean deleteRecursive(File f) {
