@@ -117,7 +117,6 @@ export default function App() {
   const [query, setQuery] = useState(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [confirmDel, setConfirmDel] = useState(false);
-  const [ctx, setCtx] = useState(null);
   const [sheet, setSheet] = useState(null);
   const [toast, setToast] = useState(null);
   const [slide, setSlide] = useState(0);
@@ -147,7 +146,7 @@ export default function App() {
       setCurUri(u.uri);
       let files;
       try { const r = await Apps.list({ uri: u.uri }); files = r.files; }
-      catch { const r = await Filesystem.readdir({ path, directory: DIR }); files = r.files; }
+      catch (er) { showToast("Системное чтение недоступно: " + (er?.message || "ошибка плагина")); const r = await Filesystem.readdir({ path, directory: DIR }); files = r.files; }
       setEntries(files || []);
     } catch (e) { setError(e.message || "Нет доступа к хранилищу"); setEntries([]); }
     setLoading(false);
@@ -173,26 +172,27 @@ export default function App() {
   const goUp = () => { if (path) setTabPath(parent(path)); };
   const closeTab = (i) => { if (tabs.length === 1) return; const t = tabs.filter((_, idx) => idx !== i); persist(t); setActive(Math.max(0, Math.min(active, t.length - 1))); };
 
+  const backRef = useRef(() => {});
+  backRef.current = () => {
+    if (openMenu) { setOpenMenu(null); return; }
+    if (props) { setProps(null); return; }
+    if (sheet) { setSheet(null); return; }
+    if (tabsMenu) { setTabsMenu(false); return; }
+    if (selMenu) { setSelMenu(false); return; }
+    if (headMenu) { setHeadMenu(false); return; }
+    if (confirmDel) { setConfirmDel(null); return; }
+    if (createOpen) { setCreateOpen(false); return; }
+    if (query !== null) { setQuery(null); return; }
+    if (selMode) { exitSel(); return; }
+    if (path) { goUp(); return; }
+    if (tabs.length > 1) { closeTab(active); return; }
+    CapApp.exitApp();
+  };
   useEffect(() => {
     let h;
-    CapApp.addListener("backButton", () => {
-      if (openMenu) { setOpenMenu(null); return; }
-      if (props) { setProps(null); return; }
-      if (sheet) { setSheet(null); return; }
-      if (selMenu) { setSelMenu(false); return; }
-      if (headMenu) { setHeadMenu(false); return; }
-      if (ctx) { setCtx(null); return; }
-      if (confirmDel) { setConfirmDel(null); return; }
-      if (createOpen) { setCreateOpen(false); return; }
-      if (query !== null) { setQuery(null); return; }
-      if (selMode) { exitSel(); return; }
-      if (path) { goUp(); return; }
-      if (tabs.length > 1) { closeTab(active); return; }
-      CapApp.exitApp();
-    }).then((l) => (h = l));
-    return () => h && h.remove();
-    // eslint-disable-next-line
-  }, [openMenu, props, sheet, selMenu, headMenu, ctx, confirmDel, createOpen, query, selMode, path, tabs, active]);
+    CapApp.addListener("backButton", () => backRef.current()).then((l) => (h = l));
+    return () => { h && h.remove(); };
+  }, []);
 
   const toggle = (name) => { const n = new Set(sel); n.has(name) ? n.delete(name) : n.add(name); setSel(n); setSelMode(n.size > 0); };
   const selectAll = () => { setSelMode(true); setSel(new Set(visible.map((e) => e.name))); };
