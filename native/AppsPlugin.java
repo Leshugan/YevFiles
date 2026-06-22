@@ -110,9 +110,9 @@ public class AppsPlugin extends Plugin {
                 for (File k : kids) {
                     JSObject o = new JSObject();
                     o.put("name", k.getName());
-                    boolean dir = k.isDirectory();
-                    o.put("type", dir ? "directory" : "file");
-                    if (dir) { File[] sub = k.listFiles(); o.put("count", sub != null ? sub.length : 0); }
+                    boolean isDir = k.isDirectory();
+                    o.put("type", isDir ? "directory" : "file");
+                    if (isDir) { File[] sub = k.listFiles(); o.put("count", sub != null ? sub.length : 0); }
                     o.put("size", k.length());
                     o.put("mtime", k.lastModified());
                     o.put("uri", "file://" + k.getAbsolutePath());
