@@ -172,7 +172,11 @@ public class AppsPlugin extends Plugin {
     }
 
     private File toFile(String u) {
-        if (u.startsWith("file://")) return new File(Uri.parse(u).getPath());
+        if (u.startsWith("file://")) {
+            String p = u.substring(7);
+            if (p.indexOf('%') >= 0) { try { p = java.net.URLDecoder.decode(p, "UTF-8"); } catch (Exception ignored) {} }
+            return new File(p);
+        }
         return new File(u);
     }
 
