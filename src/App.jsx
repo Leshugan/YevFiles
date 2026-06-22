@@ -379,7 +379,6 @@ export default function App() {
       <div style={S.crumb}>
         {path ? <span onClick={goUp} style={{ display: "inline-flex", alignItems: "center", gap: 6, color: ACC }}><Svg d={I.back} size={18} /> {path}</span>
           : <span style={{ color: SUB }}>/storage</span>}
-        <span onClick={() => showToast(curUri + " · всего " + entries.length)} style={{ marginLeft: 8, color: SUB }}>({visible.length}/{entries.length})</span>
       </div>
 
       {/* СПИСОК */}
