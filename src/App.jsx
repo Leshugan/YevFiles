@@ -17,7 +17,16 @@ const OPEN_AS = [["*/*", "Любой тип"], ["text/plain", "Текст"], ["i
 
 let mem = null;
 const ls = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } },
-  set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
+  set: (k, v) => { try { localStorage.setItem(k, v); } catch {} },
+  del: (k) => { try { localStorage.removeItem(k); } catch {} } };
+function buildInitial() {
+  const saved = loadTabs();
+  let base = saved && saved.length ? saved : [{ id: 1, path: "" }];
+  const start = ls.get(SKEY);
+  if (start != null && !base.some((t) => t.path === start)) base = [...base, { id: Date.now(), path: start }];
+  const active = start != null ? Math.max(0, base.findIndex((t) => t.path === start)) : 0;
+  return { base, active };
+}
 const loadTabs = () => { try { return JSON.parse(ls.get(TKEY)); } catch { return mem; } };
 const saveTabs = (t) => { const keep = t.filter((x) => x.saved); mem = keep; ls.set(TKEY, JSON.stringify(keep)); };
 const loadMeta = () => { try { const m = JSON.parse(ls.get(METAKEY)) || {}; return { hidden: new Set(m.hidden || []), pinTop: new Set(m.pinTop || []), pinBot: new Set(m.pinBot || []) }; } catch { return { hidden: new Set(), pinTop: new Set(), pinBot: new Set() }; } };
@@ -42,7 +51,8 @@ const mimeOf = (name) => MIME[(name.split(".").pop() || "").toLowerCase()] || "*
 const I = {
   back: <path d="M15 18l-6-6 6-6" />,
   search: <><circle cx="11" cy="11" r="7" /><path d="M21 21l-4-4" /></>,
-  selectAll: <><path d="M3 5l1.5 1.5L7 4" /><path d="M3 12l1.5 1.5L7 11" /><path d="M3 19l1.5 1.5L7 18" /><path d="M11 5h10" /><path d="M11 12h10" /><path d="M11 19h10" /></>,
+  selectAll: <><rect x="4" y="4" width="16" height="16" rx="4" /><path d="M8.5 12l2.5 2.5 4.5-5" /></>,
+  chev: <path d="M6 9l6 6 6-6" />,
   refresh: <><path d="M21 12a9 9 0 1 1-2.6-6.4" /><path d="M21 4v5h-5" /></>,
   plus: <><path d="M12 5v14" /><path d="M5 12h14" /></>,
   x: <><path d="M6 6l12 12" /><path d="M18 6L6 18" /></>,
@@ -94,13 +104,9 @@ const SORTS = [
 ];
 
 export default function App() {
-  const [tabs, setTabs] = useState(() => {
-    const saved = loadTabs(), start = ls.get(SKEY);
-    let base = saved && saved.length ? saved : [{ id: 1, path: "" }];
-    if (start != null) base = [{ id: Date.now(), path: start }, ...base.filter((t) => t.path !== start)];
-    return base;
-  });
-  const [active, setActive] = useState(0);
+  const init0 = useRef(buildInitial());
+  const [tabs, setTabs] = useState(init0.current.base);
+  const [active, setActive] = useState(init0.current.active);
   const [entries, setEntries] = useState([]);
   const [curUri, setCurUri] = useState("");
   const [loading, setLoading] = useState(false);
@@ -119,6 +125,7 @@ export default function App() {
   const [showHidden, setShowHidden] = useState(false);
   const [sortMode, setSortMode] = useState(() => ls.get(SORTKEY) || "az");
   const [headMenu, setHeadMenu] = useState(false);
+  const [tabsMenu, setTabsMenu] = useState(false);
   const [selMenu, setSelMenu] = useState(false);
   const [props, setProps] = useState(null);
   const [propCount, setPropCount] = useState(null);
@@ -230,29 +237,24 @@ export default function App() {
   const onTS = (e) => { sx.current = e.touches[0].clientX; sy.current = e.touches[0].clientY; swiped.current = false; };
   const onTM = (e) => { const dx = e.touches[0].clientX - sx.current, dy = e.touches[0].clientY - sy.current; if (!swiped.current && Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 1.5) { swiped.current = true; switchTab(dx > 0 ? -1 : 1); } };
   const tabRefs = useRef([]);
-  const tabDrag = useRef({ from: -1, x0: 0, active: false, fired: false, lp: null });
+  const tabDrag = useRef({ from: -1, x0: 0, active: false });
   const moveTab = (from, to) => { setTabs((arr) => { const a = [...arr]; const [m] = a.splice(from, 1); a.splice(to, 0, m); return a; }); setActive(to); };
   const persistCurrent = () => setTabs((cur) => { saveTabs(cur); return cur; });
-  const onTabDown = (ev, i) => {
-    const d = tabDrag.current; d.from = i; d.x0 = ev.clientX; d.active = false; d.fired = false;
-    clearTimeout(d.lp);
-    d.lp = setTimeout(() => { d.fired = true; buzz(15); setActive(i); setCtx({ tab: tabs[i], x: ev.clientX, y: ev.clientY }); }, 450);
-  };
+  const onTabDown = (ev, i) => { const d = tabDrag.current; d.from = i; d.x0 = ev.clientX; d.active = false; };
   const onTabMove = (ev) => {
     const d = tabDrag.current; if (d.from < 0) return;
-    if (!d.active && !d.fired && Math.abs(ev.clientX - d.x0) > 12) { d.active = true; clearTimeout(d.lp); }
+    if (!d.active && Math.abs(ev.clientX - d.x0) > 12) d.active = true;
     if (d.active) {
       let target = d.from;
       for (let j = 0; j < tabRefs.current.length; j++) { const el = tabRefs.current[j]; if (!el) continue; const r = el.getBoundingClientRect(); if (ev.clientX >= r.left && ev.clientX <= r.right) { target = j; break; } }
       if (target !== d.from && target >= 0) { moveTab(d.from, target); d.from = target; }
     }
   };
-  const onTabUp = (i) => {
-    const d = tabDrag.current; clearTimeout(d.lp);
-    if (d.active) { d.active = false; persistCurrent(); }
-    else if (!d.fired) setActive(i);
-    d.from = -1; d.fired = false;
-  };
+  const onTabUp = (i) => { const d = tabDrag.current; if (d.active) { d.active = false; persistCurrent(); } else setActive(i); d.from = -1; };
+
+  const saveAllTabs = () => { setTabsMenu(false); const t = tabs.map((x) => ({ ...x, saved: true })); persist(t); showToast("Вкладки сохранены"); };
+  const startupHere = () => { setTabsMenu(false); ls.set(SKEY, path); showToast("Открывается при старте: " + (path ? baseName(path) : "Storage")); };
+  const resetStartup = () => { setTabsMenu(false); ls.del(SKEY); showToast("Стартовая папка сброшена"); };
 
   /* операции через .uri */
   const refresh = () => list();
@@ -290,9 +292,6 @@ export default function App() {
     showToast(which === "hidden" ? "Готово (скрытые)" : "Закреплено");
   };
 
-  const tabStartup = () => { ls.set(SKEY, ctx.tab.path); buzz(15); setCtx(null); showToast("Открывается при старте: " + (ctx.tab.path ? baseName(ctx.tab.path) : "Storage")); };
-  const tabRemember = () => { const t = tabs.map((x) => (x.id === ctx.tab.id ? { ...x, saved: true } : x)); persist(t); buzz(15); setCtx(null); showToast("Вкладка закреплена"); };
-
   const copyPath = async (p) => { try { await navigator.clipboard.writeText(p); showToast("Путь скопирован"); } catch { showToast("Не удалось скопировать"); } };
 
   /* отображаемый список: фильтр скрытых -> поиск -> сортировка -> папки сверху -> пины */
@@ -326,6 +325,21 @@ export default function App() {
     <div style={S.app}>
       {/* ВКЛАДКИ + действия шапки */}
       <div style={S.tabsbar}>
+        <div style={{ position: "relative" }}>
+          <button style={S.hbtn} onClick={() => setTabsMenu((v) => !v)}><Svg d={I.chev} size={20} /></button>
+          {tabsMenu && (
+            <>
+              <div style={S.overlay} onClick={() => setTabsMenu(false)} />
+              <div style={{ ...S.menu, position: "fixed", top: 46, left: 4, zIndex: 1200 }}>
+                <div style={S.menuItem} onClick={saveAllTabs}><span style={{ color: ACC, display: "flex" }}><Svg d={I.pin} size={20} /></span>Сохранить вкладки</div>
+                <div style={{ height: 1, background: LINE }} />
+                <div style={S.menuItem} onClick={startupHere}><span style={{ color: GOLD, display: "flex" }}><Svg d={I.star} size={20} /></span>Открывать при старте</div>
+                <div style={{ height: 1, background: LINE }} />
+                <div style={S.menuItem} onClick={resetStartup}><span style={{ color: SUB, display: "flex" }}><Svg d={I.x} size={20} /></span>Сбросить старт</div>
+              </div>
+            </>
+          )}
+        </div>
         <div style={S.tabs}>
           {tabs.map((t, i) => (
             <div key={t.id} ref={(el) => (tabRefs.current[i] = el)}
@@ -337,7 +351,6 @@ export default function App() {
             </div>
           ))}
         </div>
-        <button style={S.hbtn} onClick={() => list()}><Svg d={I.refresh} size={20} /></button>
         <button style={S.hbtn} onClick={addTab}><Svg d={I.plus} size={22} /></button>
         <div style={{ position: "relative" }}>
           <button style={S.hbtn} onClick={() => setHeadMenu((v) => !v)}><Svg d={I.dots} size={22} /></button>
@@ -464,19 +477,6 @@ export default function App() {
             <div style={S.menuItem} onClick={() => metaToggle("top")}><span style={{ color: ACC, display: "flex" }}><Svg d={I.pinT} size={20} /></span>Закрепить сверху</div>
             <div style={{ height: 1, background: LINE }} />
             <div style={S.menuItem} onClick={() => metaToggle("bot")}><span style={{ color: ACC, display: "flex" }}><Svg d={I.pinB} size={20} /></span>Закрепить снизу</div>
-          </div>
-        </>
-      )}
-
-      {/* КОНТЕКСТНОЕ МЕНЮ ВКЛАДКИ */}
-      {ctx && (
-        <>
-          <div style={{ position: "fixed", inset: 0, zIndex: 1190 }} onClick={() => setCtx(null)} />
-          <div style={{ position: "fixed", zIndex: 1200, top: Math.min(ctx.y, window.innerHeight - 150), left: Math.min(ctx.x, window.innerWidth - 230), background: BAR, borderRadius: 12, border: "1px solid " + LINE, boxShadow: "0 8px 32px rgba(0,0,0,.6)", overflow: "hidden", minWidth: 210, animation: "dropGrow .2s cubic-bezier(.2,.9,.3,1.2)", transformOrigin: "top left" }}>
-            <div style={S.ctxTitle}>{ctx.tab.path ? baseName(ctx.tab.path) : "Storage"}</div>
-            <div style={S.menuItem} onClick={tabStartup}><span style={{ color: GOLD, display: "flex" }}><Svg d={I.star} size={20} /></span>Открывать при старте</div>
-            <div style={{ height: 1, background: LINE }} />
-            <div style={S.menuItem} onClick={tabRemember}><span style={{ color: ACC, display: "flex" }}><Svg d={I.pin} size={20} /></span>Запомнить расположение</div>
           </div>
         </>
       )}
