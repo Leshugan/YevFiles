@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Filesystem, Directory, Encoding } from "@capacitor/filesystem";
 import { App as CapApp } from "@capacitor/app";
-import { FileOpener } from "@capacitor-community/file-opener";
+import { registerPlugin } from "@capacitor/core";
+const Apps = registerPlugin("Apps");
 
 /* ===== YevFiles — leshugan.fm =====  стиль Notenger (шоколад) */
 
@@ -9,6 +10,10 @@ const BG = "#1C140C", BAR = "#2A2017", ROW2 = "#2E251C", ACC = "#EF6C00";
 const GOLD = "#F5A623", RED = "#E05252", TXT = "#F2EAE0", SUB = "#B0A498", LINE = "#4A3A2A";
 const DIR = Directory.ExternalStorage;
 const TKEY = "fm_tabs_v1", SKEY = "fm_startup_v1", METAKEY = "fm_meta_v1", SORTKEY = "fm_sort_v1";
+const DEFKEY = "fm_defaults_v1", HIDEKEY = "fm_hideapps_v1";
+const loadMap = (k) => { try { return JSON.parse(ls.get(k)) || {}; } catch { return {}; } };
+const saveMap = (k, m) => ls.set(k, JSON.stringify(m));
+const OPEN_AS = [["*/*", "Любой тип"], ["text/plain", "Текст"], ["image/*", "Изображение"], ["video/*", "Видео"], ["audio/*", "Аудио"], ["application/pdf", "PDF"]];
 
 let mem = null;
 const ls = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } },
@@ -116,6 +121,7 @@ export default function App() {
   const [selMenu, setSelMenu] = useState(false);
   const [props, setProps] = useState(null);
   const [propCount, setPropCount] = useState(null);
+  const [openMenu, setOpenMenu] = useState(null); // {file, mime, apps, useDefault, editHide}
 
   const cur = tabs[active], path = cur?.path || "";
   const persist = (t) => { setTabs(t); saveTabs(t); };
@@ -139,6 +145,12 @@ export default function App() {
   useEffect(() => { Filesystem.requestPermissions().catch(() => {}); }, []);
   useEffect(() => { list(); exitSel(); setQuery(null); /* eslint-disable-next-line */ }, [active, path]);
   useEffect(() => { let h; CapApp.addListener("resume", () => list()).then((l) => (h = l)); return () => h && h.remove(); }, [list]);
+  useEffect(() => {
+    const onVis = () => { if (document.visibilityState === "visible") list(); };
+    document.addEventListener("visibilitychange", onVis);
+    window.addEventListener("focus", onVis);
+    return () => { document.removeEventListener("visibilitychange", onVis); window.removeEventListener("focus", onVis); };
+  }, [list]);
   useEffect(() => { ls.set(SORTKEY, sortMode); }, [sortMode]);
   useEffect(() => {
     if (!props || props.type !== "directory") { setPropCount(null); return; }
@@ -153,6 +165,7 @@ export default function App() {
   useEffect(() => {
     let h;
     CapApp.addListener("backButton", () => {
+      if (openMenu) { setOpenMenu(null); return; }
       if (props) { setProps(null); return; }
       if (sheet) { setSheet(null); return; }
       if (selMenu) { setSelMenu(false); return; }
@@ -168,15 +181,39 @@ export default function App() {
     }).then((l) => (h = l));
     return () => h && h.remove();
     // eslint-disable-next-line
-  }, [props, sheet, selMenu, headMenu, ctx, confirmDel, createOpen, query, selMode, path, tabs, active]);
+  }, [openMenu, props, sheet, selMenu, headMenu, ctx, confirmDel, createOpen, query, selMode, path, tabs, active]);
 
   const toggle = (name) => { const n = new Set(sel); n.has(name) ? n.delete(name) : n.add(name); setSel(n); setSelMode(n.size > 0); };
   const selectAll = () => { setSelMode(true); setSel(new Set(visible.map((e) => e.name))); };
 
   const openExternal = async (e) => {
-    try { await FileOpener.open({ filePath: e.uri, contentType: mimeOf(e.name) }); }
-    catch (err) { showToast("Не удалось открыть: " + (err?.message || "нет приложения для типа")); }
+    const mime = mimeOf(e.name);
+    const defs = loadMap(DEFKEY);
+    const d = defs[mime];
+    if (d) { try { const [pkg, act] = d.split("|"); await Apps.open({ uri: e.uri, mime, packageName: pkg, activityName: act }); return; } catch {} }
+    await showOpenMenu(e, mime);
   };
+  const showOpenMenu = async (e, mime) => {
+    try {
+      const { apps } = await Apps.query({ mime });
+      if (!apps || !apps.length) { showToast("Нет приложений для этого типа"); return; }
+      setOpenMenu({ file: e, mime, apps, useDefault: false, editHide: false });
+    } catch (err) { showToast("Не удалось получить список: " + (err?.message || "")); }
+  };
+  const pickApp = async (app) => {
+    const om = openMenu;
+    if (om.editHide) {
+      const hm = loadMap(HIDEKEY); const arr = new Set(hm[om.mime] || []);
+      const id = app.packageName + "|" + app.activityName;
+      arr.has(id) ? arr.delete(id) : arr.add(id);
+      hm[om.mime] = [...arr]; saveMap(HIDEKEY, hm); setOpenMenu({ ...om }); return;
+    }
+    if (om.useDefault) { const defs = loadMap(DEFKEY); defs[om.mime] = app.packageName + "|" + app.activityName; saveMap(DEFKEY, defs); }
+    setOpenMenu(null);
+    try { await Apps.open({ uri: om.file.uri, mime: om.mime, packageName: app.packageName, activityName: app.activityName }); }
+    catch (err) { showToast("Не удалось открыть: " + (err?.message || "")); }
+  };
+  const resetDefault = () => { const defs = loadMap(DEFKEY); delete defs[openMenu.mime]; saveMap(DEFKEY, defs); showToast("Привязка сброшена"); };
   const open = (e) => {
     if (selMode) { toggle(e.name); return; }
     if (e.type === "directory") setTabPath(join(path, e.name));
@@ -198,9 +235,14 @@ export default function App() {
   const doCreateFolder = async (name) => { setSheet(null); if (!name) return; try { await Filesystem.mkdir({ path: targetUri(name) }); refresh(); } catch (e) { showToast("Ошибка: " + e.message); } };
   const doCreateTxt = async (name) => { setSheet(null); if (!name) return; if (!/\.txt$/i.test(name)) name += ".txt"; try { await Filesystem.writeFile({ path: targetUri(name), data: "", encoding: Encoding.UTF8 }); refresh(); } catch (e) { showToast("Ошибка: " + e.message); } };
   const doRename = async (oldName, newName) => { setSheet(null); if (!newName || newName === oldName) return; const e = byName(oldName); if (!e) return; try { await Filesystem.rename({ from: e.uri, to: targetUri(newName) }); exitSel(); refresh(); } catch (er) { showToast("Ошибка: " + er.message); } };
+  const delTree = async (e) => {
+    if (e.type !== "directory") { await Filesystem.deleteFile({ path: e.uri }); return; }
+    try { const { files } = await Filesystem.readdir({ path: e.uri }); for (const f of files) await delTree(f); } catch {}
+    await Filesystem.rmdir({ path: e.uri, recursive: true });
+  };
   const doDelete = async () => {
     const names = [...sel]; setConfirmDel(false); let ok = 0, fail = 0;
-    for (const name of names) { const e = byName(name); if (!e) { fail++; continue; } try { if (e.type === "directory") await Filesystem.rmdir({ path: e.uri, recursive: true }); else await Filesystem.deleteFile({ path: e.uri }); ok++; } catch { fail++; } }
+    for (const name of names) { const e = byName(name); if (!e) { fail++; continue; } try { await delTree(e); ok++; } catch { fail++; } }
     exitSel(); await refresh();
     showToast(fail ? "Не удалено: " + fail + (ok ? ", удалено: " + ok : "") : "Удалено: " + ok);
   };
@@ -328,9 +370,9 @@ export default function App() {
 
       {/* НИЖНЯЯ ПАНЕЛЬ */}
       {selMode ? (
-        <nav style={{ ...S.bottom, justifyContent: "space-between" }}>
+        <nav style={{ ...S.bottom, justifyContent: "flex-start" }}>
           <Btn onClick={exitSel} icon={I.x} label="Отмена" flexNone />
-          <div style={{ display: "flex", overflowX: "auto" }}>
+          <div style={{ display: "flex", overflowX: "auto", flex: 1 }}>
             {confirmDel ? (
               <>
                 <Btn onClick={doDelete} text="Да" label="Удалить" red flexNone />
@@ -338,26 +380,12 @@ export default function App() {
               </>
             ) : (
               <>
-                <Btn onClick={() => setConfirmDel(true)} icon={I.trash} label="Удалить" red flexNone />
-                <Btn onClick={() => grab("cut")} icon={I.cut} label="Вырезать" flexNone />
-                <Btn onClick={() => grab("copy")} icon={I.copy} label="Копир." flexNone />
-                <Btn onClick={() => { const e = one; const sp = splitExt(e.name, e.type === "directory"); setSheet({ kind: "rename", old: e.name, base: sp.base, ext: sp.ext, editExt: false }); }} icon={I.rename} label="Имя" flexNone disabled={sel.size !== 1} />
                 <Btn onClick={() => setProps(one)} icon={I.info} label="Свойства" flexNone disabled={sel.size !== 1} />
-                <div style={{ position: "relative", display: "flex" }}>
-                  <Btn onClick={() => setSelMenu((v) => !v)} icon={I.dots} label="Ещё" flexNone />
-                  {selMenu && (
-                    <>
-                      <div style={S.overlay} onClick={() => setSelMenu(false)} />
-                      <div style={{ ...S.menu, bottom: 58, right: 4 }}>
-                        <div style={S.menuItem} onClick={() => metaToggle("hidden")}><span style={{ color: SUB, display: "flex" }}><Svg d={I.eyeOff} size={20} /></span>Скрыть</div>
-                        <div style={{ height: 1, background: LINE }} />
-                        <div style={S.menuItem} onClick={() => metaToggle("top")}><span style={{ color: ACC, display: "flex" }}><Svg d={I.pinT} size={20} /></span>Закрепить сверху</div>
-                        <div style={{ height: 1, background: LINE }} />
-                        <div style={S.menuItem} onClick={() => metaToggle("bot")}><span style={{ color: ACC, display: "flex" }}><Svg d={I.pinB} size={20} /></span>Закрепить снизу</div>
-                      </div>
-                    </>
-                  )}
-                </div>
+                <Btn onClick={() => { const e = one; const sp = splitExt(e.name, e.type === "directory"); setSheet({ kind: "rename", old: e.name, base: sp.base, ext: sp.ext, editExt: false }); }} icon={I.rename} label="Имя" flexNone disabled={sel.size !== 1} />
+                <Btn onClick={() => setConfirmDel(true)} icon={I.trash} label="Удалить" red flexNone />
+                <Btn onClick={() => grab("copy")} icon={I.copy} label="Копир." flexNone />
+                <Btn onClick={() => grab("cut")} icon={I.cut} label="Вырезать" flexNone />
+                <Btn onClick={() => setSelMenu((v) => !v)} icon={I.dots} label="Ещё" flexNone />
               </>
             )}
           </div>
@@ -373,22 +401,36 @@ export default function App() {
                 <Btn onClick={() => setClip(null)} icon={I.x} label="Отмена" flexNone />
               </div>
             ) : (
-              <div style={{ position: "relative", flex: 1, display: "flex" }}>
-                <Btn onClick={() => setCreateOpen((v) => !v)} icon={I.plus} label="Создать" accent />
-                {createOpen && (
-                  <>
-                    <div style={S.overlay} onClick={() => setCreateOpen(false)} />
-                    <div style={{ ...S.menu, bottom: 58, right: 0 }}>
-                      <div style={S.createItem} onClick={() => { setCreateOpen(false); setSheet({ kind: "folder", val: "" }); }}>Папка</div>
-                      <div style={{ height: 1, background: LINE }} />
-                      <div style={S.createItem} onClick={() => { setCreateOpen(false); setSheet({ kind: "txt", val: "" }); }}>TXT</div>
-                    </div>
-                  </>
-                )}
-              </div>
+              <Btn onClick={() => setCreateOpen((v) => !v)} icon={I.plus} label="Создать" accent />
             )}
           </Zone>
         </nav>
+      )}
+
+      {/* МЕНЮ «СОЗДАТЬ» (поверх тулбара) */}
+      {createOpen && (
+        <>
+          <div style={{ position: "fixed", inset: 0, zIndex: 1190 }} onClick={() => setCreateOpen(false)} />
+          <div style={{ ...S.menu, position: "fixed", right: 8, bottom: "calc(62px + env(safe-area-inset-bottom))", zIndex: 1200, minWidth: 150 }}>
+            <div style={S.createItem} onClick={() => { setCreateOpen(false); setSheet({ kind: "folder", val: "" }); }}>Папка</div>
+            <div style={{ height: 1, background: LINE }} />
+            <div style={S.createItem} onClick={() => { setCreateOpen(false); setSheet({ kind: "txt", val: "" }); }}>TXT</div>
+          </div>
+        </>
+      )}
+
+      {/* МЕНЮ «ЕЩЁ» выделения (поверх тулбара) */}
+      {selMenu && (
+        <>
+          <div style={{ position: "fixed", inset: 0, zIndex: 1190 }} onClick={() => setSelMenu(false)} />
+          <div style={{ ...S.menu, position: "fixed", right: 8, bottom: "calc(62px + env(safe-area-inset-bottom))", zIndex: 1200 }}>
+            <div style={S.menuItem} onClick={() => metaToggle("hidden")}><span style={{ color: SUB, display: "flex" }}><Svg d={I.eyeOff} size={20} /></span>Скрыть</div>
+            <div style={{ height: 1, background: LINE }} />
+            <div style={S.menuItem} onClick={() => metaToggle("top")}><span style={{ color: ACC, display: "flex" }}><Svg d={I.pinT} size={20} /></span>Закрепить сверху</div>
+            <div style={{ height: 1, background: LINE }} />
+            <div style={S.menuItem} onClick={() => metaToggle("bot")}><span style={{ color: ACC, display: "flex" }}><Svg d={I.pinB} size={20} /></span>Закрепить снизу</div>
+          </div>
+        </>
       )}
 
       {/* КОНТЕКСТНОЕ МЕНЮ ВКЛАДКИ */}
@@ -451,6 +493,55 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* МЕНЮ ОТКРЫТИЯ ФАЙЛА */}
+      {openMenu && (() => {
+        const hidden = new Set(loadMap(HIDEKEY)[openMenu.mime] || []);
+        const shown = openMenu.editHide ? openMenu.apps : openMenu.apps.filter((a) => !hidden.has(a.packageName + "|" + a.activityName));
+        return (
+          <div style={S.backdrop} onClick={() => setOpenMenu(null)}>
+            <div style={S.sheet} onClick={(e) => e.stopPropagation()}>
+              <div style={{ display: "flex", alignItems: "center", marginBottom: 14 }}>
+                <div style={{ ...S.sheetTitle, marginBottom: 0, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{openMenu.file.name}</div>
+                <button style={{ ...S.iconBtn, color: openMenu.editHide ? ACC : SUB }} onClick={() => setOpenMenu({ ...openMenu, editHide: !openMenu.editHide })}><Svg d={I.rename} size={20} /></button>
+              </div>
+              <div style={{ fontSize: 12, color: SUB, marginBottom: 6 }}>Открыть как:</div>
+              <div style={{ display: "flex", gap: 6, overflowX: "auto", marginBottom: 14, paddingBottom: 2 }}>
+                {OPEN_AS.map(([m, lbl]) => (
+                  <button key={m} onClick={() => showOpenMenu(openMenu.file, m)}
+                    style={{ ...S.chip, ...(openMenu.mime === m ? S.chipOn : {}) }}>{lbl}</button>
+                ))}
+              </div>
+              {openMenu.editHide && <div style={{ fontSize: 12, color: GOLD, marginBottom: 10 }}>Нажмите на приложение, чтобы скрыть/показать его</div>}
+              <div style={{ maxHeight: "42vh", overflowY: "auto" }}>
+                {shown.length === 0 && <div style={{ color: SUB, padding: 16, textAlign: "center" }}>Нет приложений</div>}
+                {shown.map((a) => {
+                  const id = a.packageName + "|" + a.activityName;
+                  const isHid = hidden.has(id);
+                  return (
+                    <div key={id} onClick={() => pickApp(a)} style={{ ...S.appRow, opacity: isHid ? 0.45 : 1 }}>
+                      {a.icon ? <img src={a.icon} alt="" style={{ width: 38, height: 38, borderRadius: 9 }} />
+                        : <span style={{ color: SUB, display: "flex" }}><Svg d={I.file} size={32} /></span>}
+                      <span style={{ flex: 1, fontSize: 15 }}>{a.label}</span>
+                      {openMenu.editHide && <span style={{ color: isHid ? SUB : ACC, display: "flex" }}><Svg d={isHid ? I.eyeOff : I.eye} size={20} /></span>}
+                    </div>
+                  );
+                })}
+              </div>
+              {!openMenu.editHide && (
+                <>
+                  <div onClick={() => setOpenMenu({ ...openMenu, useDefault: !openMenu.useDefault })}
+                    style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 2px", cursor: "pointer" }}>
+                    <span style={{ ...S.cbox, ...(openMenu.useDefault ? S.cboxOn : {}) }}>{openMenu.useDefault ? "✓" : ""}</span>
+                    <span style={{ fontSize: 14 }}>Использовать по умолчанию</span>
+                  </div>
+                  <button style={{ ...S.sheetGhost, width: "100%", color: RED, borderColor: LINE }} onClick={resetDefault}>Сбросить привязку</button>
+                </>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {toast && <div style={S.toast}>{toast}</div>}
 
@@ -535,5 +626,11 @@ const S = {
   sheetGhost: { flex: 1, background: ROW2, border: "1px solid " + LINE, borderRadius: 12, padding: 13, color: SUB, fontSize: 14, cursor: "pointer" },
   sheetOk: { flex: 1, background: ACC, border: "none", borderRadius: 12, padding: 13, color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer" },
   sortRow: { padding: "13px 4px", fontSize: 15, color: TXT, borderBottom: "1px solid " + LINE, display: "flex", alignItems: "center" },
+  iconBtn: { border: "1px solid " + LINE, background: ROW2, borderRadius: 10, width: 38, height: 38, display: "flex", alignItems: "center", justifyContent: "center" },
+  chip: { flexShrink: 0, background: ROW2, border: "1px solid " + LINE, borderRadius: 16, padding: "7px 14px", color: SUB, fontSize: 13, whiteSpace: "nowrap" },
+  chipOn: { background: ACC, borderColor: ACC, color: "#fff" },
+  appRow: { display: "flex", alignItems: "center", gap: 14, padding: "10px 2px", borderBottom: "1px solid " + LINE },
+  cbox: { width: 22, height: 22, borderRadius: 6, border: "2px solid " + SUB, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, color: "#fff", flexShrink: 0 },
+  cboxOn: { background: ACC, borderColor: ACC },
   toast: { position: "fixed", left: "50%", bottom: 90, transform: "translateX(-50%)", background: ROW2, color: TXT, padding: "10px 18px", borderRadius: 20, fontSize: 13, border: "1px solid " + LINE, boxShadow: "0 6px 24px rgba(0,0,0,.5)", zIndex: 1500, animation: "fS .2s ease", maxWidth: "80%", textAlign: "center" },
 };
