@@ -72,7 +72,7 @@ const I = {
   folder: <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />,
   file: <><path d="M6 2h9l5 5v15H6z" /><path d="M14 2v6h6" /></>,
   txt: <><path d="M6 2h9l5 5v15H6z" /><path d="M14 2v6h6" /><path d="M9 13h6M9 16h6M9 10h3" /></>,
-  pdf: <><path d="M6 2h9l5 5v15H6z" /><path d="M14 2v6h6" /><rect x="7.5" y="13.5" width="9" height="5.5" rx="1" fill="currentColor" stroke="none" /></>,
+  pdf: <><path d="M6 2h9l5 5v15H6z" /><path d="M14 2v6h6" /><text x="11.5" y="18.5" fontSize="6.5" fontWeight="700" textAnchor="middle" fill="currentColor" stroke="none">PDF</text></>,
   apk: <><path d="M7 9a5 5 0 0 1 10 0v1H7z" /><path d="M8.5 6.5L7 4M15.5 6.5L17 4" /><circle cx="10" cy="7.4" r=".6" fill="currentColor" stroke="none" /><circle cx="14" cy="7.4" r=".6" fill="currentColor" stroke="none" /><rect x="7" y="11" width="10" height="9" rx="2" /></>,
   lnk: <><rect x="4" y="4" width="16" height="16" rx="2" /><path d="M9 15l6-6M10.5 9H15v4.5" /></>,
   img: <><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><path d="M21 15l-5-5L5 21" /></>,
@@ -245,8 +245,20 @@ export default function App() {
       const entries = [];
       zip.forEach((rel, f) => { if (!f.dir) entries.push({ name: rel, size: (f._data && f._data.uncompressedSize) || 0 }); });
       entries.sort((a, b) => a.name.localeCompare(b.name));
-      setArcView({ name: e.name, entries });
+      setArcView({ name: e.name, entries, zip });
     } catch (err) { showToast("Не удалось открыть архив: " + (err?.message || "")); }
+  };
+  const extractOpen = async (entry) => {
+    try {
+      showToast("Извлекаю…");
+      const b64 = await arcView.zip.file(entry.name).async("base64");
+      const fname = entry.name.split("/").pop();
+      const tmp = "Download/.yevtmp/" + fname;
+      await Filesystem.writeFile({ path: tmp, data: b64, directory: DIR, recursive: true });
+      const u = await Filesystem.getUri({ path: tmp, directory: DIR });
+      setArcView(null);
+      await Apps.open({ uri: u.uri, mime: mimeOf(fname) });
+    } catch (err) { showToast("Не удалось открыть: " + (err?.message || "")); }
   };
   const resetDefault = () => { const defs = loadMap(DEFKEY); delete defs[openMenu.mime]; saveMap(DEFKEY, defs); showToast("Привязка сброшена"); };
   const open = (e) => {
@@ -274,7 +286,7 @@ export default function App() {
       if (target !== d.from && target >= 0) { moveTab(d.from, target); d.from = target; }
     }
   };
-  const onTabUp = (i) => { const d = tabDrag.current; if (d.active) { d.active = false; persistCurrent(); } else setActive(i); d.from = -1; };
+  const onTabUp = (i) => { const d = tabDrag.current; if (d.active) { d.active = false; persistCurrent(); } else { const dir = i > active ? 1 : i < active ? -1 : 0; if (dir) { setSlide(dir); setTimeout(() => setSlide(0), 220); } setActive(i); } d.from = -1; };
 
   const saveAllTabs = () => { setTabsMenu(false); const t = tabs.map((x) => ({ ...x, saved: true })); persist(t); showToast("Вкладки сохранены"); };
   const startupHere = () => { setTabsMenu(false); ls.set(SKEY, path); showToast("Запуск при открытии: " + (path ? baseName(path) : "Storage")); };
@@ -428,7 +440,8 @@ export default function App() {
                   onPointerDown={(ev) => ev.stopPropagation()} onPointerUp={(ev) => { ev.stopPropagation(); clearTimeout(lpTimer.current); toggle(e.name); }}>
                   {isSel ? <span style={S.checkOn}>✓</span> : <Svg d={ic.d} size={25} />}
                 </span>
-                <span style={{ ...S.name, fontWeight: isDir ? 600 : 400 }}>{e.name}{isDir && e.count != null ? <span style={S.cnt}>{e.count}</span> : null}</span>
+                <span style={{ ...S.name, fontWeight: isDir ? 600 : 400 }}>{e.name}</span>
+                {isDir && e.count != null && <span style={S.cnt}>{e.count}</span>}
                 {pinned && <span style={{ color: SUB, display: "flex" }}><Svg d={meta.pinTop.has(keyOf(e.name)) ? I.pinT : I.pinB} size={15} /></span>}
               </div>
             );
@@ -606,8 +619,8 @@ export default function App() {
             </div>
             <div style={{ maxHeight: "60vh", overflowY: "auto" }}>
               {arcView.entries.map((it, i) => (
-                <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 2px", borderBottom: "1px solid " + LINE }}>
-                  <span style={{ color: SUB, display: "flex" }}><Svg d={I.file} size={18} /></span>
+                <div key={i} onClick={() => extractOpen(it)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 2px", borderBottom: "1px solid " + LINE }}>
+                  <span style={{ color: fileIcon(it.name).c, display: "flex" }}><Svg d={fileIcon(it.name).d} size={20} /></span>
                   <span style={{ flex: 1, fontSize: 13.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.name}</span>
                   <span style={{ color: SUB, fontSize: 12 }}>{fmtSize(it.size)}</span>
                 </div>
@@ -654,7 +667,7 @@ export default function App() {
               {!openMenu.editHide && /\.(zip|apk|jar)$/i.test(openMenu.file.name) && (
                 <div onClick={() => openArchive(openMenu.file)} style={{ ...S.appRow, color: GOLD }}>
                   <span style={{ width: 38, display: "flex", justifyContent: "center" }}><Svg d={I.folder} size={28} /></span>
-                  <span style={{ flex: 1, fontSize: 15 }}>Открыть как папку</span>
+                  <span style={{ flex: 1, fontSize: 15 }}>Открыть</span>
                 </div>
               )}
               {!openMenu.editHide && /\.apk$/i.test(openMenu.file.name) && (
@@ -682,8 +695,8 @@ export default function App() {
       {toast && <div style={S.toast}>{toast}</div>}
 
       <style>{`
-        @keyframes fm-in-r{from{transform:translateX(-14%);opacity:.4}to{transform:none;opacity:1}}
-        @keyframes fm-in-l{from{transform:translateX(14%);opacity:.4}to{transform:none;opacity:1}}
+        @keyframes fm-in-r{from{transform:translateX(14%);opacity:.4}to{transform:none;opacity:1}}
+        @keyframes fm-in-l{from{transform:translateX(-14%);opacity:.4}to{transform:none;opacity:1}}
         @keyframes dropGrow{from{opacity:0;transform:scale(.88)}to{opacity:1;transform:scale(1)}}
         @keyframes sUp{from{transform:translateY(60px);opacity:0}to{transform:translateY(0);opacity:1}}
         @keyframes fS{from{opacity:0}to{opacity:1}}
@@ -726,7 +739,7 @@ function Btn({ onClick, icon, text, label, accent, red, flexNone, disabled }) {
 
 const S = {
   app: { display: "flex", flexDirection: "column", height: "100vh", background: BG, color: TXT, fontFamily: "system-ui,-apple-system,Roboto,sans-serif", overflow: "hidden" },
-  tabsbar: { display: "flex", alignItems: "center", background: BAR, borderBottom: "1px solid #16100A", flexShrink: 0, height: 48 },
+  tabsbar: { display: "flex", alignItems: "center", background: BAR, flexShrink: 0, height: 50, borderRadius: "0 0 16px 16px" },
   tabs: { display: "flex", overflowX: "auto", flex: 1, alignItems: "center", gap: 6, padding: "0 4px", height: "100%" },
   tab: { display: "flex", alignItems: "center", gap: 6, padding: "0 12px", height: 34, borderRadius: 17, fontSize: 13.5, color: SUB, whiteSpace: "nowrap", background: "#241A11", flexShrink: 0 },
   tabActive: { color: "#fff", background: ACC },
@@ -734,20 +747,20 @@ const S = {
   hbtn: { border: "none", background: "transparent", color: TXT, width: 40, height: 48, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" },
   crumb: { padding: "8px 16px", fontSize: 13, background: BG, flexShrink: 0, borderBottom: "1px solid #241A11", overflow: "hidden", whiteSpace: "nowrap" },
   list: { flex: 1, overflowY: "auto", overflowX: "hidden", display: "flex", flexDirection: "column" },
-  slideWrap: { paddingTop: 6, paddingBottom: "55vh" },
+  slideWrap: { marginTop: "auto" },
   note: { color: SUB, textAlign: "center", padding: "60px 24px", lineHeight: 1.6 },
   row: { display: "flex", alignItems: "center", gap: 14, padding: "12px 16px", margin: "3px 8px", borderRadius: 12, background: ROW2, touchAction: "pan-y" },
-  rowDir: { background: "#33271A", borderLeft: "3px solid " + ACC },
-  cnt: { marginLeft: 8, background: "#43331F", color: GOLD, fontSize: 12, fontWeight: 700, padding: "1px 8px", borderRadius: 10, verticalAlign: "middle" },
+  rowDir: { background: "#2C2114" },
+  cnt: { background: "#43331F", color: GOLD, fontSize: 12, fontWeight: 700, padding: "2px 9px", borderRadius: 10, flexShrink: 0 },
   rowSel: { background: "#3A2A18", outline: "1px solid " + ACC },
   name: { flex: 1, fontSize: 15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
   checkOn: { width: 26, height: 26, borderRadius: 13, background: ACC, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15 },
   searchBar: { display: "flex", alignItems: "center", background: ROW2, padding: 8, gap: 8, flexShrink: 0 },
   searchInput: { flex: 1, padding: "10px 12px", borderRadius: 8, border: "1px solid " + LINE, background: BAR, color: TXT, fontSize: 15, outline: "none" },
   searchClose: { border: "none", background: "transparent", color: SUB, fontSize: 24, width: 40 },
-  bottom: { display: "flex", alignItems: "center", background: BAR, borderTop: "1px solid #16100A", paddingBottom: "env(safe-area-inset-bottom)", flexShrink: 0 },
+  bottom: { display: "flex", alignItems: "center", background: BAR, paddingBottom: "env(safe-area-inset-bottom)", flexShrink: 0, borderRadius: "16px 16px 0 0" },
   btn: { border: "none", background: "transparent", padding: "6px 6px 7px", display: "flex", flexDirection: "column", alignItems: "center", gap: 2 },
-  selCount: { minWidth: 26, height: 26, padding: "0 8px", margin: "0 8px", background: ACC, color: "#fff", borderRadius: 13, fontWeight: 700, fontSize: 13, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  selCount: { width: 28, height: 28, margin: "0 10px", background: ACC, color: "#fff", borderRadius: 14, fontWeight: 700, fontSize: 13, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
   btnLabel: { fontSize: 10, color: SUB, whiteSpace: "nowrap" },
   overlay: { position: "fixed", inset: 0, zIndex: 8 },
   menu: { position: "absolute", zIndex: 9, background: BAR, borderRadius: 12, overflow: "hidden", border: "1px solid " + LINE, boxShadow: "0 8px 32px rgba(0,0,0,.6)", minWidth: 200, animation: "dropGrow .2s cubic-bezier(.2,.9,.3,1.2)" },
