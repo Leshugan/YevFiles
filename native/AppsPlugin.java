@@ -7,6 +7,9 @@ import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.drawable.Drawable;
 import android.net.Uri;
+import android.os.Build;
+import android.os.Environment;
+import android.provider.Settings;
 import android.util.Base64;
 
 import androidx.core.content.FileProvider;
@@ -137,6 +140,35 @@ public class AppsPlugin extends Plugin {
             if (kids != null) for (File k : kids) deleteRecursive(k);
         }
         return f.delete();
+    }
+
+    @PluginMethod
+    public void hasAllFiles(PluginCall call) {
+        boolean granted;
+        if (Build.VERSION.SDK_INT >= 30) granted = Environment.isExternalStorageManager();
+        else granted = true;
+        JSObject ret = new JSObject();
+        ret.put("granted", granted);
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void requestAllFiles(PluginCall call) {
+        try {
+            Intent i;
+            if (Build.VERSION.SDK_INT >= 30) {
+                i = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
+                i.setData(Uri.parse("package:" + getContext().getPackageName()));
+            } else {
+                i = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+                i.setData(Uri.parse("package:" + getContext().getPackageName()));
+            }
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(i);
+            call.resolve();
+        } catch (Exception e) {
+            call.reject(e.getMessage());
+        }
     }
 
     private File toFile(String u) {
