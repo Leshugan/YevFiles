@@ -8,11 +8,11 @@ import android.graphics.Canvas;
 import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.os.Build;
+import android.os.StrictMode;
 import android.os.Environment;
 import android.provider.Settings;
 import android.util.Base64;
 
-import androidx.core.content.FileProvider;
 
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
@@ -38,9 +38,8 @@ public class AppsPlugin extends Plugin {
         boolean dataSet = false;
         if (uriStr != null) {
             try {
-                Uri content = contentUri(toFile(uriStr));
-                intent.setDataAndType(content, mime);
-                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                try { StrictMode.setVmPolicy(new StrictMode.VmPolicy.Builder().build()); } catch (Exception ignored) {}
+                intent.setDataAndType(Uri.fromFile(toFile(uriStr)), mime);
                 dataSet = true;
             } catch (Exception ignored) {}
         }
@@ -84,10 +83,11 @@ public class AppsPlugin extends Plugin {
             File f = toFile(uriStr);
             if (!f.exists()) { call.reject("Файл не найден: " + f.getAbsolutePath()); return; }
             if (f.isDirectory()) { call.reject("Это папка: " + f.getAbsolutePath()); return; }
-            Uri content = contentUri(f);
+            try { StrictMode.setVmPolicy(new StrictMode.VmPolicy.Builder().build()); } catch (Exception ignored) {}
+            Uri data = Uri.fromFile(f);
             Intent i = new Intent(Intent.ACTION_VIEW);
-            i.setDataAndType(content, mime);
-            i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+            i.setDataAndType(data, mime);
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             if (pkg != null && act != null) i.setClassName(pkg, act);
             else if (pkg != null) i.setPackage(pkg);
             getContext().startActivity(i);
@@ -162,10 +162,6 @@ public class AppsPlugin extends Plugin {
         } catch (Exception e) {
             call.reject(e.getMessage());
         }
-    }
-
-    private Uri contentUri(File f) {
-        return FileProvider.getUriForFile(getContext(), getContext().getPackageName() + ".appsfp", f);
     }
 
     private boolean deleteRecursive(File f) {
