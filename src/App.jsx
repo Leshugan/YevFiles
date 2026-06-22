@@ -19,7 +19,7 @@ let mem = null;
 const ls = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } },
   set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
 const loadTabs = () => { try { return JSON.parse(ls.get(TKEY)); } catch { return mem; } };
-const saveTabs = (t) => { mem = t; ls.set(TKEY, JSON.stringify(t)); };
+const saveTabs = (t) => { const keep = t.filter((x) => x.saved); mem = keep; ls.set(TKEY, JSON.stringify(keep)); };
 const loadMeta = () => { try { const m = JSON.parse(ls.get(METAKEY)) || {}; return { hidden: new Set(m.hidden || []), pinTop: new Set(m.pinTop || []), pinBot: new Set(m.pinBot || []) }; } catch { return { hidden: new Set(), pinTop: new Set(), pinBot: new Set() }; } };
 const saveMeta = (m) => ls.set(METAKEY, JSON.stringify({ hidden: [...m.hidden], pinTop: [...m.pinTop], pinBot: [...m.pinBot] }));
 
@@ -42,7 +42,8 @@ const mimeOf = (name) => MIME[(name.split(".").pop() || "").toLowerCase()] || "*
 const I = {
   back: <path d="M15 18l-6-6 6-6" />,
   search: <><circle cx="11" cy="11" r="7" /><path d="M21 21l-4-4" /></>,
-  selectAll: <><path d="M4 8V6a2 2 0 0 1 2-2h2" /><path d="M16 4h2a2 2 0 0 1 2 2v2" /><path d="M20 16v2a2 2 0 0 1-2 2h-2" /><path d="M8 20H6a2 2 0 0 1-2-2v-2" /><path d="M9 12l2 2 4-4" /></>,
+  selectAll: <><path d="M3 5l1.5 1.5L7 4" /><path d="M3 12l1.5 1.5L7 11" /><path d="M3 19l1.5 1.5L7 18" /><path d="M11 5h10" /><path d="M11 12h10" /><path d="M11 19h10" /></>,
+  refresh: <><path d="M21 12a9 9 0 1 1-2.6-6.4" /><path d="M21 4v5h-5" /></>,
   plus: <><path d="M12 5v14" /><path d="M5 12h14" /></>,
   x: <><path d="M6 6l12 12" /><path d="M18 6L6 18" /></>,
   cut: <><circle cx="6" cy="6" r="3" /><circle cx="6" cy="18" r="3" /><path d="M20 4L8.5 15.5" /><path d="M20 20L8.5 8.5" /></>,
@@ -228,9 +229,30 @@ export default function App() {
   const sx = useRef(0), sy = useRef(0), swiped = useRef(false);
   const onTS = (e) => { sx.current = e.touches[0].clientX; sy.current = e.touches[0].clientY; swiped.current = false; };
   const onTM = (e) => { const dx = e.touches[0].clientX - sx.current, dy = e.touches[0].clientY - sy.current; if (!swiped.current && Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 1.5) { swiped.current = true; switchTab(dx > 0 ? -1 : 1); } };
-  const tabLp = useRef();
-  const tabDown = (ev, i) => { clearTimeout(tabLp.current); const t = tabs[i]; tabLp.current = setTimeout(() => { buzz(15); setActive(i); setCtx({ tab: t, x: ev.clientX, y: ev.clientY }); }, 450); };
-  const tabUp = () => clearTimeout(tabLp.current);
+  const tabRefs = useRef([]);
+  const tabDrag = useRef({ from: -1, x0: 0, active: false, fired: false, lp: null });
+  const moveTab = (from, to) => { setTabs((arr) => { const a = [...arr]; const [m] = a.splice(from, 1); a.splice(to, 0, m); return a; }); setActive(to); };
+  const persistCurrent = () => setTabs((cur) => { saveTabs(cur); return cur; });
+  const onTabDown = (ev, i) => {
+    const d = tabDrag.current; d.from = i; d.x0 = ev.clientX; d.active = false; d.fired = false;
+    clearTimeout(d.lp);
+    d.lp = setTimeout(() => { d.fired = true; buzz(15); setActive(i); setCtx({ tab: tabs[i], x: ev.clientX, y: ev.clientY }); }, 450);
+  };
+  const onTabMove = (ev) => {
+    const d = tabDrag.current; if (d.from < 0) return;
+    if (!d.active && !d.fired && Math.abs(ev.clientX - d.x0) > 12) { d.active = true; clearTimeout(d.lp); }
+    if (d.active) {
+      let target = d.from;
+      for (let j = 0; j < tabRefs.current.length; j++) { const el = tabRefs.current[j]; if (!el) continue; const r = el.getBoundingClientRect(); if (ev.clientX >= r.left && ev.clientX <= r.right) { target = j; break; } }
+      if (target !== d.from && target >= 0) { moveTab(d.from, target); d.from = target; }
+    }
+  };
+  const onTabUp = (i) => {
+    const d = tabDrag.current; clearTimeout(d.lp);
+    if (d.active) { d.active = false; persistCurrent(); }
+    else if (!d.fired) setActive(i);
+    d.from = -1; d.fired = false;
+  };
 
   /* операции через .uri */
   const refresh = () => list();
@@ -269,7 +291,7 @@ export default function App() {
   };
 
   const tabStartup = () => { ls.set(SKEY, ctx.tab.path); buzz(15); setCtx(null); showToast("Открывается при старте: " + (ctx.tab.path ? baseName(ctx.tab.path) : "Storage")); };
-  const tabRemember = () => { saveTabs(tabs); buzz(15); setCtx(null); showToast("Вкладка сохранена"); };
+  const tabRemember = () => { const t = tabs.map((x) => (x.id === ctx.tab.id ? { ...x, saved: true } : x)); persist(t); buzz(15); setCtx(null); showToast("Вкладка закреплена"); };
 
   const copyPath = async (p) => { try { await navigator.clipboard.writeText(p); showToast("Путь скопирован"); } catch { showToast("Не удалось скопировать"); } };
 
@@ -306,14 +328,16 @@ export default function App() {
       <div style={S.tabsbar}>
         <div style={S.tabs}>
           {tabs.map((t, i) => (
-            <div key={t.id} onClick={() => setActive(i)}
-              onPointerDown={(ev) => tabDown(ev, i)} onPointerUp={tabUp} onPointerMove={tabUp} onPointerCancel={tabUp}
+            <div key={t.id} ref={(el) => (tabRefs.current[i] = el)}
+              onPointerDown={(ev) => onTabDown(ev, i)} onPointerMove={onTabMove} onPointerUp={() => onTabUp(i)} onPointerCancel={() => onTabUp(i)}
               style={{ ...S.tab, ...(i === active ? S.tabActive : {}) }}>
+              {t.saved && <span style={{ color: ACC, display: "flex" }}><Svg d={I.pin} size={13} /></span>}
               <span style={{ overflow: "hidden", textOverflow: "ellipsis", maxWidth: 110 }}>{t.path ? baseName(t.path) : "Storage"}</span>
               {tabs.length > 1 && <span style={S.tabX} onClick={(e) => { e.stopPropagation(); closeTab(i); }}>×</span>}
             </div>
           ))}
         </div>
+        <button style={S.hbtn} onClick={() => list()}><Svg d={I.refresh} size={20} /></button>
         <button style={S.hbtn} onClick={addTab}><Svg d={I.plus} size={22} /></button>
         <div style={{ position: "relative" }}>
           <button style={S.hbtn} onClick={() => setHeadMenu((v) => !v)}><Svg d={I.dots} size={22} /></button>
@@ -345,7 +369,7 @@ export default function App() {
       {/* СПИСОК */}
       <main style={S.list} onTouchStart={onTS} onTouchMove={onTM}>
         <div key={active} style={{ ...S.slideWrap, animation: slide ? `fm-in-${slide > 0 ? "r" : "l"} .22s ease` : "none" }}>
-          {loading && <div style={S.note}>Загрузка…</div>}
+          {loading && null}
           {error && <div style={{ ...S.note, color: RED }}>{error}<br /><span style={{ fontSize: 12 }}>Разрешите «Доступ ко всем файлам» в настройках приложения.</span></div>}
           {!loading && !error && visible.length === 0 && <div style={S.note}>Пусто</div>}
           {visible.map((e) => {
