@@ -25,14 +25,37 @@ import java.util.List;
 @CapacitorPlugin(name = "Apps")
 public class AppsPlugin extends Plugin {
 
-    /** Список активити, способных открыть файл данного MIME-типа. */
     @PluginMethod
     public void query(PluginCall call) {
         String mime = call.getString("mime", "*/*");
+        String uriStr = call.getString("uri");
         PackageManager pm = getContext().getPackageManager();
+
         Intent intent = new Intent(Intent.ACTION_VIEW);
-        intent.setType(mime);
-        List<ResolveInfo> list = pm.queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY);
+        boolean dataSet = false;
+        if (uriStr != null) {
+            try {
+                File f = toFile(uriStr);
+                Uri content = FileProvider.getUriForFile(getContext(), getContext().getPackageName() + ".appsfp", f);
+                intent.setDataAndType(content, mime);
+                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                dataSet = true;
+            } catch (Exception ignored) {}
+        }
+        if (!dataSet) intent.setType(mime);
+
+        List<ResolveInfo> list = pm.queryIntentActivities(intent, PackageManager.MATCH_ALL);
+        if (list.isEmpty() && dataSet) {
+            Intent alt = new Intent(Intent.ACTION_VIEW);
+            alt.setType(mime);
+            list = pm.queryIntentActivities(alt, PackageManager.MATCH_ALL);
+        }
+        if (list.isEmpty()) {
+            Intent edit = new Intent(Intent.ACTION_EDIT);
+            edit.setType(mime);
+            list = pm.queryIntentActivities(edit, PackageManager.MATCH_ALL);
+        }
+
         JSArray apps = new JSArray();
         for (ResolveInfo ri : list) {
             if (ri.activityInfo == null) continue;
@@ -48,7 +71,6 @@ public class AppsPlugin extends Plugin {
         call.resolve(ret);
     }
 
-    /** Открыть файл: конкретной активити (packageName+activityName) или системным выбором. */
     @PluginMethod
     public void open(PluginCall call) {
         String uriStr = call.getString("uri");
@@ -69,6 +91,52 @@ public class AppsPlugin extends Plugin {
         } catch (Exception e) {
             call.reject(e.getMessage());
         }
+    }
+
+    @PluginMethod
+    public void list(PluginCall call) {
+        String uriStr = call.getString("uri");
+        if (uriStr == null) { call.reject("no uri"); return; }
+        try {
+            File dir = toFile(uriStr);
+            File[] kids = dir.listFiles();
+            JSArray arr = new JSArray();
+            if (kids != null) {
+                for (File k : kids) {
+                    JSObject o = new JSObject();
+                    o.put("name", k.getName());
+                    o.put("type", k.isDirectory() ? "directory" : "file");
+                    o.put("size", k.length());
+                    o.put("mtime", k.lastModified());
+                    o.put("uri", "file://" + k.getAbsolutePath());
+                    arr.put(o);
+                }
+            }
+            JSObject ret = new JSObject();
+            ret.put("files", arr);
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject(e.getMessage());
+        }
+    }
+
+    @PluginMethod
+    public void delete(PluginCall call) {
+        String uriStr = call.getString("uri");
+        if (uriStr == null) { call.reject("no uri"); return; }
+        File f = toFile(uriStr);
+        boolean ok = deleteRecursive(f);
+        JSObject ret = new JSObject();
+        ret.put("deleted", ok || !f.exists());
+        call.resolve(ret);
+    }
+
+    private boolean deleteRecursive(File f) {
+        if (f.isDirectory()) {
+            File[] kids = f.listFiles();
+            if (kids != null) for (File k : kids) deleteRecursive(k);
+        }
+        return f.delete();
     }
 
     private File toFile(String u) {
