@@ -40,6 +40,8 @@ jobs:
           fi
           # доступ к файлам в legacy-режиме (Android 10)
           sed -i 's#<application #<application android:requestLegacyExternalStorage="true" #' "$MAN"
+          # старый back-callback, чтобы кнопка/жест «Назад» доходили до приложения
+          sed -i 's#<application #<application android:enableOnBackInvokedCallback="false" #' "$MAN"
           # FileProvider для открытия файлов сторонними приложениями
           if ! grep -q "appsfp" "$MAN"; then
             sed -i 's#</application>#    <provider android:name="androidx.core.content.FileProvider" android:authorities="${applicationId}.appsfp" android:exported="false" android:grantUriPermissions="true"><meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/apps_file_paths" /></provider>\n    </application>#' "$MAN"
