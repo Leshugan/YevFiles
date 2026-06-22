@@ -14,6 +14,8 @@ import android.os.Environment;
 import android.provider.Settings;
 import android.util.Base64;
 
+import androidx.core.content.FileProvider;
+
 
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
@@ -173,9 +175,12 @@ public class AppsPlugin extends Plugin {
         if (uriStr == null) { call.reject("no uri"); return; }
         try {
             File f = toFile(uriStr);
-            try { StrictMode.setVmPolicy(new StrictMode.VmPolicy.Builder().build()); } catch (Exception ignored) {}
+            if (!f.exists()) { call.reject("Файл не найден: " + f.getAbsolutePath()); return; }
+            Uri apk;
+            if (Build.VERSION.SDK_INT >= 24) apk = FileProvider.getUriForFile(getContext(), getContext().getPackageName() + ".appsfp", f);
+            else apk = Uri.fromFile(f);
             Intent i = new Intent(Intent.ACTION_VIEW);
-            i.setDataAndType(Uri.fromFile(f), "application/vnd.android.package-archive");
+            i.setDataAndType(apk, "application/vnd.android.package-archive");
             i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_GRANT_READ_URI_PERMISSION);
             getContext().startActivity(i);
             call.resolve();
