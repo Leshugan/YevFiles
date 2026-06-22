@@ -42,7 +42,7 @@ const mimeOf = (name) => MIME[(name.split(".").pop() || "").toLowerCase()] || "*
 const I = {
   back: <path d="M15 18l-6-6 6-6" />,
   search: <><circle cx="11" cy="11" r="7" /><path d="M21 21l-4-4" /></>,
-  selectAll: <><rect x="3" y="3" width="18" height="18" rx="3" /><path d="M8 12l3 3 5-6" /></>,
+  selectAll: <><path d="M4 8V6a2 2 0 0 1 2-2h2" /><path d="M16 4h2a2 2 0 0 1 2 2v2" /><path d="M20 16v2a2 2 0 0 1-2 2h-2" /><path d="M8 20H6a2 2 0 0 1-2-2v-2" /><path d="M9 12l2 2 4-4" /></>,
   plus: <><path d="M12 5v14" /><path d="M5 12h14" /></>,
   x: <><path d="M6 6l12 12" /><path d="M18 6L6 18" /></>,
   cut: <><circle cx="6" cy="6" r="3" /><circle cx="6" cy="18" r="3" /><path d="M20 4L8.5 15.5" /><path d="M20 20L8.5 8.5" /></>,
@@ -135,9 +135,12 @@ export default function App() {
   const list = useCallback(async () => {
     setLoading(true); setError(null);
     try {
-      try { const u = await Filesystem.getUri({ path, directory: DIR }); setCurUri(u.uri); } catch {}
-      const { files } = await Filesystem.readdir({ path, directory: DIR });
-      setEntries(files);
+      const u = await Filesystem.getUri({ path, directory: DIR });
+      setCurUri(u.uri);
+      let files;
+      try { const r = await Apps.list({ uri: u.uri }); files = r.files; }
+      catch { const r = await Filesystem.readdir({ path, directory: DIR }); files = r.files; }
+      setEntries(files || []);
     } catch (e) { setError(e.message || "Нет доступа к хранилищу"); setEntries([]); }
     setLoading(false);
   }, [path]);
@@ -157,7 +160,7 @@ export default function App() {
     (async () => { try { const { files } = await Filesystem.readdir({ path: props.uri }); setPropCount({ d: files.filter((f) => f.type === "directory").length, f: files.filter((f) => f.type !== "directory").length }); } catch { setPropCount(null); } })();
   }, [props]);
 
-  const exitSel = () => { setSel(new Set()); setSelMode(false); setConfirmDel(false); setSelMenu(false); };
+  const exitSel = () => { setSel(new Set()); setSelMode(false); setConfirmDel(null); setSelMenu(false); };
   const setTabPath = (p) => persist(tabs.map((x, i) => (i === active ? { ...x, path: p } : x)));
   const goUp = () => { if (path) setTabPath(parent(path)); };
   const closeTab = (i) => { if (tabs.length === 1) return; const t = tabs.filter((_, idx) => idx !== i); persist(t); setActive(Math.max(0, Math.min(active, t.length - 1))); };
@@ -171,7 +174,7 @@ export default function App() {
       if (selMenu) { setSelMenu(false); return; }
       if (headMenu) { setHeadMenu(false); return; }
       if (ctx) { setCtx(null); return; }
-      if (confirmDel) { setConfirmDel(false); return; }
+      if (confirmDel) { setConfirmDel(null); return; }
       if (createOpen) { setCreateOpen(false); return; }
       if (query !== null) { setQuery(null); return; }
       if (selMode) { exitSel(); return; }
@@ -195,7 +198,7 @@ export default function App() {
   };
   const showOpenMenu = async (e, mime) => {
     try {
-      const { apps } = await Apps.query({ mime });
+      const { apps } = await Apps.query({ uri: e.uri, mime });
       if (!apps || !apps.length) { showToast("Нет приложений для этого типа"); return; }
       setOpenMenu({ file: e, mime, apps, useDefault: false, editHide: false });
     } catch (err) { showToast("Не удалось получить список: " + (err?.message || "")); }
@@ -234,14 +237,18 @@ export default function App() {
   const targetUri = (name) => (curUri ? curUri + "/" + name : null);
   const doCreateFolder = async (name) => { setSheet(null); if (!name) return; try { await Filesystem.mkdir({ path: targetUri(name) }); refresh(); } catch (e) { showToast("Ошибка: " + e.message); } };
   const doCreateTxt = async (name) => { setSheet(null); if (!name) return; if (!/\.txt$/i.test(name)) name += ".txt"; try { await Filesystem.writeFile({ path: targetUri(name), data: "", encoding: Encoding.UTF8 }); refresh(); } catch (e) { showToast("Ошибка: " + e.message); } };
+  const doCreateNomedia = async () => { try { await Filesystem.writeFile({ path: targetUri(".nomedia"), data: "", encoding: Encoding.UTF8 }); refresh(); showToast("Создан .nomedia"); } catch (e) { showToast("Ошибка: " + e.message); } };
   const doRename = async (oldName, newName) => { setSheet(null); if (!newName || newName === oldName) return; const e = byName(oldName); if (!e) return; try { await Filesystem.rename({ from: e.uri, to: targetUri(newName) }); exitSel(); refresh(); } catch (er) { showToast("Ошибка: " + er.message); } };
   const delTree = async (e) => {
-    if (e.type !== "directory") { await Filesystem.deleteFile({ path: e.uri }); return; }
-    try { const { files } = await Filesystem.readdir({ path: e.uri }); for (const f of files) await delTree(f); } catch {}
-    await Filesystem.rmdir({ path: e.uri, recursive: true });
+    try { const r = await Apps.delete({ uri: e.uri }); if (r && r.deleted) return; } catch {}
+    // фолбэк
+    if (e.type === "directory") {
+      try { const { files } = await Apps.list({ uri: e.uri }); for (const f of files) await delTree(f); } catch {}
+      await Filesystem.rmdir({ path: e.uri, recursive: true });
+    } else await Filesystem.deleteFile({ path: e.uri });
   };
   const doDelete = async () => {
-    const names = [...sel]; setConfirmDel(false); let ok = 0, fail = 0;
+    const names = [...sel]; setConfirmDel(null); let ok = 0, fail = 0;
     for (const name of names) { const e = byName(name); if (!e) { fail++; continue; } try { await delTree(e); ok++; } catch { fail++; } }
     exitSel(); await refresh();
     showToast(fail ? "Не удалено: " + fail + (ok ? ", удалено: " + ok : "") : "Удалено: " + ok);
@@ -373,21 +380,12 @@ export default function App() {
         <nav style={{ ...S.bottom, justifyContent: "flex-start" }}>
           <Btn onClick={exitSel} icon={I.x} label="Отмена" flexNone />
           <div style={{ display: "flex", overflowX: "auto", flex: 1 }}>
-            {confirmDel ? (
-              <>
-                <Btn onClick={doDelete} text="Да" label="Удалить" red flexNone />
-                <Btn onClick={() => setConfirmDel(false)} text="Нет" label="" flexNone />
-              </>
-            ) : (
-              <>
-                <Btn onClick={() => setProps(one)} icon={I.info} label="Свойства" flexNone disabled={sel.size !== 1} />
-                <Btn onClick={() => { const e = one; const sp = splitExt(e.name, e.type === "directory"); setSheet({ kind: "rename", old: e.name, base: sp.base, ext: sp.ext, editExt: false }); }} icon={I.rename} label="Имя" flexNone disabled={sel.size !== 1} />
-                <Btn onClick={() => setConfirmDel(true)} icon={I.trash} label="Удалить" red flexNone />
-                <Btn onClick={() => grab("copy")} icon={I.copy} label="Копир." flexNone />
-                <Btn onClick={() => grab("cut")} icon={I.cut} label="Вырезать" flexNone />
-                <Btn onClick={() => setSelMenu((v) => !v)} icon={I.dots} label="Ещё" flexNone />
-              </>
-            )}
+            <Btn onClick={() => setProps(one)} icon={I.info} label="Свойства" flexNone disabled={sel.size !== 1} />
+            <Btn onClick={() => { const e = one; const sp = splitExt(e.name, e.type === "directory"); setSheet({ kind: "rename", old: e.name, base: sp.base, ext: sp.ext, editExt: false }); }} icon={I.rename} label="Имя" flexNone disabled={sel.size !== 1} />
+            <Btn onClick={(ev) => { const r = ev.currentTarget.getBoundingClientRect(); setConfirmDel({ left: r.left, top: r.top }); }} icon={I.trash} label="Удалить" red flexNone />
+            <Btn onClick={() => grab("copy")} icon={I.copy} label="Копир." flexNone />
+            <Btn onClick={() => grab("cut")} icon={I.cut} label="Вырезать" flexNone />
+            <Btn onClick={() => setSelMenu((v) => !v)} icon={I.dots} label="Ещё" flexNone />
           </div>
         </nav>
       ) : (
@@ -412,6 +410,8 @@ export default function App() {
         <>
           <div style={{ position: "fixed", inset: 0, zIndex: 1190 }} onClick={() => setCreateOpen(false)} />
           <div style={{ ...S.menu, position: "fixed", right: 8, bottom: "calc(62px + env(safe-area-inset-bottom))", zIndex: 1200, minWidth: 150 }}>
+            <div style={S.createItem} onClick={() => { setCreateOpen(false); doCreateNomedia(); }}>.nomedia</div>
+            <div style={{ height: 1, background: LINE }} />
             <div style={S.createItem} onClick={() => { setCreateOpen(false); setSheet({ kind: "folder", val: "" }); }}>Папка</div>
             <div style={{ height: 1, background: LINE }} />
             <div style={S.createItem} onClick={() => { setCreateOpen(false); setSheet({ kind: "txt", val: "" }); }}>TXT</div>
@@ -424,7 +424,18 @@ export default function App() {
         <>
           <div style={{ position: "fixed", inset: 0, zIndex: 1190 }} onClick={() => setSelMenu(false)} />
           <div style={{ ...S.menu, position: "fixed", right: 8, bottom: "calc(62px + env(safe-area-inset-bottom))", zIndex: 1200 }}>
-            <div style={S.menuItem} onClick={() => metaToggle("hidden")}><span style={{ color: SUB, display: "flex" }}><Svg d={I.eyeOff} size={20} /></span>Скрыть</div>
+            {one && one.type === "directory" && (
+              <>
+                <div style={S.menuItem} onClick={() => { const t = [...tabs, { id: Date.now(), path: keyOf(one.name) }]; persist(t); setSelMenu(false); exitSel(); setActive(t.length - 1); }}>
+                  <span style={{ color: GOLD, display: "flex" }}><Svg d={I.folder} size={20} /></span>Открыть во вкладке
+                </div>
+                <div style={{ height: 1, background: LINE }} />
+              </>
+            )}
+            <div style={S.menuItem} onClick={() => metaToggle("hidden")}>
+              <span style={{ color: SUB, display: "flex" }}><Svg d={[...sel].every((n) => meta.hidden.has(keyOf(n))) ? I.eye : I.eyeOff} size={20} /></span>
+              {[...sel].every((n) => meta.hidden.has(keyOf(n))) ? "Показать" : "Скрыть"}
+            </div>
             <div style={{ height: 1, background: LINE }} />
             <div style={S.menuItem} onClick={() => metaToggle("top")}><span style={{ color: ACC, display: "flex" }}><Svg d={I.pinT} size={20} /></span>Закрепить сверху</div>
             <div style={{ height: 1, background: LINE }} />
@@ -492,6 +503,18 @@ export default function App() {
             <button style={{ ...S.sheetGhost, width: "100%", marginTop: 14 }} onClick={() => setProps(null)}>Закрыть</button>
           </div>
         </div>
+      )}
+
+      {/* ПОДТВЕРЖДЕНИЕ УДАЛЕНИЯ — над кнопкой «Удалить» */}
+      {confirmDel && (
+        <>
+          <div style={{ position: "fixed", inset: 0, zIndex: 1290 }} onClick={() => setConfirmDel(null)} />
+          <div style={{ position: "fixed", zIndex: 1300, left: Math.max(8, Math.min(confirmDel.left - 6, window.innerWidth - 150)), top: confirmDel.top - 56,
+            display: "flex", gap: 8, background: BAR, border: "1px solid " + LINE, borderRadius: 12, padding: 8, boxShadow: "0 8px 28px rgba(0,0,0,.6)", animation: "dropGrow .15s ease" }}>
+            <button onClick={doDelete} style={{ background: RED, border: "none", borderRadius: 8, color: "#fff", fontSize: 14, fontWeight: 700, padding: "8px 18px" }}>Да</button>
+            <button onClick={() => setConfirmDel(null)} style={{ background: ROW2, border: "1px solid " + LINE, borderRadius: 8, color: SUB, fontSize: 14, padding: "8px 18px" }}>Нет</button>
+          </div>
+        </>
       )}
 
       {/* МЕНЮ ОТКРЫТИЯ ФАЙЛА */}
