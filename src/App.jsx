@@ -70,6 +70,9 @@ const I = {
   pinB: <><path d="M12 21v-8M8 17l4 4 4-4" /><path d="M5 10h14M5 10V4h14v6" /></>,
   folder: <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />,
   file: <><path d="M6 2h9l5 5v15H6z" /><path d="M14 2v6h6" /></>,
+  txt: <><path d="M6 2h9l5 5v15H6z" /><path d="M14 2v6h6" /><path d="M9 13h6M9 16h6M9 10h3" /></>,
+  pdf: <><path d="M6 2h9l5 5v15H6z" /><path d="M14 2v6h6" /><path d="M9 18v-5h1.8a1.6 1.6 0 0 1 0 3.2H9" /></>,
+  lnk: <><rect x="4" y="4" width="16" height="16" rx="2" /><path d="M9 15l6-6M10.5 9H15v4.5" /></>,
   img: <><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><path d="M21 15l-5-5L5 21" /></>,
   video: <><rect x="2" y="5" width="14" height="14" rx="2" /><path d="M16 10l6-3v10l-6-3z" /></>,
   audio: <><path d="M9 18V5l10-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="16" cy="16" r="3" /></>,
@@ -90,6 +93,9 @@ const EXT = {
 };
 const fileIcon = (name) => {
   const ext = (name.split(".").pop() || "").toLowerCase();
+  if (ext === "pdf") return { d: I.pdf, c: "#E0574F" };
+  if (ext === "lnk") return { d: I.lnk, c: GOLD };
+  if (["txt", "md", "log", "ini", "cfg"].includes(ext)) return { d: I.txt, c: "#9FD0FF" };
   if (EXT.img.includes(ext)) return { d: I.img, c: "#7FB3FF" };
   if (EXT.video.includes(ext)) return { d: I.video, c: "#C98BFF" };
   if (EXT.audio.includes(ext)) return { d: I.audio, c: "#FF9D6B" };
@@ -255,8 +261,8 @@ export default function App() {
   const onTabUp = (i) => { const d = tabDrag.current; if (d.active) { d.active = false; persistCurrent(); } else setActive(i); d.from = -1; };
 
   const saveAllTabs = () => { setTabsMenu(false); const t = tabs.map((x) => ({ ...x, saved: true })); persist(t); showToast("Вкладки сохранены"); };
-  const startupHere = () => { setTabsMenu(false); ls.set(SKEY, path); showToast("Открывается при старте: " + (path ? baseName(path) : "Storage")); };
-  const resetStartup = () => { setTabsMenu(false); ls.del(SKEY); showToast("Стартовая папка сброшена"); };
+  const startupHere = () => { setTabsMenu(false); ls.set(SKEY, path); showToast("Запуск при открытии: " + (path ? baseName(path) : "Storage")); };
+  const resetTabs = () => { setTabsMenu(false); ls.del(SKEY); setTabs((arr) => { const t = arr.map((x) => ({ ...x, saved: false })); saveTabs(t); return t; }); showToast("Вкладки сброшены"); };
 
   /* операции через .uri */
   const refresh = () => list();
@@ -289,9 +295,10 @@ export default function App() {
       if (which === "hidden") { m.hidden.has(k) ? m.hidden.delete(k) : m.hidden.add(k); }
       if (which === "top") { m.pinBot.delete(k); m.pinTop.has(k) ? m.pinTop.delete(k) : m.pinTop.add(k); }
       if (which === "bot") { m.pinTop.delete(k); m.pinBot.has(k) ? m.pinBot.delete(k) : m.pinBot.add(k); }
+      if (which === "unpin") { m.pinTop.delete(k); m.pinBot.delete(k); }
     }
     applyMeta(m); setSelMenu(false); exitSel();
-    showToast(which === "hidden" ? "Готово (скрытые)" : "Закреплено");
+    showToast(which === "hidden" ? "Готово" : which === "unpin" ? "Откреплено" : "Закреплено");
   };
 
   const copyPath = async (p) => { try { await navigator.clipboard.writeText(p); showToast("Путь скопирован"); } catch { showToast("Не удалось скопировать"); } };
@@ -335,9 +342,9 @@ export default function App() {
               <div style={{ ...S.menu, position: "fixed", top: 46, left: 4, zIndex: 1200 }}>
                 <div style={S.menuItem} onClick={saveAllTabs}><span style={{ color: ACC, display: "flex" }}><Svg d={I.pin} size={20} /></span>Сохранить вкладки</div>
                 <div style={{ height: 1, background: LINE }} />
-                <div style={S.menuItem} onClick={startupHere}><span style={{ color: GOLD, display: "flex" }}><Svg d={I.star} size={20} /></span>Открывать при старте</div>
+                <div style={S.menuItem} onClick={startupHere}><span style={{ color: GOLD, display: "flex" }}><Svg d={I.star} size={20} /></span>Запуск при открытии</div>
                 <div style={{ height: 1, background: LINE }} />
-                <div style={S.menuItem} onClick={resetStartup}><span style={{ color: SUB, display: "flex" }}><Svg d={I.x} size={20} /></span>Сбросить старт</div>
+                <div style={S.menuItem} onClick={resetTabs}><span style={{ color: SUB, display: "flex" }}><Svg d={I.x} size={20} /></span>Сбросить вкладки</div>
               </div>
             </>
           )}
@@ -395,17 +402,17 @@ export default function App() {
           {!loading && !error && visible.length === 0 && <div style={S.note}>Пусто</div>}
           {visible.map((e) => {
             const isSel = sel.has(e.name), hid = isHidden(e);
-            const ic = e.type === "directory" ? { d: I.folder, c: GOLD } : fileIcon(e.name);
+            const ic = e.type === "directory" ? { d: I.folder, c: ACC } : fileIcon(e.name);
             const pinned = meta.pinTop.has(keyOf(e.name)) || meta.pinBot.has(keyOf(e.name));
             return (
               <div key={e.name} style={{ ...S.row, ...(isSel ? S.rowSel : {}), opacity: hid ? 0.5 : 1 }}
                 onPointerDown={(ev) => rDown(ev, e)} onPointerMove={rMove} onPointerUp={() => rUp(e)} onPointerCancel={() => clearTimeout(lpTimer.current)}>
                 <span style={{ color: isSel ? ACC : ic.c, display: "flex" }}
-                  onPointerDown={(ev) => ev.stopPropagation()} onClick={(ev) => { ev.stopPropagation(); toggle(e.name); }}>
-                  {isSel ? <span style={S.checkOn}>✓</span> : <Svg d={ic.d} size={26} />}
+                  onPointerDown={(ev) => ev.stopPropagation()} onPointerUp={(ev) => { ev.stopPropagation(); clearTimeout(lpTimer.current); toggle(e.name); }}>
+                  {isSel ? <span style={S.checkOn}>✓</span> : <Svg d={ic.d} size={25} />}
                 </span>
-                <span style={S.name}>{e.name}</span>
-                {pinned && <span style={{ color: SUB, display: "flex" }}><Svg d={meta.pinTop.has(keyOf(e.name)) ? I.pinT : I.pinB} size={16} /></span>}
+                <span style={S.name}>{e.name}{e.type === "directory" && e.count != null ? <span style={{ color: SUB, fontSize: 13 }}> ({e.count})</span> : null}</span>
+                {pinned && <span style={{ color: SUB, display: "flex" }}><Svg d={meta.pinTop.has(keyOf(e.name)) ? I.pinT : I.pinB} size={15} /></span>}
               </div>
             );
           })}
@@ -423,13 +430,14 @@ export default function App() {
       {/* НИЖНЯЯ ПАНЕЛЬ */}
       {selMode ? (
         <nav style={{ ...S.bottom, justifyContent: "flex-start" }}>
-          <Btn onClick={exitSel} icon={I.x} label="Отмена" flexNone />
-          <div style={{ display: "flex", overflowX: "auto", flex: 1 }}>
+          <div style={{ ...S.selCount }}>{sel.size}</div>
+          <div style={{ display: "flex", overflowX: "auto", flex: 1, justifyContent: "flex-end" }}>
+            <Btn onClick={exitSel} icon={I.x} label="Отмена" flexNone />
             <Btn onClick={() => setProps(one)} icon={I.info} label="Свойства" flexNone disabled={sel.size !== 1} />
-            <Btn onClick={() => { const e = one; const sp = splitExt(e.name, e.type === "directory"); setSheet({ kind: "rename", old: e.name, base: sp.base, ext: sp.ext, editExt: false }); }} icon={I.rename} label="Имя" flexNone disabled={sel.size !== 1} />
-            <Btn onClick={(ev) => { const r = ev.currentTarget.getBoundingClientRect(); setConfirmDel({ left: r.left, top: r.top }); }} icon={I.trash} label="Удалить" red flexNone />
-            <Btn onClick={() => grab("copy")} icon={I.copy} label="Копир." flexNone />
             <Btn onClick={() => grab("cut")} icon={I.cut} label="Вырезать" flexNone />
+            <Btn onClick={() => grab("copy")} icon={I.copy} label="Копир." flexNone />
+            <Btn onClick={(ev) => { const r = ev.currentTarget.getBoundingClientRect(); setConfirmDel({ left: r.left, top: r.top }); }} icon={I.trash} label="Удалить" red flexNone />
+            <Btn onClick={() => { const e = one; const sp = splitExt(e.name, e.type === "directory"); setSheet({ kind: "rename", old: e.name, base: sp.base, ext: sp.ext, editExt: false }); }} icon={I.rename} label="Имя" flexNone disabled={sel.size !== 1} />
             <Btn onClick={() => setSelMenu((v) => !v)} icon={I.dots} label="Ещё" flexNone />
           </div>
         </nav>
@@ -440,11 +448,11 @@ export default function App() {
           <Zone>
             {clip ? (
               <div style={{ display: "flex", flex: 1 }}>
-                <Btn onClick={paste} icon={I.paste} label={"Вставить (" + clip.items.length + ")"} accent />
+                <Btn onClick={paste} icon={I.paste} label={"Вставить (" + clip.items.length + ")"} />
                 <Btn onClick={() => setClip(null)} icon={I.x} label="Отмена" flexNone />
               </div>
             ) : (
-              <Btn onClick={() => setCreateOpen((v) => !v)} icon={I.plus} label="Создать" accent />
+              <Btn onClick={() => setCreateOpen((v) => !v)} icon={I.plus} label="Создать" />
             )}
           </Zone>
         </nav>
@@ -468,23 +476,44 @@ export default function App() {
       {selMenu && (
         <>
           <div style={{ position: "fixed", inset: 0, zIndex: 1190 }} onClick={() => setSelMenu(false)} />
-          <div style={{ ...S.menu, position: "fixed", right: 8, bottom: "calc(62px + env(safe-area-inset-bottom))", zIndex: 1200 }}>
+          <div style={{ ...S.menu, position: "fixed", right: 8, bottom: "calc(56px + env(safe-area-inset-bottom))", zIndex: 1200 }}>
             {one && one.type === "directory" && (
               <>
                 <div style={S.menuItem} onClick={() => { const t = [...tabs, { id: Date.now(), path: keyOf(one.name) }]; persist(t); setSelMenu(false); exitSel(); setActive(t.length - 1); }}>
-                  <span style={{ color: GOLD, display: "flex" }}><Svg d={I.folder} size={20} /></span>Открыть во вкладке
+                  <span style={{ color: ACC, display: "flex" }}><Svg d={I.folder} size={20} /></span>Открыть во вкладке
                 </div>
                 <div style={{ height: 1, background: LINE }} />
               </>
             )}
-            <div style={S.menuItem} onClick={() => metaToggle("hidden")}>
-              <span style={{ color: SUB, display: "flex" }}><Svg d={[...sel].every((n) => meta.hidden.has(keyOf(n))) ? I.eye : I.eyeOff} size={20} /></span>
-              {[...sel].every((n) => meta.hidden.has(keyOf(n))) ? "Показать" : "Скрыть"}
-            </div>
+            {(() => { const allHid = [...sel].every((n) => meta.hidden.has(keyOf(n))); return (
+              <div style={S.menuItem} onClick={() => metaToggle("hidden")}>
+                <span style={{ color: SUB, display: "flex" }}><Svg d={allHid ? I.eye : I.eyeOff} size={20} /></span>{allHid ? "Показать" : "Скрыть"}
+              </div>
+            ); })()}
             <div style={{ height: 1, background: LINE }} />
-            <div style={S.menuItem} onClick={() => metaToggle("top")}><span style={{ color: ACC, display: "flex" }}><Svg d={I.pinT} size={20} /></span>Закрепить сверху</div>
-            <div style={{ height: 1, background: LINE }} />
-            <div style={S.menuItem} onClick={() => metaToggle("bot")}><span style={{ color: ACC, display: "flex" }}><Svg d={I.pinB} size={20} /></span>Закрепить снизу</div>
+            {(() => {
+              const pinnedNow = [...sel].every((n) => meta.pinTop.has(keyOf(n)) || meta.pinBot.has(keyOf(n)));
+              if (pinnedNow) return <div style={S.menuItem} onClick={() => metaToggle("unpin")}><span style={{ color: ACC, display: "flex" }}><Svg d={I.x} size={20} /></span>Открепить</div>;
+              return (<>
+                <div style={S.menuItem} onClick={() => metaToggle("top")}><span style={{ color: ACC, display: "flex" }}><Svg d={I.pinT} size={20} /></span>Закрепить сверху</div>
+                <div style={{ height: 1, background: LINE }} />
+                <div style={S.menuItem} onClick={() => metaToggle("bot")}><span style={{ color: ACC, display: "flex" }}><Svg d={I.pinB} size={20} /></span>Закрепить снизу</div>
+              </>);
+            })()}
+            {one && one.type !== "directory" && (
+              <>
+                <div style={{ height: 1, background: LINE }} />
+                <div style={S.menuItem} onClick={() => { setSelMenu(false); const e = one; exitSel(); showOpenMenu(e, mimeOf(e.name)); }}><span style={{ color: TXT, display: "flex" }}><Svg d={I.dots} size={20} /></span>Открыть с помощью</div>
+              </>
+            )}
+            {one && /\.apk$/i.test(one.name) && (
+              <>
+                <div style={{ height: 1, background: LINE }} />
+                <div style={S.menuItem} onClick={() => { setSelMenu(false); Apps.installApk({ uri: one.uri }).catch((er) => showToast("Ошибка: " + (er?.message || ""))); }}><span style={{ color: "#6FD3A8", display: "flex" }}><Svg d={I.plus} size={20} /></span>Установить</div>
+                <div style={{ height: 1, background: LINE }} />
+                <div style={S.menuItem} onClick={() => { setSelMenu(false); Apps.uninstall({ uri: one.uri }).catch((er) => showToast("Ошибка: " + (er?.message || ""))); }}><span style={{ color: RED, display: "flex" }}><Svg d={I.trash} size={20} /></span>Деинсталлировать</div>
+              </>
+            )}
           </div>
         </>
       )}
@@ -583,6 +612,13 @@ export default function App() {
                   );
                 })}
               </div>
+              {!openMenu.editHide && /\.apk$/i.test(openMenu.file.name) && (
+                <div onClick={() => { setOpenMenu(null); Apps.installApk({ uri: openMenu.file.uri }).catch((er) => showToast("Ошибка: " + (er?.message || ""))); }}
+                  style={{ ...S.appRow, color: "#6FD3A8" }}>
+                  <span style={{ width: 38, display: "flex", justifyContent: "center" }}><Svg d={I.plus} size={28} /></span>
+                  <span style={{ flex: 1, fontSize: 15 }}>Установить пакет</span>
+                </div>
+              )}
               {!openMenu.editHide && (
                 <>
                   <div onClick={() => setOpenMenu({ ...openMenu, useDefault: !openMenu.useDefault })}
@@ -636,8 +672,8 @@ function SheetInput({ title, value, placeholder, onChange, onCancel, onOk, okTex
 function Btn({ onClick, icon, text, label, accent, red, flexNone, disabled }) {
   const color = disabled ? "#5c4d3e" : red ? RED : accent ? ACC : TXT;
   return (
-    <button onClick={disabled ? undefined : onClick} style={{ ...S.btn, flex: flexNone ? "none" : 1, minWidth: flexNone ? 60 : undefined, color }}>
-      <span style={{ display: "flex", height: 26, alignItems: "center", fontSize: 22, fontWeight: 700 }}>{icon ? <Svg d={icon} size={25} /> : text}</span>
+    <button onClick={disabled ? undefined : onClick} style={{ ...S.btn, flex: flexNone ? "none" : 1, minWidth: flexNone ? 52 : undefined, color }}>
+      <span style={{ display: "flex", height: 22, alignItems: "center", fontSize: 19, fontWeight: 700 }}>{icon ? <Svg d={icon} size={21} /> : text}</span>
       {label ? <span style={S.btnLabel}>{label}</span> : null}
     </button>
   );
@@ -645,26 +681,27 @@ function Btn({ onClick, icon, text, label, accent, red, flexNone, disabled }) {
 
 const S = {
   app: { display: "flex", flexDirection: "column", height: "100vh", background: BG, color: TXT, fontFamily: "system-ui,-apple-system,Roboto,sans-serif", overflow: "hidden" },
-  tabsbar: { display: "flex", alignItems: "center", background: BAR, borderBottom: "1px solid #16100A", flexShrink: 0 },
-  tabs: { display: "flex", overflowX: "auto", flex: 1 },
-  tab: { display: "flex", alignItems: "center", gap: 6, padding: "12px 14px", fontSize: 14, color: SUB, whiteSpace: "nowrap", borderBottom: "2px solid transparent" },
-  tabActive: { color: TXT, borderBottom: "2px solid " + ACC },
+  tabsbar: { display: "flex", alignItems: "center", background: BAR, borderBottom: "1px solid #16100A", flexShrink: 0, height: 48 },
+  tabs: { display: "flex", overflowX: "auto", flex: 1, alignItems: "center", gap: 6, padding: "0 4px", height: "100%" },
+  tab: { display: "flex", alignItems: "center", gap: 6, padding: "0 12px", height: 34, borderRadius: 17, fontSize: 13.5, color: SUB, whiteSpace: "nowrap", background: "#241A11", flexShrink: 0 },
+  tabActive: { color: "#fff", background: ACC },
   tabX: { fontSize: 17, color: SUB, padding: "0 2px" },
-  hbtn: { border: "none", background: "transparent", color: ACC, width: 42, height: 46, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" },
+  hbtn: { border: "none", background: "transparent", color: TXT, width: 40, height: 48, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" },
   crumb: { padding: "8px 16px", fontSize: 13, background: BG, flexShrink: 0, borderBottom: "1px solid #241A11", overflow: "hidden", whiteSpace: "nowrap" },
   list: { flex: 1, overflowY: "auto", overflowX: "hidden", display: "flex", flexDirection: "column" },
-  slideWrap: { marginTop: "auto" },
+  slideWrap: { paddingTop: "45vh", paddingBottom: 8 },
   note: { color: SUB, textAlign: "center", padding: "60px 24px", lineHeight: 1.6 },
-  row: { display: "flex", alignItems: "center", gap: 14, padding: "13px 16px", borderBottom: "1px solid #241A11", touchAction: "pan-y" },
-  rowSel: { background: "#3A2A18" },
+  row: { display: "flex", alignItems: "center", gap: 14, padding: "12px 16px", margin: "3px 8px", borderRadius: 12, background: ROW2, touchAction: "pan-y" },
+  rowSel: { background: "#3A2A18", outline: "1px solid " + ACC },
   name: { flex: 1, fontSize: 15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
   checkOn: { width: 26, height: 26, borderRadius: 13, background: ACC, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15 },
   searchBar: { display: "flex", alignItems: "center", background: ROW2, padding: 8, gap: 8, flexShrink: 0 },
   searchInput: { flex: 1, padding: "10px 12px", borderRadius: 8, border: "1px solid " + LINE, background: BAR, color: TXT, fontSize: 15, outline: "none" },
   searchClose: { border: "none", background: "transparent", color: SUB, fontSize: 24, width: 40 },
   bottom: { display: "flex", alignItems: "center", background: BAR, borderTop: "1px solid #16100A", paddingBottom: "env(safe-area-inset-bottom)", flexShrink: 0 },
-  btn: { border: "none", background: "transparent", padding: "10px 7px 12px", display: "flex", flexDirection: "column", alignItems: "center", gap: 4 },
-  btnLabel: { fontSize: 11, color: SUB, whiteSpace: "nowrap" },
+  btn: { border: "none", background: "transparent", padding: "6px 6px 7px", display: "flex", flexDirection: "column", alignItems: "center", gap: 2 },
+  selCount: { minWidth: 30, padding: "0 8px", color: ACC, fontWeight: 700, fontSize: 15, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  btnLabel: { fontSize: 10, color: SUB, whiteSpace: "nowrap" },
   overlay: { position: "fixed", inset: 0, zIndex: 8 },
   menu: { position: "absolute", zIndex: 9, background: BAR, borderRadius: 12, overflow: "hidden", border: "1px solid " + LINE, boxShadow: "0 8px 32px rgba(0,0,0,.6)", minWidth: 200, animation: "dropGrow .2s cubic-bezier(.2,.9,.3,1.2)" },
   menuItem: { display: "flex", alignItems: "center", gap: 12, padding: "13px 14px", fontSize: 14, color: TXT, whiteSpace: "nowrap" },
