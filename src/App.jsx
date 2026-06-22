@@ -128,7 +128,8 @@ export default function App() {
   const [selMenu, setSelMenu] = useState(false);
   const [props, setProps] = useState(null);
   const [propCount, setPropCount] = useState(null);
-  const [openMenu, setOpenMenu] = useState(null); // {file, mime, apps, useDefault, editHide}
+  const [openMenu, setOpenMenu] = useState(null);
+  const [allFiles, setAllFiles] = useState(true); // {file, mime, apps, useDefault, editHide}
 
   const cur = tabs[active], path = cur?.path || "";
   const persist = (t) => { setTabs(t); saveTabs(t); };
@@ -152,11 +153,12 @@ export default function App() {
     setLoading(false);
   }, [path]);
 
-  useEffect(() => { Filesystem.requestPermissions().catch(() => {}); }, []);
+  useEffect(() => { Filesystem.requestPermissions().catch(() => {}); checkAccess(); }, []);
+  const checkAccess = async () => { try { const r = await Apps.hasAllFiles(); setAllFiles(!!r.granted); } catch { setAllFiles(true); } };
   useEffect(() => { list(); exitSel(); setQuery(null); /* eslint-disable-next-line */ }, [active, path]);
   useEffect(() => { let h; CapApp.addListener("resume", () => list()).then((l) => (h = l)); return () => h && h.remove(); }, [list]);
   useEffect(() => {
-    const onVis = () => { if (document.visibilityState === "visible") list(); };
+    const onVis = () => { if (document.visibilityState === "visible") { checkAccess(); list(); } };
     document.addEventListener("visibilitychange", onVis);
     window.addEventListener("focus", onVis);
     return () => { document.removeEventListener("visibilitychange", onVis); window.removeEventListener("focus", onVis); };
@@ -375,12 +377,19 @@ export default function App() {
 
       {/* ПУТЬ */}
       <div style={S.crumb}>
-        {path ? <span onClick={goUp} style={{ display: "flex", alignItems: "center", gap: 6, color: ACC }}><Svg d={I.back} size={18} /> {path}</span>
+        {path ? <span onClick={goUp} style={{ display: "inline-flex", alignItems: "center", gap: 6, color: ACC }}><Svg d={I.back} size={18} /> {path}</span>
           : <span style={{ color: SUB }}>/storage</span>}
+        <span onClick={() => showToast(curUri + " · всего " + entries.length)} style={{ marginLeft: 8, color: SUB }}>({visible.length}/{entries.length})</span>
       </div>
 
       {/* СПИСОК */}
       <main style={S.list} onTouchStart={onTS} onTouchMove={onTM}>
+        {!allFiles && (
+          <div style={S.accessBar}>
+            <div style={{ flex: 1, fontSize: 13, lineHeight: 1.4 }}>Нет доступа ко всем файлам — архивы, PDF и APK не видны.</div>
+            <button style={S.accessBtn} onClick={() => Apps.requestAllFiles().catch(() => {})}>Дать доступ</button>
+          </div>
+        )}
         <div key={active} style={{ ...S.slideWrap, animation: slide ? `fm-in-${slide > 0 ? "r" : "l"} .22s ease` : "none" }}>
           {loading && null}
           {error && <div style={{ ...S.note, color: RED }}>{error}<br /><span style={{ fontSize: 12 }}>Разрешите «Доступ ко всем файлам» в настройках приложения.</span></div>}
@@ -672,6 +681,8 @@ const S = {
   sheetField: { width: "100%", background: ROW2, border: "1px solid " + LINE, borderRadius: 12, padding: "12px 14px", color: TXT, fontSize: 15, marginBottom: 16, outline: "none" },
   sheetGhost: { flex: 1, background: ROW2, border: "1px solid " + LINE, borderRadius: 12, padding: 13, color: SUB, fontSize: 14, cursor: "pointer" },
   sheetOk: { flex: 1, background: ACC, border: "none", borderRadius: 12, padding: 13, color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer" },
+  accessBar: { display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: "#3A2A14", borderBottom: "1px solid " + LINE },
+  accessBtn: { flexShrink: 0, background: ACC, border: "none", borderRadius: 8, color: "#fff", fontSize: 13, fontWeight: 700, padding: "8px 14px" },
   sortRow: { padding: "13px 4px", fontSize: 15, color: TXT, borderBottom: "1px solid " + LINE, display: "flex", alignItems: "center" },
   iconBtn: { border: "1px solid " + LINE, background: ROW2, borderRadius: 10, width: 38, height: 38, display: "flex", alignItems: "center", justifyContent: "center" },
   chip: { flexShrink: 0, background: ROW2, border: "1px solid " + LINE, borderRadius: 16, padding: "7px 14px", color: SUB, fontSize: 13, whiteSpace: "nowrap" },
