@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from "react";
 import { Filesystem, Directory, Encoding } from "@capacitor/filesystem";
 import { App as CapApp } from "@capacitor/app";
-import { registerPlugin } from "@capacitor/core";
+import { registerPlugin, Capacitor } from "@capacitor/core";
 import JSZip from "jszip";
 const Apps = registerPlugin("Apps");
 
@@ -183,6 +183,9 @@ export default function App() {
   const [settings, setSettings] = useState(false);
   const [iconDB, setIconDB] = useState(() => loadMap(ICONKEY));
   const saveIconDB = (db) => { setIconDB(db); saveMap(ICONKEY, db); };
+  const [apkIcons, setApkIcons] = useState({});
+  const isImg = (n) => /\.(png|jpg|jpeg|webp|gif|bmp)$/i.test(n);
+  const cfs = (u) => { try { return Capacitor.convertFileSrc(u); } catch { return u; } };
   const [tabsMenu, setTabsMenu] = useState(false);
   const [selMenu, setSelMenu] = useState(false);
   const [props, setProps] = useState(null);
@@ -249,6 +252,18 @@ export default function App() {
     el.scrollTop = contentH >= ch ? pt : el.scrollHeight - ch;
   }, [path, active, entries]);
   const onListScroll = (e) => { scrollPos.current[pathKeyRef.current] = e.currentTarget.scrollTop; };
+  useEffect(() => {
+    const apks = entries.filter((e) => e.type !== "directory" && /\.apk$/i.test(e.name) && !apkIcons[e.uri]);
+    if (!apks.length) return;
+    let stop = false;
+    (async () => {
+      for (const a of apks) {
+        if (stop) return;
+        try { const r = await Apps.apkIcon({ uri: a.uri }); if (r && r.icon) setApkIcons((m) => ({ ...m, [a.uri]: "data:image/png;base64," + r.icon })); } catch {}
+      }
+    })();
+    return () => { stop = true; };
+  }, [entries]);
   const silentRefresh = useCallback(async () => {
     try {
       const u = await Filesystem.getUri({ path, directory: DIR });
@@ -551,7 +566,7 @@ export default function App() {
                   <span style={{ color: ACC, display: "flex" }}><Svg d={I.sort} size={20} /></span>Сортировка
                 </div>
                 <div style={{ height: 1, background: LINE }} />
-                <div style={S.menuItem} onClick={() => { setShowHidden((v) => !v); setHeadMenu(false); }}>
+                <div style={S.menuItem} onClick={() => { setShowHidden((v) => !v); setHeadMenu(false); refresh(); }}>
                   <span style={{ color: showHidden ? ACC : SUB, display: "flex" }}><Svg d={showHidden ? I.eye : I.eyeOff} size={20} /></span>
                   Скрытые объекты
                   <span style={{ marginLeft: "auto", ...S.tgl, ...(showHidden ? S.tglOn : {}) }}><span style={{ ...S.knob, ...(showHidden ? S.knobOn : {}) }} /></span>
@@ -601,11 +616,14 @@ export default function App() {
               return (
                 <div key={e.name} style={{ ...S.row, ...(isDir ? S.rowDir : {}), ...(isSel ? S.rowSel : {}), opacity: hid ? 0.5 : 1 }}
                   onPointerDown={(ev) => rDown(ev, e)} onPointerMove={rMove} onPointerUp={() => rUp(e)} onPointerCancel={() => clearTimeout(lpTimer.current)}>
-                  <span style={{ ...S.iconWrap, color: ic.c, background: isSel ? "transparent" : "rgba(255,255,255,.05)", overflow: "hidden" }}
+                  <span style={{ ...S.iconWrap, color: ic.c, background: isSel ? "transparent" : "rgba(255,255,255,.05)", overflow: "hidden", position: "relative" }}
                     onPointerDown={(ev) => ev.stopPropagation()} onPointerUp={(ev) => { ev.stopPropagation(); clearTimeout(lpTimer.current); toggle(e.name); }}>
                     {isSel ? <span style={S.cbk}><Svg d={I.check} size={14} /></span>
-                      : (isDir && iconDB[keyOf(e.name)]) ? <img src={iconDB[keyOf(e.name)]} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 13 }} />
+                      : (isDir && iconDB[keyOf(e.name)]) ? <img src={iconDB[keyOf(e.name)]} alt="" style={S.iconImg} />
+                      : (!isDir && isImg(e.name)) ? <img src={cfs(e.uri)} alt="" loading="lazy" style={S.iconImg} />
+                      : (!isDir && /\.apk$/i.test(e.name) && apkIcons[e.uri]) ? <img src={apkIcons[e.uri]} alt="" style={S.iconImg} />
                       : <Svg d={ic.d} size={24} />}
+                    {isDir && !isSel && !iconDB[keyOf(e.name)] && e.thumb ? <img src={cfs(e.thumb)} alt="" loading="lazy" style={S.folderThumb} /> : null}
                   </span>
                   <span style={S.rowMid}>
                     <span style={{ ...S.name, fontWeight: isDir ? 600 : 400, display: "flex", alignItems: "center", gap: 7 }}>
@@ -796,7 +814,7 @@ export default function App() {
             <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: SUB }}>Открываю архив…</div>
           ) : (
           <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column" }}>
-            <div style={{ marginTop: "auto" }}>
+            <div>
               {arcView.entries.map((it, i) => {
                 const ic = fileIcon(it.name);
                 return (
@@ -1017,6 +1035,8 @@ const S = {
   row: { display: "flex", alignItems: "center", gap: 14, padding: "10px 14px", touchAction: "pan-y", borderBottom: "1px solid rgba(255,255,255,.08)" },
   sep: { height: 1, background: "rgba(255,255,255,.10)", margin: "4px 0" },
   iconWrap: { width: 44, height: 44, borderRadius: 13, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  iconImg: { width: "100%", height: "100%", objectFit: "cover", borderRadius: 13 },
+  folderThumb: { position: "absolute", right: 4, bottom: 4, width: 20, height: 20, borderRadius: 5, objectFit: "cover", border: "1.5px solid " + BG },
   cbk: { width: 22, height: 22, borderRadius: 6, background: ACC, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center" },
   rowMid: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 },
   rowDate: { fontSize: 12, color: SUB },
