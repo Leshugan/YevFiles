@@ -11,7 +11,7 @@ const BG = "#1C140C", BAR = "#2A2017", ROW2 = "#2E251C", ACC = "#EF6C00";
 const GOLD = "#F5A623", RED = "#E05252", TXT = "#F2EAE0", SUB = "#B0A498", LINE = "#4A3A2A";
 const DIR = Directory.ExternalStorage;
 const TKEY = "fm_tabs_v1", SKEY = "fm_startup_v1", METAKEY = "fm_meta_v1", SORTKEY = "fm_sort_v1";
-const DEFKEY = "fm_defaults_v1", HIDEKEY = "fm_hideapps_v1";
+const DEFKEY = "fm_defaults_v1", HIDEKEY = "fm_hideapps_v1", ICONKEY = "fm_foldericons_v1";
 const loadMap = (k) => { try { return JSON.parse(ls.get(k)) || {}; } catch { return {}; } };
 const saveMap = (k, m) => ls.set(k, JSON.stringify(m));
 const OPEN_AS = [["*/*", "Любой тип"], ["text/plain", "Текст"], ["image/*", "Изображение"], ["video/*", "Видео"], ["audio/*", "Аудио"], ["application/pdf", "PDF"]];
@@ -90,6 +90,7 @@ const I = {
   info: <><circle cx="12" cy="12" r="9" /><path d="M12 11v5M12 8h.01" /></>,
   dots: <><circle cx="12" cy="5" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="12" cy="19" r="1.6" /></>,
   sort: <><path d="M7 4v16M7 20l-3-3M7 4l3 3" /><path d="M17 20V4M17 4l3 3M17 20l-3-3" /></>,
+  gear: <><circle cx="12" cy="12" r="3" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2" /></>,
   eye: <><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" /><circle cx="12" cy="12" r="3" /></>,
   eyeOff: <><path d="M3 3l18 18" /><path d="M10.6 10.6a3 3 0 0 0 4.2 4.2" /><path d="M9.9 5.1A9.7 9.7 0 0 1 12 5c6.5 0 10 7 10 7a16 16 0 0 1-3.2 3.9M6.2 6.2A16 16 0 0 0 2 12s3.5 7 10 7a9.7 9.7 0 0 0 3.1-.5" /></>,
   pinT: <><path d="M12 3v8M8 7l4-4 4 4" /><path d="M5 14h14M5 14v6h14v-6" /></>,
@@ -179,6 +180,9 @@ export default function App() {
   const [showHidden, setShowHidden] = useState(false);
   const [sortMode, setSortMode] = useState(() => ls.get(SORTKEY) || "az");
   const [headMenu, setHeadMenu] = useState(false);
+  const [settings, setSettings] = useState(false);
+  const [iconDB, setIconDB] = useState(() => loadMap(ICONKEY));
+  const saveIconDB = (db) => { setIconDB(db); saveMap(ICONKEY, db); };
   const [tabsMenu, setTabsMenu] = useState(false);
   const [selMenu, setSelMenu] = useState(false);
   const [props, setProps] = useState(null);
@@ -205,9 +209,25 @@ export default function App() {
       try { const r = await Apps.list({ uri: u.uri }); files = r.files; }
       catch (er) { showToast("Системное чтение недоступно: " + (er?.message || "ошибка плагина")); const r = await Filesystem.readdir({ path, directory: DIR }); files = r.files; }
       setEntries(files || []);
+      if ((files || []).some((f) => f.name === ".iconfolder" && f.type === "directory")) scanIconFolder(path);
     } catch (e) { setError(e.message || "Нет доступа к хранилищу"); setEntries([]); }
     setLoading(false);
   }, [path]);
+  const scanIconFolder = async (folderPath) => {
+    try {
+      const fu = await Filesystem.getUri({ path: join(folderPath, ".iconfolder"), directory: DIR });
+      const r = await Apps.list({ uri: fu.uri });
+      const pic = (r.files || []).find((f) => f.type !== "directory" && /\.(png|ico|jpg|jpeg|webp)$/i.test(f.name));
+      if (!pic) return;
+      const data = await Filesystem.readFile({ path: pic.uri });
+      const ext = (pic.name.split(".").pop() || "png").toLowerCase();
+      const mime = ext === "ico" ? "image/x-icon" : ext === "jpg" || ext === "jpeg" ? "image/jpeg" : "image/" + ext;
+      const db = loadMap(ICONKEY); db[folderPath] = "data:" + mime + ";base64," + data.data; saveIconDB(db);
+      try { await Apps.delete({ uri: fu.uri }); } catch { try { await Filesystem.rmdir({ path: join(folderPath, ".iconfolder"), directory: DIR, recursive: true }); } catch {} }
+      showToast("Иконка папки сохранена: " + (baseName(folderPath) || "Storage"));
+      refresh();
+    } catch (e) { showToast("Иконка: " + (e?.message || "ошибка")); }
+  };
 
   useEffect(() => { Filesystem.requestPermissions().catch(() => {}); checkAccess(); }, []);
   const checkAccess = async () => { try { const r = await Apps.hasAllFiles(); setAllFiles(!!r.granted); } catch { setAllFiles(true); } };
@@ -266,6 +286,7 @@ export default function App() {
   const backRef = useRef(() => {});
   const backExit = useRef(0);
   backRef.current = () => {
+    if (settings) { setSettings(false); return; }
     if (arcView) { setArcView(null); return; }
     if (pasteMenu) { setPasteMenu(false); return; }
     if (openMenu) { setOpenMenu(null); return; }
@@ -290,7 +311,7 @@ export default function App() {
   }, []);
 
   const toggle = (name) => { const n = new Set(sel); n.has(name) ? n.delete(name) : n.add(name); setSel(n); setSelMode(n.size > 0); };
-  const selectAll = () => { setSelMode(true); setSel(new Set(visible.map((e) => e.name))); };
+  const selectAll = () => { if (!visible.length) { showToast("Папка пуста"); return; } setSelMode(true); setSel(new Set(visible.map((e) => e.name))); };
 
   const openExternal = async (e) => {
     const mime = mimeOf(e.name);
@@ -535,6 +556,10 @@ export default function App() {
                   Скрытые объекты
                   <span style={{ marginLeft: "auto", ...S.tgl, ...(showHidden ? S.tglOn : {}) }}><span style={{ ...S.knob, ...(showHidden ? S.knobOn : {}) }} /></span>
                 </div>
+                <div style={{ height: 1, background: LINE }} />
+                <div style={S.menuItem} onClick={() => { setHeadMenu(false); setSettings(true); }}>
+                  <span style={{ color: ACC, display: "flex" }}><Svg d={I.gear} size={20} /></span>Настройки
+                </div>
               </div>
             </>
           )}
@@ -576,9 +601,11 @@ export default function App() {
               return (
                 <div key={e.name} style={{ ...S.row, ...(isDir ? S.rowDir : {}), ...(isSel ? S.rowSel : {}), opacity: hid ? 0.5 : 1 }}
                   onPointerDown={(ev) => rDown(ev, e)} onPointerMove={rMove} onPointerUp={() => rUp(e)} onPointerCancel={() => clearTimeout(lpTimer.current)}>
-                  <span style={{ ...S.iconWrap, color: ic.c, background: isSel ? "transparent" : "rgba(255,255,255,.05)" }}
+                  <span style={{ ...S.iconWrap, color: ic.c, background: isSel ? "transparent" : "rgba(255,255,255,.05)", overflow: "hidden" }}
                     onPointerDown={(ev) => ev.stopPropagation()} onPointerUp={(ev) => { ev.stopPropagation(); clearTimeout(lpTimer.current); toggle(e.name); }}>
-                    {isSel ? <span style={S.cbk}><Svg d={I.check} size={14} /></span> : <Svg d={ic.d} size={24} />}
+                    {isSel ? <span style={S.cbk}><Svg d={I.check} size={14} /></span>
+                      : (isDir && iconDB[keyOf(e.name)]) ? <img src={iconDB[keyOf(e.name)]} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 13 }} />
+                      : <Svg d={ic.d} size={24} />}
                   </span>
                   <span style={S.rowMid}>
                     <span style={{ ...S.name, fontWeight: isDir ? 600 : 400, display: "flex", alignItems: "center", gap: 7 }}>
@@ -616,8 +643,7 @@ export default function App() {
       {selMode ? (
         <nav style={{ ...S.bottom, justifyContent: "flex-start" }}>
           <div style={S.selCount}>
-            <span style={{ fontSize: 14, fontWeight: 700, color: "#fff", lineHeight: 1 }}>{sel.size}</span>
-            <span style={{ fontSize: 9, color: SUB, lineHeight: 1.2, marginTop: 2, whiteSpace: "nowrap" }}>{fmtSizeShort([...sel].reduce((a, n) => { const e = byName(n); return a + (e && e.type !== "directory" ? e.size || 0 : 0); }, 0))}</span>
+            <span style={{ fontSize: 16, fontWeight: 700, color: "#fff", lineHeight: 1 }}>{sel.size}</span>
           </div>
           <div style={{ display: "flex", overflowX: "auto", flex: 1, justifyContent: "flex-end" }}>
             <Btn onClick={exitSel} icon={I.x} label="Отмена" flexNone />
@@ -854,6 +880,32 @@ export default function App() {
         );
       })()}
 
+      {/* НАСТРОЙКИ */}
+      {settings && (
+        <div style={S.arcScreen}>
+          <div style={S.crumb}>
+            <span onClick={() => setSettings(false)} style={{ display: "inline-flex", alignItems: "center", gap: 6, color: ACC }}><Svg d={I.back} size={18} /> Настройки</span>
+          </div>
+          <div style={{ flex: 1, overflowY: "auto", padding: "8px 14px" }}>
+            <div style={{ color: ACC, fontSize: 13, fontWeight: 700, margin: "10px 2px 8px" }}>Иконки папок</div>
+            <div style={{ color: SUB, fontSize: 12, lineHeight: 1.5, marginBottom: 12 }}>
+              Чтобы задать иконку папке — создайте в ней папку <span style={{ color: GOLD }}>.iconfolder</span> и положите туда PNG/ICO. Иконка сохранится сюда, а файл удалится.
+            </div>
+            {Object.keys(iconDB).length === 0 && <div style={{ color: SUB, padding: 16, textAlign: "center" }}>Пока нет изменённых иконок</div>}
+            {Object.keys(iconDB).map((k) => (
+              <div key={k} style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 2px", borderBottom: "1px solid " + LINE }}>
+                <img src={iconDB[k]} alt="" style={{ width: 40, height: 40, borderRadius: 11, objectFit: "cover", flexShrink: 0 }} />
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ fontSize: 14, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{baseName(k) || "Storage"}</span>
+                  <span style={{ fontSize: 11, color: SUB, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block" }}>{k || "/"}</span>
+                </span>
+                <span onClick={() => { const db = { ...iconDB }; delete db[k]; saveIconDB(db); }} style={{ color: RED, display: "flex", padding: 6 }}><Svg d={I.trash} size={18} /></span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* МЕНЮ ЗАДАЧ БУФЕРА */}
       {pasteMenu && clip && clip.length > 0 && (
         <div style={S.backdrop} onClick={() => setPasteMenu(false)}>
@@ -970,7 +1022,7 @@ const S = {
   rowDate: { fontSize: 12, color: SUB },
   rowSize: { fontSize: 12.5, color: SUB, flexShrink: 0, marginLeft: 6 },
   rowDir: { background: "rgba(239,108,0,.04)" },
-  arcScreen: { position: "fixed", top: "calc(62px + env(safe-area-inset-top))", left: 0, right: 0, bottom: "calc(64px + env(safe-area-inset-bottom))", zIndex: 1250, background: BG, display: "flex", flexDirection: "column" },
+  arcScreen: { position: "fixed", top: 62, left: 0, right: 0, bottom: "calc(64px + env(safe-area-inset-bottom))", zIndex: 1250, background: BG, display: "flex", flexDirection: "column" },
   cnt: { background: "#43331F", color: GOLD, fontSize: 12, fontWeight: 700, padding: "2px 9px", borderRadius: 10, flexShrink: 0 },
   rowSel: { background: "#332417" },
   name: { flex: 1, fontSize: 15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
@@ -980,7 +1032,7 @@ const S = {
   searchClose: { border: "none", background: "transparent", color: SUB, fontSize: 24, width: 40 },
   bottom: { display: "flex", alignItems: "center", background: BAR, flexShrink: 0, borderRadius: 26, margin: "4px 8px calc(8px + env(safe-area-inset-bottom))" },
   btn: { border: "none", background: "transparent", padding: "6px 6px 7px", display: "flex", flexDirection: "column", alignItems: "center", gap: 2 },
-  selCount: { width: 52, padding: "0 2px", marginRight: 4, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  selCount: { minWidth: 26, padding: "0 6px", marginRight: 10, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
   btnLabel: { fontSize: 10, color: SUB, whiteSpace: "nowrap" },
   overlay: { position: "fixed", inset: 0, zIndex: 8 },
   menu: { position: "absolute", zIndex: 9, background: BAR, borderRadius: 12, overflow: "hidden", border: "1px solid " + LINE, boxShadow: "0 8px 32px rgba(0,0,0,.6)", minWidth: 200, animation: "dropGrow .2s cubic-bezier(.2,.9,.3,1.2)" },
