@@ -170,7 +170,7 @@ export default function App() {
   useEffect(() => { Filesystem.requestPermissions().catch(() => {}); checkAccess(); }, []);
   const checkAccess = async () => { try { const r = await Apps.hasAllFiles(); setAllFiles(!!r.granted); } catch { setAllFiles(true); } };
   const listRef = useRef(null);
-  useEffect(() => { const id = setTimeout(() => { const el = listRef.current; if (el) el.scrollTop = path ? el.scrollHeight : 0; }, 60); return () => clearTimeout(id); }, [path, active]);
+  useEffect(() => { const id = setTimeout(() => { const el = listRef.current; if (!el) return; el.scrollTop = path ? el.scrollHeight : window.innerHeight * 0.55; }, 60); return () => clearTimeout(id); }, [path, active]);
   const silentRefresh = useCallback(async () => {
     try {
       const u = await Filesystem.getUri({ path, directory: DIR });
@@ -202,7 +202,7 @@ export default function App() {
 
   const exitSel = () => { setSel(new Set()); setSelMode(false); setConfirmDel(null); setSelMenu(false); };
   const setTabPath = (p) => setTabs((ts) => ts.map((x, i) => (i === active ? { ...x, path: p } : x)));
-  const goUp = () => { const t = tabs[active]; if (t && t.saved && t.root != null && path === t.root) return; if (path) setTabPath(parent(path)); };
+  const goUp = () => { if (path) setTabPath(parent(path)); };
   const closeTab = (i) => { if (tabs.length === 1) return; const t = tabs.filter((_, idx) => idx !== i); persist(t); setActive(Math.max(0, Math.min(active, t.length - 1))); };
 
   const backRef = useRef(() => {});
@@ -218,7 +218,7 @@ export default function App() {
     if (createOpen) { setCreateOpen(false); return; }
     if (query !== null) { setQuery(null); return; }
     if (selMode) { exitSel(); return; }
-    { const t = tabs[active]; const atRoot = t && t.saved && t.root != null && path === t.root; if (path && !atRoot) { goUp(); return; } }
+    if (path) { goUp(); return; }
     CapApp.exitApp();
   };
   useEffect(() => {
@@ -309,7 +309,7 @@ export default function App() {
   };
   const onTabUp = (i) => { const d = tabDrag.current; if (d.active) { d.active = false; persistCurrent(); } else { const dir = i > active ? 1 : i < active ? -1 : 0; if (dir) { setSlide(dir); setTimeout(() => setSlide(0), 220); } setActive(i); } d.from = -1; };
 
-  const saveAllTabs = () => { setTabsMenu(false); const t = tabs.map((x) => ({ ...x, saved: true, root: x.path })); persist(t); showToast("Вкладки сохранены"); };
+  const saveAllTabs = () => { setTabsMenu(false); const t = tabs.map((x) => ({ ...x, saved: true })); persist(t); showToast("Вкладки сохранены"); };
   const startupHere = () => { setTabsMenu(false); ls.set(SKEY, path); showToast("Запуск при открытии: " + (path ? baseName(path) : "Storage")); };
   const resetTabs = () => { setTabsMenu(false); ls.del(SKEY); setTabs((arr) => { const t = arr.map((x) => ({ ...x, saved: false })); saveTabs(t); return t; }); showToast("Вкладки сброшены"); };
 
@@ -457,7 +457,7 @@ export default function App() {
             <button style={S.accessBtn} onClick={() => Apps.requestAllFiles().catch(() => {})}>Дать доступ</button>
           </div>
         )}
-        <div key={active} style={{ ...S.slideWrap, animation: slide ? `fm-in-${slide > 0 ? "r" : "l"} .22s ease` : "none" }}>
+        <div key={active} style={{ ...S.slideWrap, marginTop: path ? "auto" : 0, animation: slide ? `fm-in-${slide > 0 ? "r" : "l"} .22s ease` : "none" }}>
           {loading && null}
           {error && <div style={{ ...S.note, color: RED }}>{error}<br /><span style={{ fontSize: 12 }}>Разрешите «Доступ ко всем файлам» в настройках приложения.</span></div>}
           {!loading && !error && visible.length === 0 && <div style={S.note}>Пусто</div>}
@@ -787,7 +787,7 @@ const S = {
   hbtn: { border: "none", background: "transparent", color: TXT, width: 40, height: 48, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" },
   crumb: { padding: "8px 16px", fontSize: 13, background: BG, flexShrink: 0, borderBottom: "1px solid #241A11", overflow: "hidden", whiteSpace: "nowrap" },
   list: { flex: 1, overflowY: "auto", overflowX: "hidden", display: "flex", flexDirection: "column" },
-  slideWrap: { marginTop: "auto" },
+  slideWrap: {},
   note: { color: SUB, textAlign: "center", padding: "60px 24px", lineHeight: 1.6 },
   row: { display: "flex", alignItems: "center", gap: 14, padding: "9px 14px", touchAction: "pan-y", borderBottom: "1px solid rgba(255,255,255,.04)" },
   iconWrap: { width: 46, height: 46, borderRadius: 23, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
@@ -795,7 +795,7 @@ const S = {
   rowDate: { fontSize: 12, color: SUB },
   rowSize: { fontSize: 12.5, color: SUB, flexShrink: 0, marginLeft: 6 },
   rowDir: { background: "rgba(239,108,0,.05)" },
-  arcScreen: { position: "fixed", inset: 0, zIndex: 1250, background: BG, display: "flex", flexDirection: "column", paddingTop: "env(safe-area-inset-top)" },
+  arcScreen: { position: "fixed", top: 0, left: 0, right: 0, bottom: "calc(64px + env(safe-area-inset-bottom))", zIndex: 1250, background: BG, display: "flex", flexDirection: "column", paddingTop: "env(safe-area-inset-top)" },
   cnt: { background: "#43331F", color: GOLD, fontSize: 12, fontWeight: 700, padding: "2px 9px", borderRadius: 10, flexShrink: 0 },
   rowSel: { background: "#332417" },
   name: { flex: 1, fontSize: 15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
