@@ -202,7 +202,7 @@ export default function App() {
 
   const exitSel = () => { setSel(new Set()); setSelMode(false); setConfirmDel(null); setSelMenu(false); };
   const setTabPath = (p) => persist(tabs.map((x, i) => (i === active ? { ...x, path: p } : x)));
-  const goUp = () => { if (path) setTabPath(parent(path)); };
+  const goUp = () => { const t = tabs[active]; if (t && t.saved && t.root != null && path === t.root) return; if (path) setTabPath(parent(path)); };
   const closeTab = (i) => { if (tabs.length === 1) return; const t = tabs.filter((_, idx) => idx !== i); persist(t); setActive(Math.max(0, Math.min(active, t.length - 1))); };
 
   const backRef = useRef(() => {});
@@ -218,7 +218,7 @@ export default function App() {
     if (createOpen) { setCreateOpen(false); return; }
     if (query !== null) { setQuery(null); return; }
     if (selMode) { exitSel(); return; }
-    if (path) { goUp(); return; }
+    { const t = tabs[active]; const atRoot = t && t.saved && t.root != null && path === t.root; if (path && !atRoot) { goUp(); return; } }
     if (tabs.length > 1) { closeTab(active); return; }
     CapApp.exitApp();
   };
@@ -278,7 +278,8 @@ export default function App() {
       await Filesystem.writeFile({ path: tmp, data: b64, directory: DIR, recursive: true });
       const u = await Filesystem.getUri({ path: tmp, directory: DIR });
       setArcView(null);
-      await Apps.open({ uri: u.uri, mime: mimeOf(fname) });
+      if (/\.apk$/i.test(fname)) await Apps.installApk({ uri: u.uri });
+      else await Apps.open({ uri: u.uri, mime: mimeOf(fname) });
     } catch (err) { showToast("Не удалось открыть: " + (err?.message || "")); }
   };
   const resetDefault = () => { const defs = loadMap(DEFKEY); delete defs[openMenu.mime]; saveMap(DEFKEY, defs); showToast("Привязка сброшена"); };
@@ -309,7 +310,7 @@ export default function App() {
   };
   const onTabUp = (i) => { const d = tabDrag.current; if (d.active) { d.active = false; persistCurrent(); } else { const dir = i > active ? 1 : i < active ? -1 : 0; if (dir) { setSlide(dir); setTimeout(() => setSlide(0), 220); } setActive(i); } d.from = -1; };
 
-  const saveAllTabs = () => { setTabsMenu(false); const t = tabs.map((x) => ({ ...x, saved: true })); persist(t); showToast("Вкладки сохранены"); };
+  const saveAllTabs = () => { setTabsMenu(false); const t = tabs.map((x) => ({ ...x, saved: true, root: x.path })); persist(t); showToast("Вкладки сохранены"); };
   const startupHere = () => { setTabsMenu(false); ls.set(SKEY, path); showToast("Запуск при открытии: " + (path ? baseName(path) : "Storage")); };
   const resetTabs = () => { setTabsMenu(false); ls.del(SKEY); setTabs((arr) => { const t = arr.map((x) => ({ ...x, saved: false })); saveTabs(t); return t; }); showToast("Вкладки сброшены"); };
 
@@ -394,6 +395,10 @@ export default function App() {
                 <div style={S.menuItem} onClick={startupHere}><span style={{ color: GOLD, display: "flex" }}><Svg d={I.star} size={20} /></span>Запуск при открытии</div>
                 <div style={{ height: 1, background: LINE }} />
                 <div style={S.menuItem} onClick={resetTabs}><span style={{ color: SUB, display: "flex" }}><Svg d={I.x} size={20} /></span>Сбросить вкладки</div>
+                {tabs.length > 1 && <>
+                  <div style={{ height: 1, background: LINE }} />
+                  <div style={S.menuItem} onClick={() => { setTabsMenu(false); closeTab(active); }}><span style={{ color: RED, display: "flex" }}><Svg d={I.x} size={20} /></span>Закрыть вкладку</div>
+                </>}
               </div>
             </>
           )}
@@ -404,8 +409,7 @@ export default function App() {
               onPointerDown={(ev) => onTabDown(ev, i)} onPointerMove={onTabMove} onPointerUp={() => onTabUp(i)} onPointerCancel={() => onTabUp(i)}
               style={{ ...S.tab, ...(i === active ? S.tabActive : {}) }}>
               {t.saved && <span style={{ color: ACC, display: "flex" }}><Svg d={I.pin} size={13} /></span>}
-              <span style={{ overflow: "hidden", textOverflow: "ellipsis", maxWidth: 110 }}>{t.path ? baseName(t.path) : "Storage"}</span>
-              {tabs.length > 1 && <span style={S.tabX} onClick={(e) => { e.stopPropagation(); closeTab(i); }}>×</span>}
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis", maxWidth: 130 }}>{t.path ? baseName(t.path) : "Storage"}</span>
             </div>
           ))}
         </div>
@@ -464,7 +468,7 @@ export default function App() {
             const isDir = e.type === "directory";
             const pinned = meta.pinTop.has(keyOf(e.name)) || meta.pinBot.has(keyOf(e.name));
             return (
-              <div key={e.name} style={{ ...S.row, ...(isSel ? S.rowSel : {}), opacity: hid ? 0.5 : 1 }}
+              <div key={e.name} style={{ ...S.row, ...(isDir ? S.rowDir : {}), ...(isSel ? S.rowSel : {}), opacity: hid ? 0.5 : 1 }}
                 onPointerDown={(ev) => rDown(ev, e)} onPointerMove={rMove} onPointerUp={() => rUp(e)} onPointerCancel={() => clearTimeout(lpTimer.current)}>
                 <span style={{ ...S.iconWrap, color: isSel ? "#fff" : ic.c, background: isSel ? ACC : "rgba(255,255,255,.05)" }}
                   onPointerDown={(ev) => ev.stopPropagation()} onPointerUp={(ev) => { ev.stopPropagation(); clearTimeout(lpTimer.current); toggle(e.name); }}>
@@ -472,7 +476,7 @@ export default function App() {
                 </span>
                 <span style={S.rowMid}>
                   <span style={{ ...S.name, fontWeight: isDir ? 600 : 400 }}>{e.name}</span>
-                  {e.mtime ? <span style={S.rowDate}>{fmtDate(e.mtime)}</span> : null}
+                  {!isDir && e.mtime ? <span style={S.rowDate}>{fmtDate(e.mtime)}</span> : null}
                 </span>
                 {pinned && <span style={{ color: SUB, display: "flex" }}><Svg d={meta.pinTop.has(keyOf(e.name)) ? I.pinT : I.pinB} size={14} /></span>}
                 <span style={S.rowSize}>{isDir ? (e.count != null ? "(" + e.count + ")" : "") : fmtSizeShort(e.size)}</span>
@@ -498,8 +502,8 @@ export default function App() {
             <Btn onClick={exitSel} icon={I.x} label="Отмена" flexNone />
             <Btn onClick={() => setProps(one)} icon={I.info} label="Свойства" flexNone disabled={sel.size !== 1} />
             <Btn onClick={() => grab("cut")} icon={I.cut} label="Вырезать" flexNone />
-            <Btn onClick={(ev) => { const r = ev.currentTarget.getBoundingClientRect(); setConfirmDel({ left: r.left, top: r.top }); }} icon={I.trash} label="Удалить" red flexNone />
             <Btn onClick={() => grab("copy")} icon={I.copy} label="Копир." flexNone />
+            <Btn onClick={(ev) => { const r = ev.currentTarget.getBoundingClientRect(); setConfirmDel({ left: r.left, top: r.top }); }} icon={I.trash} label="Удалить" red flexNone />
             <Btn onClick={() => { const e = one; const sp = splitExt(e.name, e.type === "directory"); setSheet({ kind: "rename", old: e.name, base: sp.base, ext: sp.ext, editExt: false }); }} icon={I.rename} label="Имя" flexNone disabled={sel.size !== 1} />
             <Btn onClick={() => setSelMenu((v) => !v)} icon={I.dots} label="Ещё" flexNone />
           </div>
@@ -641,23 +645,27 @@ export default function App() {
         </>
       )}
 
-      {/* ПРОСМОТР АРХИВА */}
+      {/* ПРОСМОТР АРХИВА — как папка */}
       {arcView && (
-        <div style={S.backdrop} onClick={() => setArcView(null)}>
-          <div style={S.sheet} onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
-              <span style={{ color: GOLD, display: "flex" }}><Svg d={I.archive} size={22} /></span>
-              <div style={{ ...S.sheetTitle, marginBottom: 0, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{arcView.name}</div>
-              <span style={{ color: SUB, fontSize: 13 }}>{arcView.entries.length} эл.</span>
-            </div>
-            <div style={{ maxHeight: "60vh", overflowY: "auto" }}>
-              {arcView.entries.map((it, i) => (
-                <div key={i} onClick={() => extractOpen(it)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 2px", borderBottom: "1px solid " + LINE }}>
-                  <span style={{ color: fileIcon(it.name).c, display: "flex" }}><Svg d={fileIcon(it.name).d} size={20} /></span>
-                  <span style={{ flex: 1, fontSize: 13.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.name}</span>
-                  <span style={{ color: SUB, fontSize: 12 }}>{fmtSize(it.size)}</span>
-                </div>
-              ))}
+        <div style={S.arcScreen}>
+          <div style={S.crumb}>
+            <span onClick={() => setArcView(null)} style={{ display: "inline-flex", alignItems: "center", gap: 6, color: ACC }}><Svg d={I.back} size={18} /> {arcView.name}</span>
+          </div>
+          <div style={{ flex: 1, overflowY: "auto" }}>
+            <div style={{ marginTop: "auto" }}>
+              {arcView.entries.map((it, i) => {
+                const ic = fileIcon(it.name);
+                return (
+                  <div key={i} onClick={() => extractOpen(it)} style={S.row}>
+                    <span style={{ ...S.iconWrap, color: ic.c, background: "rgba(255,255,255,.05)" }}><Svg d={ic.d} size={24} /></span>
+                    <span style={S.rowMid}>
+                      <span style={S.name}>{it.name}</span>
+                      <span style={S.rowDate}>в архиве</span>
+                    </span>
+                    <span style={S.rowSize}>{fmtSizeShort(it.size)}</span>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -773,21 +781,22 @@ function Btn({ onClick, icon, text, label, accent, red, flexNone, disabled }) {
 const S = {
   app: { display: "flex", flexDirection: "column", height: "100vh", background: BG, color: TXT, fontFamily: "system-ui,-apple-system,Roboto,sans-serif", overflow: "hidden" },
   tabsbar: { display: "flex", alignItems: "center", background: BAR, flexShrink: 0, height: 50, margin: "8px 8px 4px", borderRadius: 24 },
-  tabs: { display: "flex", overflowX: "auto", flex: 1, alignItems: "center", gap: 6, padding: "0 4px", height: "100%" },
+  tabs: { display: "flex", overflowX: "auto", flex: 1, alignItems: "center", justifyContent: "center", gap: 6, padding: "0 4px", height: "100%" },
   tab: { display: "flex", alignItems: "center", gap: 6, padding: "0 12px", height: 34, borderRadius: 17, fontSize: 13.5, color: SUB, whiteSpace: "nowrap", background: "#241A11", flexShrink: 0, border: "1px solid transparent" },
   tabActive: { color: ACC, background: "rgba(239,108,0,.14)", border: "1px solid " + ACC, fontWeight: 600 },
   tabX: { fontSize: 17, color: SUB, padding: "0 2px" },
   hbtn: { border: "none", background: "transparent", color: TXT, width: 40, height: 48, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" },
   crumb: { padding: "8px 16px", fontSize: 13, background: BG, flexShrink: 0, borderBottom: "1px solid #241A11", overflow: "hidden", whiteSpace: "nowrap" },
   list: { flex: 1, overflowY: "auto", overflowX: "hidden", display: "flex", flexDirection: "column" },
-  slideWrap: { marginTop: "auto", paddingTop: "55vh" },
+  slideWrap: { marginTop: "auto", paddingTop: "55vh", paddingBottom: "50vh" },
   note: { color: SUB, textAlign: "center", padding: "60px 24px", lineHeight: 1.6 },
   row: { display: "flex", alignItems: "center", gap: 14, padding: "9px 14px", touchAction: "pan-y", borderBottom: "1px solid rgba(255,255,255,.04)" },
   iconWrap: { width: 46, height: 46, borderRadius: 23, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
   rowMid: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 },
   rowDate: { fontSize: 12, color: SUB },
   rowSize: { fontSize: 12.5, color: SUB, flexShrink: 0, marginLeft: 6 },
-  rowDir: { background: "#2C2114" },
+  rowDir: { background: "rgba(239,108,0,.05)" },
+  arcScreen: { position: "fixed", inset: 0, zIndex: 1250, background: BG, display: "flex", flexDirection: "column", paddingTop: "env(safe-area-inset-top)" },
   cnt: { background: "#43331F", color: GOLD, fontSize: 12, fontWeight: 700, padding: "2px 9px", borderRadius: 10, flexShrink: 0 },
   rowSel: { background: "#332417" },
   name: { flex: 1, fontSize: 15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
