@@ -45,7 +45,15 @@ const splitExt = (name, isDir) => {
 const fmtSize = (b) => { if (b == null) return "—"; const u = ["Б", "КБ", "МБ", "ГБ"]; let i = 0, n = b; while (n >= 1024 && i < 3) { n /= 1024; i++; } return (i ? n.toFixed(1) : n) + " " + u[i] + (i ? " (" + b.toLocaleString("ru") + " Б)" : ""); };
 const fmtShort = (b) => { if (b == null) return ""; const u = ["Б", "КБ", "МБ", "ГБ"]; let i = 0, n = b; while (n >= 1024 && i < 3) { n /= 1024; i++; } return (i ? n.toFixed(1) : n) + " " + u[i]; };
 const fmtSizeShort = (b) => { if (b == null) return ""; const u = ["Б", "КБ", "МБ", "ГБ"]; let i = 0, n = b; while (n >= 1024 && i < 3) { n /= 1024; i++; } return (i ? n.toFixed(1) : n) + " " + u[i]; };
-const fmtDate = (ms) => { if (!ms) return ""; const d = new Date(ms); return d.toLocaleDateString("ru") + " " + d.toLocaleTimeString("ru", { hour: "2-digit", minute: "2-digit" }); };
+const plural = (n, a, b, c) => { const m10 = n % 10, m100 = n % 100; if (m10 === 1 && m100 !== 11) return a; if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return b; return c; };
+const fmtDate = (ms) => {
+  if (!ms) return "";
+  const d = new Date(ms), diff = Date.now() - ms;
+  if (diff < 60000) return "только что";
+  if (diff < 3600000) { const m = Math.floor(diff / 60000); return m + " " + plural(m, "минуту", "минуты", "минут") + " назад"; }
+  if (d.toDateString() === new Date().toDateString()) { const h = Math.floor(diff / 3600000); return h + " " + plural(h, "час", "часа", "часов") + " назад"; }
+  return d.toLocaleDateString("ru") + " " + d.toLocaleTimeString("ru", { hour: "2-digit", minute: "2-digit" });
+};
 const ago = (ms) => { if (!ms) return "—"; const d = new Date(ms), diff = (Date.now() - ms) / 60000; const rel = diff < 1 ? "только что" : diff < 60 ? Math.floor(diff) + " мин назад" : diff < 1440 ? Math.floor(diff / 60) + " ч назад" : Math.floor(diff / 1440) + " дн назад"; const p = (n) => String(n).padStart(2, "0"); return `${p(d.getHours())}:${p(d.getMinutes())}, ${p(d.getDate())}.${p(d.getMonth() + 1)}.${String(d.getFullYear()).slice(2)} · ${rel}`; };
 
 const MIME = { txt: "text/plain", md: "text/plain", log: "text/plain", csv: "text/csv", html: "text/html", json: "application/json", xml: "text/xml", pdf: "application/pdf", jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", gif: "image/gif", webp: "image/webp", bmp: "image/bmp", svg: "image/svg+xml", mp4: "video/mp4", mkv: "video/x-matroska", avi: "video/x-msvideo", mov: "video/quicktime", webm: "video/webm", "3gp": "video/3gpp", mp3: "audio/mpeg", wav: "audio/wav", ogg: "audio/ogg", flac: "audio/flac", m4a: "audio/mp4", aac: "audio/aac", zip: "application/zip", rar: "application/vnd.rar", "7z": "application/x-7z-compressed", apk: "application/vnd.android.package-archive" };
@@ -169,7 +177,7 @@ export default function App() {
   useEffect(() => { Filesystem.requestPermissions().catch(() => {}); checkAccess(); }, []);
   const checkAccess = async () => { try { const r = await Apps.hasAllFiles(); setAllFiles(!!r.granted); } catch { setAllFiles(true); } };
   const listRef = useRef(null);
-  useEffect(() => { const id = setTimeout(() => { const el = listRef.current; if (!el) return; el.scrollTop = window.innerHeight * 0.55; }, 60); return () => clearTimeout(id); }, [path, active]);
+  useEffect(() => { const id = setTimeout(() => { const el = listRef.current; if (!el) return; el.scrollTop = window.innerHeight * 0.78; }, 60); return () => clearTimeout(id); }, [path, active]);
   const silentRefresh = useCallback(async () => {
     try {
       const u = await Filesystem.getUri({ path, directory: DIR });
@@ -798,7 +806,7 @@ const S = {
   hbtn: { border: "none", background: "transparent", color: TXT, width: 40, height: 48, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" },
   crumb: { padding: "8px 16px", fontSize: 13, background: BG, flexShrink: 0, borderBottom: "1px solid #241A11", overflow: "hidden", whiteSpace: "nowrap" },
   list: { flex: 1, overflowY: "auto", overflowX: "hidden", display: "flex", flexDirection: "column" },
-  slideWrap: { display: "flex", flexDirection: "column", minHeight: "45vh" },
+  slideWrap: { display: "flex", flexDirection: "column", minHeight: "calc(100dvh - 140px)" },
   note: { color: SUB, textAlign: "center", padding: "60px 24px", lineHeight: 1.6 },
   row: { display: "flex", alignItems: "center", gap: 14, padding: "9px 14px", touchAction: "pan-y", borderBottom: "1px solid rgba(255,255,255,.04)" },
   iconWrap: { width: 46, height: 46, borderRadius: 23, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
