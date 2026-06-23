@@ -187,6 +187,67 @@ public class AppsPlugin extends Plugin {
     }
 
     @PluginMethod
+    public void getShared(PluginCall call) {
+        try {
+            JSArray arr = new JSArray();
+            for (android.net.Uri u : MainActivity.pendingShared) {
+                JSObject o = new JSObject();
+                String name = queryName(u);
+                o.put("name", name);
+                o.put("mime", getContext().getContentResolver().getType(u));
+                arr.put(o);
+            }
+            JSObject ret = new JSObject(); ret.put("files", arr); call.resolve(ret);
+        } catch (Exception e) { call.reject(e.getMessage()); }
+    }
+
+    @PluginMethod
+    public void saveShared(PluginCall call) {
+        String destDir = call.getString("dir");
+        if (destDir == null) { call.reject("no dir"); return; }
+        try {
+            File dir = toFile(destDir);
+            int ok = 0;
+            for (android.net.Uri u : MainActivity.pendingShared) {
+                String name = queryName(u);
+                File out = new File(dir, name);
+                int n = 0; String base = name, ext = "";
+                int dot = name.lastIndexOf('.');
+                if (dot > 0) { base = name.substring(0, dot); ext = name.substring(dot); }
+                while (out.exists()) { n++; out = new File(dir, base + " (" + n + ")" + ext); }
+                java.io.InputStream in = getContext().getContentResolver().openInputStream(u);
+                java.io.FileOutputStream fos = new java.io.FileOutputStream(out);
+                byte[] buf = new byte[65536]; int r;
+                while ((r = in.read(buf)) > 0) fos.write(buf, 0, r);
+                fos.close(); in.close(); ok++;
+            }
+            MainActivity.pendingShared.clear();
+            JSObject ret = new JSObject(); ret.put("saved", ok); call.resolve(ret);
+        } catch (Exception e) { call.reject(e.getMessage()); }
+    }
+
+    @PluginMethod
+    public void clearShared(PluginCall call) {
+        MainActivity.pendingShared.clear();
+        call.resolve(new JSObject());
+    }
+
+    private String queryName(android.net.Uri u) {
+        String name = null;
+        try {
+            android.database.Cursor c = getContext().getContentResolver().query(u, null, null, null, null);
+            if (c != null) {
+                int idx = c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME);
+                if (idx >= 0 && c.moveToFirst()) name = c.getString(idx);
+                c.close();
+            }
+        } catch (Exception ignored) {}
+        if (name == null) { name = u.getLastPathSegment(); if (name != null && name.contains("/")) name = name.substring(name.lastIndexOf('/') + 1); }
+        if (name == null || name.isEmpty()) name = "shared_" + System.currentTimeMillis();
+        return name;
+    }
+
+    @PluginMethod
     public void apkIcon(PluginCall call) {
         String uriStr = call.getString("uri");
         if (uriStr == null) { call.reject("no uri"); return; }
