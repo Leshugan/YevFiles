@@ -56,20 +56,7 @@ jobs:
           fi
           # Приём "Поделиться" (ACTION_SEND) — YevFiles в шторке "Поделиться/Сохранить в"
           if ! grep -q "android.intent.action.SEND" "$MAN"; then
-            python3 - "$MAN" << 'PYEOF'
-import sys, re
-p = sys.argv[1]
-s = open(p).read()
-flt = '<intent-filter><action android:name="android.intent.action.SEND" /><category android:name="android.intent.category.DEFAULT" /><data android:mimeType="*/*" /></intent-filter><intent-filter><action android:name="android.intent.action.SEND_MULTIPLE" /><category android:name="android.intent.category.DEFAULT" /><data android:mimeType="*/*" /></intent-filter>'
-# вставить фильтры внутрь activity MainActivity перед закрывающим </activity>
-m = re.search(r'(<activity[^>]*MainActivity[^>]*>)(.*?)(</activity>)', s, re.S)
-if m and 'android.intent.action.SEND"' not in m.group(2):
-    s = s[:m.end(2)] + flt + s[m.end(2):]
-    open(p,'w').write(s)
-    print("SEND filter added")
-else:
-    print("activity not matched or already present")
-PYEOF
+            sed -i 's#</activity>#<intent-filter><action android:name="android.intent.action.SEND" /><category android:name="android.intent.category.DEFAULT" /><data android:mimeType="*/*" /></intent-filter><intent-filter><action android:name="android.intent.action.SEND_MULTIPLE" /><category android:name="android.intent.category.DEFAULT" /><data android:mimeType="*/*" /></intent-filter></activity>#' "$MAN"
           fi
           echo "----- manifest -----"
           grep -E "uses-permission|requestLegacy|appsfp|YevDocuments|action.SEND" "$MAN" || true
