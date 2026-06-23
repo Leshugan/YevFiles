@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from "react";
 import { Filesystem, Directory, Encoding } from "@capacitor/filesystem";
 import { App as CapApp } from "@capacitor/app";
 import { registerPlugin } from "@capacitor/core";
@@ -181,17 +181,21 @@ export default function App() {
   const listRef = useRef(null);
   const [padTop, setPadTop] = useState(0);
   const visLen = useRef(0);
-  useEffect(() => {
+  const scrollPos = useRef({});
+  const pathKeyRef = useRef("");
+  pathKeyRef.current = active + "|" + path;
+  useLayoutEffect(() => {
     const el = listRef.current; if (!el) return;
-    const t = setTimeout(() => {
-      const ch = el.clientHeight, rowH = 72, n = visLen.current;
-      const pt = Math.max(0, ch - Math.min(4, n) * rowH);
-      const contentH = el.scrollHeight - padTop;
-      if (pt !== padTop) { setPadTop(pt); return; }
-      el.scrollTop = contentH >= ch ? pt : el.scrollHeight - ch;
-    }, 60);
-    return () => clearTimeout(t);
+    const ch = el.clientHeight, rowH = 72, n = visLen.current;
+    const pt = Math.max(0, ch - Math.min(4, n) * rowH);
+    if (pt !== padTop) { setPadTop(pt); return; }
+    const key = active + "|" + path;
+    const saved = scrollPos.current[key];
+    if (saved != null) { el.scrollTop = saved; return; }
+    const contentH = el.scrollHeight - pt;
+    el.scrollTop = contentH >= ch ? pt : el.scrollHeight - ch;
   }, [path, active, entries, padTop]);
+  const onListScroll = (e) => { scrollPos.current[pathKeyRef.current] = e.currentTarget.scrollTop; };
   const silentRefresh = useCallback(async () => {
     try {
       const u = await Filesystem.getUri({ path, directory: DIR });
@@ -263,11 +267,12 @@ export default function App() {
     await showOpenMenu(e, mime);
   };
   const showOpenMenu = async (e, mime) => {
+    setOpenMenu({ file: e, mime, apps: null, useDefault: false, editHide: false });
     try {
       const { apps } = await Apps.query({ uri: e.uri, mime });
-      if (!apps || !apps.length) { showToast("Нет приложений для этого типа"); return; }
-      setOpenMenu({ file: e, mime, apps, useDefault: false, editHide: false });
-    } catch (err) { showToast("Не удалось получить список: " + (err?.message || "")); }
+      if (!apps || !apps.length) { showToast("Нет приложений для этого типа"); setOpenMenu(null); return; }
+      setOpenMenu((m) => (m && m.file === e ? { ...m, apps } : m));
+    } catch (err) { showToast("Не удалось получить список: " + (err?.message || "")); setOpenMenu(null); }
   };
   const pickApp = async (app) => {
     const om = openMenu;
@@ -283,7 +288,8 @@ export default function App() {
     catch (err) { showToast("Не удалось открыть: " + (err?.message || "")); }
   };
   const openArchive = async (e) => {
-    setOpenMenu(null); showToast("Открываю архив…");
+    setOpenMenu(null);
+    setArcView({ name: e.name, entries: null });
     try {
       const r = await Filesystem.readFile({ path: e.uri });
       const zip = await JSZip.loadAsync(r.data, { base64: true });
@@ -291,11 +297,11 @@ export default function App() {
       zip.forEach((rel, f) => { if (!f.dir) entries.push({ name: rel, size: (f._data && f._data.uncompressedSize) || 0 }); });
       entries.sort((a, b) => a.name.localeCompare(b.name));
       setArcView({ name: e.name, entries, zip });
-    } catch (err) { showToast("Не удалось открыть архив: " + (err?.message || "")); }
+    } catch (err) { setArcView(null); showToast("Не удалось открыть архив: " + (err?.message || "")); }
   };
   const extractOpen = async (entry) => {
+    setArcView((m) => (m ? { ...m, busy: "Извлекаю…" } : m));
     try {
-      showToast("Извлекаю…");
       const b64 = await arcView.zip.file(entry.name).async("base64");
       const fname = entry.name.split("/").pop();
       const tmp = "Download/.yevtmp/" + fname;
@@ -304,7 +310,7 @@ export default function App() {
       setArcView(null);
       if (/\.apk$/i.test(fname)) await Apps.installApk({ uri: u.uri });
       else await Apps.open({ uri: u.uri, mime: mimeOf(fname) });
-    } catch (err) { showToast("Не удалось открыть: " + (err?.message || "")); }
+    } catch (err) { setArcView((m) => (m ? { ...m, busy: null } : m)); showToast("Не удалось открыть: " + (err?.message || "")); }
   };
   const resetDefault = () => { const defs = loadMap(DEFKEY); delete defs[openMenu.mime]; saveMap(DEFKEY, defs); showToast("Привязка сброшена"); };
   const open = (e) => {
@@ -456,7 +462,6 @@ export default function App() {
             <div key={t.id} ref={(el) => (tabRefs.current[i] = el)}
               onPointerDown={(ev) => onTabDown(ev, i)} onPointerMove={onTabMove} onPointerUp={() => onTabUp(i)} onPointerCancel={() => onTabUp(i)}
               style={{ ...S.tab, ...(i === active ? S.tabActive : {}) }}>
-              {t.startup && <span style={{ color: GOLD, display: "flex" }}><Svg d={I.home} size={14} /></span>}
               <span style={{ overflow: "hidden", textOverflow: "ellipsis", maxWidth: 130 }}>{t.path ? baseName(t.path) : "Storage"}</span>
             </div>
           ))}
@@ -499,7 +504,7 @@ export default function App() {
         </div>
       )}
       {/* СПИСОК */}
-      <main ref={listRef} style={S.list} onTouchStart={onTS} onTouchMove={onTM}>
+      <main ref={listRef} style={S.list} onScroll={onListScroll} onTouchStart={onTS} onTouchMove={onTM}>
         {false && (
           <div style={S.accessBar}>
             <div style={{ flex: 1, fontSize: 13, lineHeight: 1.4 }}>Нет доступа ко всем файлам — архивы, PDF и APK не видны.</div>
@@ -525,7 +530,10 @@ export default function App() {
                     {isSel ? <Svg d={I.check} size={22} /> : <Svg d={ic.d} size={24} />}
                   </span>
                   <span style={S.rowMid}>
-                    <span style={{ ...S.name, fontWeight: isDir ? 600 : 400 }}>{e.name}</span>
+                    <span style={{ ...S.name, fontWeight: isDir ? 600 : 400, display: "flex", alignItems: "center", gap: 6 }}>
+                      {isDir && startupPath != null && join(path, e.name) === startupPath && <span style={{ color: GOLD, display: "flex" }}><Svg d={I.home} size={15} /></span>}
+                      {e.name}
+                    </span>
                     {!isDir && e.mtime ? <span style={S.rowDate}>{fmtDate(e.mtime)}</span> : null}
                   </span>
                   {pinned && <span style={{ color: SUB, display: "flex" }}><Svg d={meta.pinTop.has(keyOf(e.name)) ? I.pinT : I.pinB} size={14} /></span>}
@@ -534,6 +542,7 @@ export default function App() {
               );
             };
             const firstFile = visible.findIndex((e) => e.type !== "directory");
+            const startupPath = (tabs.find((t) => t.startup) || {}).path;
             visLen.current = visible.length;
             return visible.map((e, i) => (
               <React.Fragment key={e.name}>
@@ -570,9 +579,9 @@ export default function App() {
       ) : (
         <nav style={S.bottom}>
           <Zone><Btn onClick={() => setQuery(query === null ? "" : null)} icon={I.search} label="Поиск" /></Zone>
-          {clip && clip.length > 0 && <Zone><Btn onClick={() => setClip(null)} icon={I.x} label="Отмена" red /></Zone>}
+          <Zone>{clip && clip.length > 0 ? <Btn onClick={() => setClip(null)} icon={I.x} label="Отмена" red /> : null}</Zone>
           <Zone><Btn onClick={selectAll} icon={I.selectAll} label="Все" /></Zone>
-          {clip && clip.length > 0 && <Zone><Btn onClick={() => (clip.length === 1 ? pasteAll() : setPasteMenu((v) => !v))} icon={I.paste} label={"Вставить (" + clip.length + ")"} /></Zone>}
+          <Zone>{clip && clip.length > 0 ? <Btn onClick={() => (clip.length === 1 ? pasteAll() : setPasteMenu((v) => !v))} icon={I.paste} label={"Вставить (" + clip.length + ")"} /> : null}</Zone>
           <Zone><Btn onClick={() => setCreateOpen((v) => !v)} icon={I.plus} label="Создать" /></Zone>
         </nav>
       )}
@@ -703,6 +712,10 @@ export default function App() {
           <div style={S.crumb}>
             <span onClick={() => setArcView(null)} style={{ display: "inline-flex", alignItems: "center", gap: 6, color: ACC }}><Svg d={I.back} size={18} /> {arcView.name}</span>
           </div>
+          {arcView.busy && <div style={{ padding: "10px 16px", color: GOLD, fontSize: 13, textAlign: "center" }}>{arcView.busy}</div>}
+          {arcView.entries == null ? (
+            <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: SUB }}>Открываю архив…</div>
+          ) : (
           <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column" }}>
             <div style={{ marginTop: "auto" }}>
               {arcView.entries.map((it, i) => {
@@ -720,13 +733,15 @@ export default function App() {
               })}
             </div>
           </div>
+          )}
         </div>
       )}
 
       {/* МЕНЮ ОТКРЫТИЯ ФАЙЛА */}
       {openMenu && (() => {
         const hidden = new Set(loadMap(HIDEKEY)[openMenu.mime] || []);
-        const shown = openMenu.editHide ? openMenu.apps : openMenu.apps.filter((a) => !hidden.has(a.packageName + "|" + a.activityName));
+        const apps = openMenu.apps || [];
+        const shown = openMenu.editHide ? apps : apps.filter((a) => !hidden.has(a.packageName + "|" + a.activityName));
         return (
           <div style={S.backdrop} onClick={() => setOpenMenu(null)}>
             <div style={S.sheet} onClick={(e) => e.stopPropagation()}>
@@ -743,7 +758,8 @@ export default function App() {
               </div>
               {openMenu.editHide && <div style={{ fontSize: 12, color: GOLD, marginBottom: 10 }}>Нажмите на приложение, чтобы скрыть/показать его</div>}
               <div style={{ maxHeight: "42vh", overflowY: "auto" }}>
-                {shown.length === 0 && <div style={{ color: SUB, padding: 16, textAlign: "center" }}>Нет приложений</div>}
+                {openMenu.apps == null && <div style={{ color: SUB, padding: 20, textAlign: "center" }}>Загрузка приложений…</div>}
+                {openMenu.apps && shown.length === 0 && <div style={{ color: SUB, padding: 16, textAlign: "center" }}>Нет приложений</div>}
                 {shown.map((a) => {
                   const id = a.packageName + "|" + a.activityName;
                   const isHid = hidden.has(id);
@@ -802,7 +818,7 @@ export default function App() {
                 </div>
               ))}
             </div>
-            <button style={{ ...S.accessBtn, width: "100%", marginTop: 14, padding: "12px" }} onClick={pasteAll}>Все сюда</button>
+            <button style={{ ...S.accessBtn, width: "100%", marginTop: 14, padding: "12px" }} onClick={pasteAll}>Всё сюда</button>
           </div>
         </div>
       )}
@@ -866,8 +882,8 @@ const S = {
   slideWrap: { display: "flex", flexDirection: "column" },
   note: { color: SUB, textAlign: "center", padding: "60px 24px", lineHeight: 1.6 },
   row: { display: "flex", alignItems: "center", gap: 14, padding: "9px 14px", touchAction: "pan-y", borderBottom: "1px solid rgba(255,255,255,.04)" },
-  sep: { height: 1, background: "rgba(255,255,255,.12)", margin: "8px 16px" },
-  iconWrap: { width: 46, height: 46, borderRadius: 23, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  sep: { height: 1, background: "rgba(255,255,255,.10)", margin: "4px 0" },
+  iconWrap: { width: 44, height: 44, borderRadius: 13, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
   rowMid: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 },
   rowDate: { fontSize: 12, color: SUB },
   rowSize: { fontSize: 12.5, color: SUB, flexShrink: 0, marginLeft: 6 },
@@ -882,7 +898,7 @@ const S = {
   searchClose: { border: "none", background: "transparent", color: SUB, fontSize: 24, width: 40 },
   bottom: { display: "flex", alignItems: "center", background: BAR, flexShrink: 0, borderRadius: 26, margin: "4px 8px calc(8px + env(safe-area-inset-bottom))" },
   btn: { border: "none", background: "transparent", padding: "6px 6px 7px", display: "flex", flexDirection: "column", alignItems: "center", gap: 2 },
-  selCount: { minWidth: 28, height: 28, padding: "0 6px", margin: "0 10px", background: "rgba(239,108,0,.16)", border: "1px solid " + ACC, color: ACC, borderRadius: 14, fontWeight: 700, fontSize: 13, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  selCount: { minWidth: 28, height: 28, padding: "0 6px", margin: "0 10px", background: "rgba(239,108,0,.16)", border: "1px solid " + ACC, color: ACC, borderRadius: 9, fontWeight: 700, fontSize: 13, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
   btnLabel: { fontSize: 10, color: SUB, whiteSpace: "nowrap" },
   overlay: { position: "fixed", inset: 0, zIndex: 8 },
   menu: { position: "absolute", zIndex: 9, background: BAR, borderRadius: 12, overflow: "hidden", border: "1px solid " + LINE, boxShadow: "0 8px 32px rgba(0,0,0,.6)", minWidth: 200, animation: "dropGrow .2s cubic-bezier(.2,.9,.3,1.2)" },
