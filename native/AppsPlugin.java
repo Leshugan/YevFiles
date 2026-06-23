@@ -3,7 +3,11 @@ package leshugan.fm;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageInfo;
+import android.content.pm.PackageInstaller;
 import android.content.pm.ResolveInfo;
+import android.os.FileObserver;
+import android.app.PendingIntent;
+import android.content.IntentSender;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.drawable.Drawable;
@@ -26,10 +30,15 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.List;
 
 @CapacitorPlugin(name = "Apps")
 public class AppsPlugin extends Plugin {
+
+    private FileObserver observer;
 
     @PluginMethod
     public void query(PluginCall call) {
@@ -176,16 +185,25 @@ public class AppsPlugin extends Plugin {
         try {
             File f = toFile(uriStr);
             if (!f.exists()) { call.reject("Файл не найден: " + f.getAbsolutePath()); return; }
-            Uri apk;
-            if (Build.VERSION.SDK_INT >= 24) apk = FileProvider.getUriForFile(getContext(), getContext().getPackageName() + ".appsfp", f);
-            else apk = Uri.fromFile(f);
-            Intent i = new Intent(Intent.ACTION_VIEW);
-            i.setDataAndType(apk, "application/vnd.android.package-archive");
-            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            for (ResolveInfo ri : getContext().getPackageManager().queryIntentActivities(i, PackageManager.MATCH_DEFAULT_ONLY)) {
-                getContext().grantUriPermission(ri.activityInfo.packageName, apk, Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            }
-            getContext().startActivity(i);
+            PackageInstaller pi = getContext().getPackageManager().getPackageInstaller();
+            PackageInstaller.SessionParams params = new PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL);
+            int sessionId = pi.createSession(params);
+            PackageInstaller.Session session = pi.openSession(sessionId);
+            OutputStream out = session.openWrite("apk", 0, f.length());
+            InputStream in = new FileInputStream(f);
+            byte[] buf = new byte[65536];
+            int n;
+            while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+            session.fsync(out);
+            in.close();
+            out.close();
+            Intent statusIntent = new Intent(getContext(), getClass());
+            statusIntent.setAction("leshugan.fm.INSTALL_RESULT");
+            int flags = PendingIntent.FLAG_UPDATE_CURRENT;
+            if (Build.VERSION.SDK_INT >= 31) flags |= PendingIntent.FLAG_MUTABLE;
+            PendingIntent pending = PendingIntent.getBroadcast(getContext(), sessionId, statusIntent, flags);
+            session.commit(pending.getIntentSender());
+            session.close();
             call.resolve();
         } catch (Exception e) { call.reject(e.getMessage()); }
     }
@@ -203,6 +221,28 @@ public class AppsPlugin extends Plugin {
             getContext().startActivity(i);
             call.resolve();
         } catch (Exception e) { call.reject(e.getMessage()); }
+    }
+
+    @PluginMethod
+    public void watch(PluginCall call) {
+        String uriStr = call.getString("uri");
+        if (uriStr == null) { call.reject("no uri"); return; }
+        try {
+            final String path = toFile(uriStr).getAbsolutePath();
+            if (observer != null) { observer.stopWatching(); observer = null; }
+            int mask = FileObserver.CREATE | FileObserver.DELETE | FileObserver.MOVED_FROM | FileObserver.MOVED_TO | FileObserver.CLOSE_WRITE | FileObserver.MODIFY;
+            observer = new FileObserver(path, mask) {
+                @Override public void onEvent(int event, String p) { notifyListeners("fschange", new JSObject()); }
+            };
+            observer.startWatching();
+            call.resolve();
+        } catch (Exception e) { call.reject(e.getMessage()); }
+    }
+
+    @PluginMethod
+    public void unwatch(PluginCall call) {
+        if (observer != null) { observer.stopWatching(); observer = null; }
+        call.resolve();
     }
 
     private boolean deleteRecursive(File f) {
