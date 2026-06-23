@@ -205,6 +205,7 @@ export default function App() {
   const closeTab = (i) => { if (tabs.length === 1) return; const t = tabs.filter((_, idx) => idx !== i); persist(t); setActive(Math.max(0, Math.min(active, t.length - 1))); };
 
   const backRef = useRef(() => {});
+  const backExit = useRef(0);
   backRef.current = () => {
     if (arcView) { setArcView(null); return; }
     if (openMenu) { setOpenMenu(null); return; }
@@ -218,7 +219,9 @@ export default function App() {
     if (query !== null) { setQuery(null); return; }
     if (selMode) { exitSel(); return; }
     if (path) { goUp(); return; }
-    CapApp.exitApp();
+    const now = Date.now();
+    if (now - backExit.current < 2000) { CapApp.exitApp(); }
+    else { backExit.current = now; showToast("Нажмите «Назад» ещё раз для выхода"); }
   };
   useEffect(() => {
     let h;
@@ -460,27 +463,36 @@ export default function App() {
           {loading && null}
           {error && <div style={{ ...S.note, color: RED }}>{error}<br /><span style={{ fontSize: 12 }}>Разрешите «Доступ ко всем файлам» в настройках приложения.</span></div>}
           {!loading && !error && visible.length === 0 && <div style={S.note}>Пусто</div>}
-          {visible.map((e) => {
-            const isSel = sel.has(e.name), hid = isHidden(e);
-            const ic = e.type === "directory" ? { d: I.folder, c: ACC } : fileIcon(e.name);
-            const isDir = e.type === "directory";
-            const pinned = meta.pinTop.has(keyOf(e.name)) || meta.pinBot.has(keyOf(e.name));
-            return (
-              <div key={e.name} style={{ ...S.row, ...(isDir ? S.rowDir : {}), ...(isSel ? S.rowSel : {}), opacity: hid ? 0.5 : 1 }}
-                onPointerDown={(ev) => rDown(ev, e)} onPointerMove={rMove} onPointerUp={() => rUp(e)} onPointerCancel={() => clearTimeout(lpTimer.current)}>
-                <span style={{ ...S.iconWrap, color: isSel ? "#fff" : ic.c, background: isSel ? ACC : "rgba(255,255,255,.05)" }}
-                  onPointerDown={(ev) => ev.stopPropagation()} onPointerUp={(ev) => { ev.stopPropagation(); clearTimeout(lpTimer.current); toggle(e.name); }}>
-                  {isSel ? <Svg d={I.check} size={22} /> : <Svg d={ic.d} size={24} />}
-                </span>
-                <span style={S.rowMid}>
-                  <span style={{ ...S.name, fontWeight: isDir ? 600 : 400 }}>{e.name}</span>
-                  {!isDir && e.mtime ? <span style={S.rowDate}>{fmtDate(e.mtime)}</span> : null}
-                </span>
-                {pinned && <span style={{ color: SUB, display: "flex" }}><Svg d={meta.pinTop.has(keyOf(e.name)) ? I.pinT : I.pinB} size={14} /></span>}
-                <span style={S.rowSize}>{isDir ? (e.count != null ? "(" + e.count + ")" : "") : fmtSizeShort(e.size)}</span>
-              </div>
-            );
-          })}
+          {(() => {
+            const renderRow = (e) => {
+              const isSel = sel.has(e.name), hid = isHidden(e);
+              const isDir = e.type === "directory";
+              const ic = isDir ? { d: I.folder, c: ACC } : fileIcon(e.name);
+              const pinned = meta.pinTop.has(keyOf(e.name)) || meta.pinBot.has(keyOf(e.name));
+              return (
+                <div key={e.name} style={{ ...S.row, ...(isDir ? S.rowDir : {}), ...(isSel ? S.rowSel : {}), opacity: hid ? 0.5 : 1 }}
+                  onPointerDown={(ev) => rDown(ev, e)} onPointerMove={rMove} onPointerUp={() => rUp(e)} onPointerCancel={() => clearTimeout(lpTimer.current)}>
+                  <span style={{ ...S.iconWrap, color: isSel ? "#fff" : ic.c, background: isSel ? ACC : "rgba(255,255,255,.05)" }}
+                    onPointerDown={(ev) => ev.stopPropagation()} onPointerUp={(ev) => { ev.stopPropagation(); clearTimeout(lpTimer.current); toggle(e.name); }}>
+                    {isSel ? <Svg d={I.check} size={22} /> : <Svg d={ic.d} size={24} />}
+                  </span>
+                  <span style={S.rowMid}>
+                    <span style={{ ...S.name, fontWeight: isDir ? 600 : 400 }}>{e.name}</span>
+                    {!isDir && e.mtime ? <span style={S.rowDate}>{fmtDate(e.mtime)}</span> : null}
+                  </span>
+                  {pinned && <span style={{ color: SUB, display: "flex" }}><Svg d={meta.pinTop.has(keyOf(e.name)) ? I.pinT : I.pinB} size={14} /></span>}
+                  <span style={S.rowSize}>{isDir ? (e.count != null ? "(" + e.count + ")" : "") : fmtSizeShort(e.size)}</span>
+                </div>
+              );
+            };
+            const dirs = visible.filter((e) => e.type === "directory");
+            const files = visible.filter((e) => e.type !== "directory");
+            return (<>
+              {dirs.map(renderRow)}
+              <div style={{ flex: "1 0 auto" }} />
+              {files.map(renderRow)}
+            </>);
+          })()}
         </div>
       </main>
 
@@ -786,7 +798,7 @@ const S = {
   hbtn: { border: "none", background: "transparent", color: TXT, width: 40, height: 48, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" },
   crumb: { padding: "8px 16px", fontSize: 13, background: BG, flexShrink: 0, borderBottom: "1px solid #241A11", overflow: "hidden", whiteSpace: "nowrap" },
   list: { flex: 1, overflowY: "auto", overflowX: "hidden", display: "flex", flexDirection: "column" },
-  slideWrap: {},
+  slideWrap: { display: "flex", flexDirection: "column", minHeight: "45vh" },
   note: { color: SUB, textAlign: "center", padding: "60px 24px", lineHeight: 1.6 },
   row: { display: "flex", alignItems: "center", gap: 14, padding: "9px 14px", touchAction: "pan-y", borderBottom: "1px solid rgba(255,255,255,.04)" },
   iconWrap: { width: 46, height: 46, borderRadius: 23, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
