@@ -161,6 +161,32 @@ public class AppsPlugin extends Plugin {
     }
 
     @PluginMethod
+    public void pdfThumb(PluginCall call) {
+        String uriStr = call.getString("uri");
+        if (uriStr == null) { call.reject("no uri"); return; }
+        try {
+            File f = toFile(uriStr);
+            android.os.ParcelFileDescriptor pfd = android.os.ParcelFileDescriptor.open(f, android.os.ParcelFileDescriptor.MODE_READ_ONLY);
+            android.graphics.pdf.PdfRenderer r = new android.graphics.pdf.PdfRenderer(pfd);
+            JSObject ret = new JSObject();
+            if (r.getPageCount() > 0) {
+                android.graphics.pdf.PdfRenderer.Page page = r.openPage(0);
+                int w = 160, h = (int) (160f * page.getHeight() / Math.max(1, page.getWidth()));
+                if (h <= 0) h = 200;
+                Bitmap b = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+                b.eraseColor(0xFFFFFFFF);
+                page.render(b, null, null, android.graphics.pdf.PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY);
+                page.close();
+                ByteArrayOutputStream out = new ByteArrayOutputStream();
+                b.compress(Bitmap.CompressFormat.PNG, 90, out);
+                ret.put("thumb", "data:image/png;base64," + Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP));
+            }
+            r.close(); pfd.close();
+            call.resolve(ret);
+        } catch (Exception e) { call.reject(e.getMessage()); }
+    }
+
+    @PluginMethod
     public void apkIcon(PluginCall call) {
         String uriStr = call.getString("uri");
         if (uriStr == null) { call.reject("no uri"); return; }
