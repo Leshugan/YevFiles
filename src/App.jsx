@@ -209,7 +209,7 @@ export default function App() {
   const [openMenu, setOpenMenu] = useState(null);
   const [arcView, setArcView] = useState(null);
   const [arcSel, setArcSel] = useState(new Set());
-  const arcLp = useRef(false), arcLpT = useRef(null);
+  const arcLp = useRef(false), arcLpT = useRef(null), arcPX = useRef(0), arcPY = useRef(0);
   const [shared, setShared] = useState([]);
   const checkShared = async () => { try { const r = await Apps.getShared(); setShared(r.files || []); } catch {} };
   useEffect(() => { checkShared(); const h = CapApp.addListener("resume", checkShared); return () => { h.then((x) => x.remove()).catch(() => {}); }; }, []);
@@ -877,7 +877,7 @@ export default function App() {
       {/* ПРОСМОТР АРХИВА — как папка */}
       {arcView && (
         <div style={S.arcScreen}>
-          <div style={S.crumb}>
+          <div style={{ ...S.crumb, borderBottom: "none" }}>
             <span onClick={() => setArcView(null)} style={{ display: "inline-flex", alignItems: "center", gap: 6, color: ACC }}><Svg d={I.back} size={18} /> {arcView.name}</span>
           </div>
           {arcView.busy && <div style={{ padding: "10px 16px", color: GOLD, fontSize: 13, textAlign: "center" }}>{arcView.busy}</div>}
@@ -893,9 +893,9 @@ export default function App() {
                 return (
                   <div key={i}
                     onClick={() => { if (arcSel.size > 0) tog(); else if (!arcLp.current) extractOpen(it); }}
-                    onPointerDown={() => { arcLp.current = false; clearTimeout(arcLpT.current); arcLpT.current = setTimeout(() => { arcLp.current = true; tog(); }, 350); }}
+                    onPointerDown={(ev) => { arcLp.current = false; arcPX.current = ev.clientX; arcPY.current = ev.clientY; clearTimeout(arcLpT.current); arcLpT.current = setTimeout(() => { arcLp.current = true; tog(); }, 400); }}
                     onPointerUp={() => clearTimeout(arcLpT.current)}
-                    onPointerMove={() => clearTimeout(arcLpT.current)}
+                    onPointerMove={(ev) => { if (Math.abs(ev.clientX - arcPX.current) > 10 || Math.abs(ev.clientY - arcPY.current) > 10) clearTimeout(arcLpT.current); }}
                     onPointerCancel={() => clearTimeout(arcLpT.current)}
                     style={{ ...S.row, ...(asel ? { background: "rgba(239,108,0,.07)" } : {}) }}>
                     <span style={{ ...S.iconWrap, color: ic.c, background: asel ? "transparent" : "rgba(255,255,255,.05)" }}
@@ -1145,7 +1145,7 @@ const S = {
   arcSelBar: { position: "absolute", left: "50%", transform: "translateX(-50%)", bottom: 10, display: "flex", alignItems: "center", gap: 8, padding: "6px 8px 6px 14px", background: BAR, borderRadius: 22, boxShadow: "0 6px 24px rgba(0,0,0,.55)" },
   arcSelCancel: { background: "transparent", border: "none", borderRadius: 14, color: SUB, fontSize: 13, padding: "7px 12px" },
   arcSelGo: { display: "inline-flex", alignItems: "center", gap: 5, background: ACC, border: "none", borderRadius: 14, color: "#fff", fontWeight: 700, fontSize: 13, padding: "7px 14px" },
-  arcScreen: { position: "fixed", top: 62, left: 0, right: 0, bottom: "calc(96px + env(safe-area-inset-bottom))", zIndex: 1250, background: BG, display: "flex", flexDirection: "column" },
+  arcScreen: { position: "fixed", top: 62, left: 0, right: 0, bottom: "calc(90px + env(safe-area-inset-bottom))", zIndex: 1250, background: BG, display: "flex", flexDirection: "column" },
   cnt: { background: "#43331F", color: GOLD, fontSize: 12, fontWeight: 700, padding: "2px 9px", borderRadius: 10, flexShrink: 0 },
   rowSel: { background: "#332417" },
   name: { flex: 1, fontSize: 15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
