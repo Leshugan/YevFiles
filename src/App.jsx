@@ -76,7 +76,7 @@ const I = {
   folder: <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />,
   file: <><path d="M6 2h9l5 5v15H6z" /><path d="M14 2v6h6" /></>,
   txt: <><path d="M6 2h9l5 5v15H6z" /><path d="M14 2v6h6" /><path d="M9 13h6M9 16h6M9 10h3" /></>,
-  pdf: <><path d="M6 2h9l5 5v15H6z" /><path d="M14 2v6h6" /><rect x="8" y="13.5" width="8" height="5" rx="1.2" fill="currentColor" stroke="none" /><path d="M9.6 16h4.8" stroke="#1C140C" strokeWidth="1.1" /></>,
+  pdf: <><path d="M6 2h9l5 5v15H6z" /><path d="M14 2v6h6" /><path d="M9 12h6M9 15h6M9 18h3" /></>,
   apk: <><path d="M7 9a5 5 0 0 1 10 0v1H7z" /><path d="M8.5 6.5L7 4M15.5 6.5L17 4" /><circle cx="10" cy="7.4" r=".6" fill="currentColor" stroke="none" /><circle cx="14" cy="7.4" r=".6" fill="currentColor" stroke="none" /><rect x="7" y="11" width="10" height="9" rx="2" /></>,
   lnk: <><rect x="4" y="4" width="16" height="16" rx="2" /><path d="M9 15l6-6M10.5 9H15v4.5" /></>,
   img: <><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><path d="M21 15l-5-5L5 21" /></>,
@@ -169,6 +169,8 @@ export default function App() {
 
   useEffect(() => { Filesystem.requestPermissions().catch(() => {}); checkAccess(); }, []);
   const checkAccess = async () => { try { const r = await Apps.hasAllFiles(); setAllFiles(!!r.granted); } catch { setAllFiles(true); } };
+  const listRef = useRef(null);
+  useEffect(() => { const el = listRef.current; if (el) el.scrollTop = el.scrollHeight; }, [path, active]);
   const silentRefresh = useCallback(async () => {
     try {
       const u = await Filesystem.getUri({ path, directory: DIR });
@@ -177,7 +179,13 @@ export default function App() {
       setEntries((prev) => { const a = JSON.stringify((prev || []).map((x) => x.name + x.size + x.mtime)); const b = JSON.stringify((files || []).map((x) => x.name + x.size + x.mtime)); return a === b ? prev : (files || []); });
     } catch {}
   }, [path]);
-  useEffect(() => { const id = setInterval(silentRefresh, 2500); return () => clearInterval(id); }, [silentRefresh]);
+  useEffect(() => {
+    let h, t;
+    const onChange = () => { clearTimeout(t); t = setTimeout(silentRefresh, 250); };
+    Apps.addListener("fschange", onChange).then((l) => (h = l));
+    return () => { clearTimeout(t); h && h.remove(); };
+  }, [silentRefresh]);
+  useEffect(() => { if (curUri) Apps.watch({ uri: curUri }).catch(() => {}); }, [curUri]);
   useEffect(() => { list(); exitSel(); setQuery(null); /* eslint-disable-next-line */ }, [active, path]);
   useEffect(() => { let h; CapApp.addListener("resume", () => list()).then((l) => (h = l)); return () => h && h.remove(); }, [list]);
   useEffect(() => {
@@ -376,7 +384,7 @@ export default function App() {
       {/* ВКЛАДКИ + действия шапки */}
       <div style={S.tabsbar}>
         <div style={{ position: "relative" }}>
-          <button style={S.hbtn} onClick={() => setTabsMenu((v) => !v)}><Svg d={I.chev} size={20} /></button>
+          <button style={{ ...S.hbtn, width: 28 }} onClick={() => setTabsMenu((v) => !v)}><Svg d={I.chev} size={18} /></button>
           {tabsMenu && (
             <>
               <div style={S.overlay} onClick={() => setTabsMenu(false)} />
@@ -401,13 +409,16 @@ export default function App() {
             </div>
           ))}
         </div>
-        <button style={S.hbtn} onClick={addTab}><Svg d={I.plus} size={22} /></button>
         <div style={{ position: "relative" }}>
           <button style={S.hbtn} onClick={() => setHeadMenu((v) => !v)}><Svg d={I.dots} size={22} /></button>
           {headMenu && (
             <>
               <div style={S.overlay} onClick={() => setHeadMenu(false)} />
               <div style={{ ...S.menu, top: 46, right: 4 }}>
+                <div style={S.menuItem} onClick={() => { setHeadMenu(false); addTab(); }}>
+                  <span style={{ color: ACC, display: "flex" }}><Svg d={I.plus} size={20} /></span>Новая вкладка
+                </div>
+                <div style={{ height: 1, background: LINE }} />
                 <div style={S.menuItem} onClick={() => { setHeadMenu(false); setSheet({ kind: "sort" }); }}>
                   <span style={{ color: ACC, display: "flex" }}><Svg d={I.sort} size={20} /></span>Сортировка
                 </div>
@@ -436,7 +447,7 @@ export default function App() {
         </div>
       )}
       {/* СПИСОК */}
-      <main style={S.list} onTouchStart={onTS} onTouchMove={onTM}>
+      <main ref={listRef} style={S.list} onTouchStart={onTS} onTouchMove={onTM}>
         {false && (
           <div style={S.accessBar}>
             <div style={{ flex: 1, fontSize: 13, lineHeight: 1.4 }}>Нет доступа ко всем файлам — архивы, PDF и APK не видны.</div>
@@ -763,13 +774,13 @@ const S = {
   app: { display: "flex", flexDirection: "column", height: "100vh", background: BG, color: TXT, fontFamily: "system-ui,-apple-system,Roboto,sans-serif", overflow: "hidden" },
   tabsbar: { display: "flex", alignItems: "center", background: BAR, flexShrink: 0, height: 50, margin: "8px 8px 4px", borderRadius: 24 },
   tabs: { display: "flex", overflowX: "auto", flex: 1, alignItems: "center", gap: 6, padding: "0 4px", height: "100%" },
-  tab: { display: "flex", alignItems: "center", gap: 6, padding: "0 12px", height: 34, borderRadius: 17, fontSize: 13.5, color: SUB, whiteSpace: "nowrap", background: "#241A11", flexShrink: 0 },
-  tabActive: { color: "#fff", background: ACC, fontWeight: 600, boxShadow: "0 2px 10px rgba(239,108,0,.45)" },
+  tab: { display: "flex", alignItems: "center", gap: 6, padding: "0 12px", height: 34, borderRadius: 17, fontSize: 13.5, color: SUB, whiteSpace: "nowrap", background: "#241A11", flexShrink: 0, border: "1px solid transparent" },
+  tabActive: { color: ACC, background: "rgba(239,108,0,.14)", border: "1px solid " + ACC, fontWeight: 600 },
   tabX: { fontSize: 17, color: SUB, padding: "0 2px" },
   hbtn: { border: "none", background: "transparent", color: TXT, width: 40, height: 48, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" },
   crumb: { padding: "8px 16px", fontSize: 13, background: BG, flexShrink: 0, borderBottom: "1px solid #241A11", overflow: "hidden", whiteSpace: "nowrap" },
   list: { flex: 1, overflowY: "auto", overflowX: "hidden", display: "flex", flexDirection: "column" },
-  slideWrap: { marginTop: "auto" },
+  slideWrap: { paddingTop: "55vh" },
   note: { color: SUB, textAlign: "center", padding: "60px 24px", lineHeight: 1.6 },
   row: { display: "flex", alignItems: "center", gap: 14, padding: "9px 14px", touchAction: "pan-y", borderBottom: "1px solid rgba(255,255,255,.04)" },
   iconWrap: { width: 46, height: 46, borderRadius: 23, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
