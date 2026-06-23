@@ -209,6 +209,15 @@ export default function App() {
   const [openMenu, setOpenMenu] = useState(null);
   const [arcView, setArcView] = useState(null);
   const [arcSel, setArcSel] = useState(new Set());
+  const arcLp = useRef(false), arcLpT = useRef(null);
+  const [shared, setShared] = useState([]);
+  const checkShared = async () => { try { const r = await Apps.getShared(); setShared(r.files || []); } catch {} };
+  useEffect(() => { checkShared(); const h = CapApp.addListener("resume", checkShared); return () => { h.then((x) => x.remove()).catch(() => {}); }; }, []);
+  const saveSharedHere = async () => {
+    try { const u = await Filesystem.getUri({ path, directory: DIR }); const r = await Apps.saveShared({ dir: u.uri }); showToast("Сохранено: " + (r.saved || 0) + " в " + (baseName(path) || "Storage")); setShared([]); refresh(); }
+    catch (e) { showToast("Ошибка сохранения: " + (e?.message || "")); }
+  };
+  const dismissShared = async () => { try { await Apps.clearShared(); } catch {} setShared([]); };
   const extractSelected = async () => {
     const names = [...arcSel]; setArcSel(new Set());
     setArcView((m) => (m ? { ...m, busy: "Извлекаю…" } : m));
@@ -645,6 +654,13 @@ export default function App() {
           <button style={S.accessBtn} onClick={() => Apps.requestAllFiles().catch(() => {})}>Дать доступ</button>
         </div>
       )}
+      {shared.length > 0 && (
+        <div style={{ ...S.accessBar, background: "#2A2016", borderBottom: "1px solid " + ACC }}>
+          <div style={{ flex: 1, fontSize: 13, lineHeight: 1.4 }}>Сохранить {shared.length === 1 ? "«" + shared[0].name + "»" : shared.length + " файл(ов)"} в эту папку?</div>
+          <button style={{ ...S.accessBtn, background: "transparent", border: "1px solid " + LINE, color: SUB }} onClick={dismissShared}>Нет</button>
+          <button style={S.accessBtn} onClick={saveSharedHere}>Сохранить</button>
+        </div>
+      )}
       {/* СПИСОК */}
       <main ref={listRef} style={S.list} onScroll={onListScroll} onTouchStart={onTS} onTouchMove={onTM}>
         {false && (
@@ -876,10 +892,11 @@ export default function App() {
                 const tog = () => { const n = new Set(arcSel); n.has(it.name) ? n.delete(it.name) : n.add(it.name); setArcSel(n); };
                 return (
                   <div key={i}
-                    onClick={() => { if (arcSel.size > 0) tog(); else extractOpen(it); }}
-                    onPointerDown={(ev) => { ev.currentTarget._m = false; ev.currentTarget._lp = setTimeout(() => { ev.currentTarget._lp = null; tog(); }, 400); }}
-                    onPointerUp={(ev) => { if (ev.currentTarget._lp) { clearTimeout(ev.currentTarget._lp); ev.currentTarget._lp = null; } }}
-                    onPointerMove={(ev) => { if (ev.currentTarget._lp) { clearTimeout(ev.currentTarget._lp); ev.currentTarget._lp = null; } }}
+                    onClick={() => { if (arcSel.size > 0) tog(); else if (!arcLp.current) extractOpen(it); }}
+                    onPointerDown={() => { arcLp.current = false; clearTimeout(arcLpT.current); arcLpT.current = setTimeout(() => { arcLp.current = true; tog(); }, 350); }}
+                    onPointerUp={() => clearTimeout(arcLpT.current)}
+                    onPointerMove={() => clearTimeout(arcLpT.current)}
+                    onPointerCancel={() => clearTimeout(arcLpT.current)}
                     style={{ ...S.row, ...(asel ? { background: "rgba(239,108,0,.07)" } : {}) }}>
                     <span style={{ ...S.iconWrap, color: ic.c, background: asel ? "transparent" : "rgba(255,255,255,.05)" }}
                       onClick={(ev) => { ev.stopPropagation(); tog(); }}>
@@ -1125,10 +1142,10 @@ const S = {
   rowDate: { fontSize: 12, color: SUB },
   rowSize: { fontSize: 11.5, color: "rgba(176,164,152,.5)", flexShrink: 0, marginLeft: 6 },
   rowDir: { background: "rgba(239,108,0,.04)" },
-  arcSelBar: { position: "absolute", left: 8, right: 8, bottom: 8, display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: BAR, borderRadius: 20, boxShadow: "0 6px 24px rgba(0,0,0,.5)" },
-  arcSelCancel: { marginLeft: "auto", background: "transparent", border: "1px solid " + LINE, borderRadius: 10, color: SUB, fontSize: 14, padding: "8px 16px" },
-  arcSelGo: { display: "inline-flex", alignItems: "center", gap: 6, background: ACC, border: "none", borderRadius: 10, color: "#fff", fontWeight: 700, fontSize: 14, padding: "8px 18px" },
-  arcScreen: { position: "fixed", top: 62, left: 0, right: 0, bottom: "calc(86px + env(safe-area-inset-bottom))", zIndex: 1250, background: BG, display: "flex", flexDirection: "column" },
+  arcSelBar: { position: "absolute", left: "50%", transform: "translateX(-50%)", bottom: 10, display: "flex", alignItems: "center", gap: 8, padding: "6px 8px 6px 14px", background: BAR, borderRadius: 22, boxShadow: "0 6px 24px rgba(0,0,0,.55)" },
+  arcSelCancel: { background: "transparent", border: "none", borderRadius: 14, color: SUB, fontSize: 13, padding: "7px 12px" },
+  arcSelGo: { display: "inline-flex", alignItems: "center", gap: 5, background: ACC, border: "none", borderRadius: 14, color: "#fff", fontWeight: 700, fontSize: 13, padding: "7px 14px" },
+  arcScreen: { position: "fixed", top: 62, left: 0, right: 0, bottom: "calc(96px + env(safe-area-inset-bottom))", zIndex: 1250, background: BG, display: "flex", flexDirection: "column" },
   cnt: { background: "#43331F", color: GOLD, fontSize: 12, fontWeight: 700, padding: "2px 9px", borderRadius: 10, flexShrink: 0 },
   rowSel: { background: "#332417" },
   name: { flex: 1, fontSize: 15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
