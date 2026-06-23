@@ -29,7 +29,7 @@ function buildInitial() {
   return { base, active };
 }
 const loadTabs = () => { try { return JSON.parse(ls.get(TKEY)); } catch { return mem; } };
-const saveTabs = (t) => { const keep = t.filter((x) => x.saved); mem = keep; ls.set(TKEY, JSON.stringify(keep)); };
+const saveTabs = (t) => { mem = t; ls.set(TKEY, JSON.stringify(t)); };
 const loadMeta = () => { try { const m = JSON.parse(ls.get(METAKEY)) || {}; return { hidden: new Set(m.hidden || []), pinTop: new Set(m.pinTop || []), pinBot: new Set(m.pinBot || []) }; } catch { return { hidden: new Set(), pinTop: new Set(), pinBot: new Set() }; } };
 const saveMeta = (m) => ls.set(METAKEY, JSON.stringify({ hidden: [...m.hidden], pinTop: [...m.pinTop], pinBot: [...m.pinBot] }));
 
@@ -201,7 +201,7 @@ export default function App() {
   }, [props]);
 
   const exitSel = () => { setSel(new Set()); setSelMode(false); setConfirmDel(null); setSelMenu(false); };
-  const setTabPath = (p) => setTabs((ts) => ts.map((x, i) => (i === active ? { ...x, path: p } : x)));
+  const setTabPath = (p) => persist(tabs.map((x, i) => (i === active ? { ...x, path: p } : x)));
   const goUp = () => { if (path) setTabPath(parent(path)); };
   const closeTab = (i) => { if (tabs.length === 1) return; const t = tabs.filter((_, idx) => idx !== i); persist(t); setActive(Math.max(0, Math.min(active, t.length - 1))); };
 
@@ -309,9 +309,8 @@ export default function App() {
   };
   const onTabUp = (i) => { const d = tabDrag.current; if (d.active) { d.active = false; persistCurrent(); } else { const dir = i > active ? 1 : i < active ? -1 : 0; if (dir) { setSlide(dir); setTimeout(() => setSlide(0), 220); } setActive(i); } d.from = -1; };
 
-  const saveAllTabs = () => { setTabsMenu(false); const t = tabs.map((x) => ({ ...x, saved: true })); persist(t); showToast("Вкладки сохранены"); };
   const startupHere = () => { setTabsMenu(false); ls.set(SKEY, path); showToast("Запуск при открытии: " + (path ? baseName(path) : "Storage")); };
-  const resetTabs = () => { setTabsMenu(false); ls.del(SKEY); setTabs((arr) => { const t = arr.map((x) => ({ ...x, saved: false })); saveTabs(t); return t; }); showToast("Вкладки сброшены"); };
+  const resetTabs = () => { setTabsMenu(false); ls.del(SKEY); const t = [{ id: 1, path: "" }]; persist(t); setActive(0); showToast("Вкладки сброшены"); };
 
   /* операции через .uri */
   const refresh = () => list();
@@ -383,14 +382,12 @@ export default function App() {
     <div style={S.app}>
       {/* ВКЛАДКИ + действия шапки */}
       <div style={S.tabsbar}>
-        <div style={{ position: "relative" }}>
-          <button style={{ ...S.hbtn, width: 28 }} onClick={() => setTabsMenu((v) => !v)}><Svg d={I.chev} size={18} /></button>
+        <div style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "center", height: "100%", padding: "0 6px" }}>
+          <button style={{ ...S.hbtn, width: 28, height: 28 }} onClick={() => setTabsMenu((v) => !v)}><Svg d={I.chev} size={18} /></button>
           {tabsMenu && (
             <>
               <div style={S.overlay} onClick={() => setTabsMenu(false)} />
               <div style={{ ...S.menu, position: "fixed", top: 46, left: 4, zIndex: 1200 }}>
-                <div style={S.menuItem} onClick={saveAllTabs}><span style={{ color: ACC, display: "flex" }}><Svg d={I.pin} size={20} /></span>Сохранить вкладки</div>
-                <div style={{ height: 1, background: LINE }} />
                 <div style={S.menuItem} onClick={startupHere}><span style={{ color: GOLD, display: "flex" }}><Svg d={I.star} size={20} /></span>Запуск при открытии</div>
                 <div style={{ height: 1, background: LINE }} />
                 <div style={S.menuItem} onClick={resetTabs}><span style={{ color: SUB, display: "flex" }}><Svg d={I.x} size={20} /></span>Сбросить вкладки</div>
@@ -407,7 +404,6 @@ export default function App() {
             <div key={t.id} ref={(el) => (tabRefs.current[i] = el)}
               onPointerDown={(ev) => onTabDown(ev, i)} onPointerMove={onTabMove} onPointerUp={() => onTabUp(i)} onPointerCancel={() => onTabUp(i)}
               style={{ ...S.tab, ...(i === active ? S.tabActive : {}) }}>
-              {t.saved && <span style={{ color: ACC, display: "flex" }}><Svg d={I.pin} size={13} /></span>}
               <span style={{ overflow: "hidden", textOverflow: "ellipsis", maxWidth: 130 }}>{t.path ? baseName(t.path) : "Storage"}</span>
             </div>
           ))}
