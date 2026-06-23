@@ -67,7 +67,7 @@ const I = {
   check: <path d="M5 12l4 4 10-11" />,
   dl: <><path d="M12 3v12" /><path d="M7 11l5 5 5-5" /><path d="M5 21h14" /></>,
   bell: <><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.7 21a2 2 0 0 1-3.4 0" /></>,
-  ring: <><path d="M9 18V6l10-2v12" /><circle cx="6" cy="18" r="3" /><circle cx="16" cy="16" r="3" /><path d="M19 9c1.2.6 2 1.5 2 2.5M19 6c2.2 1 3.6 2.6 3.6 4.5" /></>,
+  ring: <><path d="M8 14a4 4 0 0 1 8 0" /><path d="M12 3v3M5.6 6.6l2 2M18.4 6.6l-2 2" /><rect x="4" y="14" width="16" height="6" rx="2" /><path d="M10 17h4" /></>,
   alarm: <><circle cx="12" cy="13" r="8" /><path d="M12 9v4l2 2" /><path d="M5 3L2 6M19 3l3 3" /></>,
   mic: <><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0" /><path d="M12 18v3" /></>,
   cam: <><path d="M3 8a2 2 0 0 1 2-2h2l1.5-2h7L19 6h0a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><circle cx="12" cy="12.5" r="3.5" /></>,
@@ -115,6 +115,16 @@ const I = {
 const Svg = ({ d, size = 24 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{d}</svg>
 );
+const ArcBadge = ({ name }) => {
+  const ext = (name.split(".").pop() || "").toUpperCase();
+  const c = ARCH_COLORS[ext.toLowerCase()] || "#E3B14F";
+  return (
+    <svg width="30" height="30" viewBox="0 0 24 24" fill="none">
+      <rect x="3" y="3" width="18" height="18" rx="4" stroke={c} strokeWidth="2" fill="none" />
+      <text x="12" y="15.5" textAnchor="middle" fontSize="7.5" fontWeight="700" fill={c} fontFamily="system-ui,sans-serif">{ext}</text>
+    </svg>
+  );
+};
 const EXT = {
   img: ["jpg", "jpeg", "png", "gif", "webp", "bmp", "svg", "heic"],
   video: ["mp4", "mkv", "avi", "mov", "webm", "3gp", "flv"],
@@ -367,18 +377,19 @@ export default function App() {
 
   const openExternal = async (e) => {
     const mime = mimeOf(e.name);
+    const cat = defaultOpenAs(e.name);
     const defs = loadMap(DEFKEY);
-    const d = defs[mime];
+    const d = defs[cat] || defs[mime];
     if (d) { try { const [pkg, act] = d.split("|"); await Apps.open({ uri: e.uri, mime, packageName: pkg, activityName: act }); return; } catch {} }
     await showOpenMenu(e, mime);
   };
   const showOpenMenu = async (e, mime) => {
-    setOpenMenu({ file: e, mime, apps: null, useDefault: false, editHide: false });
+    const cat = OPEN_AS.some(([m]) => m === mime) ? mime : defaultOpenAs(e.name);
+    setOpenMenu({ file: e, mime: cat, apps: null, useDefault: false, editHide: false });
     try {
       const { apps } = await Apps.query({ uri: e.uri, mime });
-      if (!apps || !apps.length) { showToast("Нет приложений для этого типа"); setOpenMenu(null); return; }
-      setOpenMenu((m) => (m && m.file === e ? { ...m, apps } : m));
-    } catch (err) { showToast("Не удалось получить список: " + (err?.message || "")); setOpenMenu(null); }
+      setOpenMenu((m) => (m && m.file === e ? { ...m, apps: apps || [] } : m));
+    } catch (err) { setOpenMenu((m) => (m && m.file === e ? { ...m, apps: [] } : m)); showToast("Ошибка: " + (err?.message || "")); }
   };
   const pickApp = async (app) => {
     const om = openMenu;
@@ -390,7 +401,7 @@ export default function App() {
     }
     if (om.useDefault) { const defs = loadMap(DEFKEY); defs[om.mime] = app.packageName + "|" + app.activityName; saveMap(DEFKEY, defs); }
     setOpenMenu(null);
-    try { await Apps.open({ uri: om.file.uri, mime: om.mime, packageName: app.packageName, activityName: app.activityName }); }
+    try { await Apps.open({ uri: om.file.uri, mime: mimeOf(om.file.name), packageName: app.packageName, activityName: app.activityName }); }
     catch (err) { showToast("Не удалось открыть: " + (err?.message || "")); }
   };
   const openArchive = async (e) => {
@@ -664,6 +675,7 @@ export default function App() {
                       : (!isDir && isImg(e.name)) ? <img src={cfs(e.uri)} alt="" loading="lazy" style={S.iconImg} />
                       : (!isDir && /\.apk$/i.test(e.name) && apkIcons[e.uri]) ? <img src={apkIcons[e.uri]} alt="" style={S.iconImg} />
                       : (!isDir && isPdf(e.name) && pdfThumbs[e.uri]) ? <img src={pdfThumbs[e.uri]} alt="" style={S.iconImg} />
+                      : (!isDir && !/\.apk$/i.test(e.name) && EXT.archive.includes((e.name.split(".").pop() || "").toLowerCase())) ? <ArcBadge name={e.name} />
                       : <Svg d={ic.d} size={24} />}
                     {isDir && !isSel && !iconDB[keyOf(e.name)] && e.thumb ? <img src={cfs(e.thumb)} alt="" loading="lazy" style={S.folderThumb} /> : null}
                   </span>
@@ -853,13 +865,6 @@ export default function App() {
             <span onClick={() => setArcView(null)} style={{ display: "inline-flex", alignItems: "center", gap: 6, color: ACC }}><Svg d={I.back} size={18} /> {arcView.name}</span>
           </div>
           {arcView.busy && <div style={{ padding: "10px 16px", color: GOLD, fontSize: 13, textAlign: "center" }}>{arcView.busy}</div>}
-          {arcSel.size > 0 && (
-            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 14px", borderBottom: "1px solid " + LINE }}>
-              <span style={{ color: "#fff", fontWeight: 700 }}>{arcSel.size}</span>
-              <button onClick={() => setArcSel(new Set())} style={{ marginLeft: "auto", background: ROW2, border: "1px solid " + LINE, borderRadius: 8, color: SUB, fontSize: 13, padding: "7px 14px" }}>Отмена</button>
-              <button onClick={extractSelected} style={{ background: ACC, border: "none", borderRadius: 8, color: "#fff", fontWeight: 700, fontSize: 13, padding: "7px 16px" }}>Извлечь</button>
-            </div>
-          )}
           {arcView.entries == null ? (
             <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: SUB }}>Открываю архив…</div>
           ) : (
@@ -868,15 +873,20 @@ export default function App() {
               {arcView.entries.map((it, i) => {
                 const ic = fileIcon(it.name);
                 const asel = arcSel.has(it.name);
+                const tog = () => { const n = new Set(arcSel); n.has(it.name) ? n.delete(it.name) : n.add(it.name); setArcSel(n); };
                 return (
                   <div key={i}
-                    onClick={() => { if (arcSel.size > 0) { const n = new Set(arcSel); n.has(it.name) ? n.delete(it.name) : n.add(it.name); setArcSel(n); } else extractOpen(it); }}
-                    onPointerDown={(ev) => { const t = setTimeout(() => { const n = new Set(arcSel); n.add(it.name); setArcSel(n); }, 400); ev.currentTarget._lp = t; }}
-                    onPointerUp={(ev) => clearTimeout(ev.currentTarget._lp)} onPointerMove={(ev) => clearTimeout(ev.currentTarget._lp)}
-                    style={S.row}>
+                    onClick={() => { if (arcSel.size > 0) tog(); else extractOpen(it); }}
+                    onPointerDown={(ev) => { ev.currentTarget._m = false; ev.currentTarget._lp = setTimeout(() => { ev.currentTarget._lp = null; tog(); }, 400); }}
+                    onPointerUp={(ev) => { if (ev.currentTarget._lp) { clearTimeout(ev.currentTarget._lp); ev.currentTarget._lp = null; } }}
+                    onPointerMove={(ev) => { if (ev.currentTarget._lp) { clearTimeout(ev.currentTarget._lp); ev.currentTarget._lp = null; } }}
+                    style={{ ...S.row, ...(asel ? { background: "rgba(239,108,0,.07)" } : {}) }}>
                     <span style={{ ...S.iconWrap, color: ic.c, background: asel ? "transparent" : "rgba(255,255,255,.05)" }}
-                      onClick={(ev) => { ev.stopPropagation(); const n = new Set(arcSel); n.has(it.name) ? n.delete(it.name) : n.add(it.name); setArcSel(n); }}>
-                      {asel ? <span style={S.cbk}><Svg d={I.check} size={14} /></span> : <Svg d={ic.d} size={24} />}
+                      onClick={(ev) => { ev.stopPropagation(); tog(); }}>
+                      {asel ? <span style={S.cbk}><Svg d={I.check} size={14} /></span>
+                        : /\.apk$/i.test(it.name) ? <Svg d={ic.d} size={24} />
+                        : (EXT.archive.includes((it.name.split(".").pop() || "").toLowerCase())) ? <ArcBadge name={it.name} />
+                        : <Svg d={ic.d} size={24} />}
                     </span>
                     <span style={S.rowMid}>
                       <span style={S.name}>{it.name}</span>
@@ -889,6 +899,13 @@ export default function App() {
               })}
             </div>
           </div>
+          )}
+          {arcSel.size > 0 && (
+            <div style={S.arcSelBar}>
+              <span style={{ color: "#fff", fontWeight: 700, fontSize: 15 }}>{arcSel.size}</span>
+              <button onClick={() => setArcSel(new Set())} style={S.arcSelCancel}>Отмена</button>
+              <button onClick={extractSelected} style={S.arcSelGo}><Svg d={I.dl} size={16} /> Извлечь</button>
+            </div>
           )}
         </div>
       )}
@@ -1102,13 +1119,16 @@ const S = {
   sep: { height: 1, background: "rgba(255,255,255,.10)", margin: "4px 0" },
   iconWrap: { width: 44, height: 44, borderRadius: 13, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
   iconImg: { width: "100%", height: "100%", objectFit: "cover", borderRadius: 13 },
-  folderThumb: { position: "absolute", left: 0, bottom: 0, width: 28, height: 28, borderRadius: 7, objectFit: "cover", border: "2px solid " + BG },
+  folderThumb: { position: "absolute", right: 1, bottom: 1, width: 26, height: 26, borderRadius: 7, objectFit: "cover", border: "2px solid " + BG },
   cbk: { width: 22, height: 22, borderRadius: 6, background: ACC, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center" },
   rowMid: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 },
   rowDate: { fontSize: 12, color: SUB },
   rowSize: { fontSize: 11.5, color: "rgba(176,164,152,.5)", flexShrink: 0, marginLeft: 6 },
   rowDir: { background: "rgba(239,108,0,.04)" },
-  arcScreen: { position: "fixed", top: 62, left: 0, right: 0, bottom: "calc(74px + env(safe-area-inset-bottom))", zIndex: 1250, background: BG, display: "flex", flexDirection: "column" },
+  arcSelBar: { position: "absolute", left: 8, right: 8, bottom: 8, display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: BAR, borderRadius: 20, boxShadow: "0 6px 24px rgba(0,0,0,.5)" },
+  arcSelCancel: { marginLeft: "auto", background: "transparent", border: "1px solid " + LINE, borderRadius: 10, color: SUB, fontSize: 14, padding: "8px 16px" },
+  arcSelGo: { display: "inline-flex", alignItems: "center", gap: 6, background: ACC, border: "none", borderRadius: 10, color: "#fff", fontWeight: 700, fontSize: 14, padding: "8px 18px" },
+  arcScreen: { position: "fixed", top: 62, left: 0, right: 0, bottom: "calc(86px + env(safe-area-inset-bottom))", zIndex: 1250, background: BG, display: "flex", flexDirection: "column" },
   cnt: { background: "#43331F", color: GOLD, fontSize: 12, fontWeight: 700, padding: "2px 9px", borderRadius: 10, flexShrink: 0 },
   rowSel: { background: "#332417" },
   name: { flex: 1, fontSize: 15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
