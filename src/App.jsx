@@ -184,7 +184,9 @@ export default function App() {
   const [iconDB, setIconDB] = useState(() => loadMap(ICONKEY));
   const saveIconDB = (db) => { setIconDB(db); saveMap(ICONKEY, db); };
   const [apkIcons, setApkIcons] = useState({});
+  const [pdfThumbs, setPdfThumbs] = useState({});
   const isImg = (n) => /\.(png|jpg|jpeg|webp|gif|bmp)$/i.test(n);
+  const isPdf = (n) => /\.pdf$/i.test(n);
   const cfs = (u) => { try { return Capacitor.convertFileSrc(u); } catch { return u; } };
   const [tabsMenu, setTabsMenu] = useState(false);
   const [selMenu, setSelMenu] = useState(false);
@@ -259,7 +261,19 @@ export default function App() {
     (async () => {
       for (const a of apks) {
         if (stop) return;
-        try { const r = await Apps.apkIcon({ uri: a.uri }); if (r && r.icon) setApkIcons((m) => ({ ...m, [a.uri]: "data:image/png;base64," + r.icon })); } catch {}
+        try { const r = await Apps.apkIcon({ uri: a.uri }); if (r && r.icon) setApkIcons((m) => ({ ...m, [a.uri]: r.icon })); } catch {}
+      }
+    })();
+    return () => { stop = true; };
+  }, [entries]);
+  useEffect(() => {
+    const pdfs = entries.filter((e) => e.type !== "directory" && /\.pdf$/i.test(e.name) && !pdfThumbs[e.uri]);
+    if (!pdfs.length) return;
+    let stop = false;
+    (async () => {
+      for (const p of pdfs) {
+        if (stop) return;
+        try { const r = await Apps.pdfThumb({ uri: p.uri }); if (r && r.thumb) setPdfThumbs((m) => ({ ...m, [p.uri]: r.thumb })); } catch {}
       }
     })();
     return () => { stop = true; };
@@ -622,6 +636,7 @@ export default function App() {
                       : (isDir && iconDB[keyOf(e.name)]) ? <img src={iconDB[keyOf(e.name)]} alt="" style={S.iconImg} />
                       : (!isDir && isImg(e.name)) ? <img src={cfs(e.uri)} alt="" loading="lazy" style={S.iconImg} />
                       : (!isDir && /\.apk$/i.test(e.name) && apkIcons[e.uri]) ? <img src={apkIcons[e.uri]} alt="" style={S.iconImg} />
+                      : (!isDir && isPdf(e.name) && pdfThumbs[e.uri]) ? <img src={pdfThumbs[e.uri]} alt="" style={S.iconImg} />
                       : <Svg d={ic.d} size={24} />}
                     {isDir && !isSel && !iconDB[keyOf(e.name)] && e.thumb ? <img src={cfs(e.thumb)} alt="" loading="lazy" style={S.folderThumb} /> : null}
                   </span>
@@ -814,7 +829,7 @@ export default function App() {
             <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: SUB }}>Открываю архив…</div>
           ) : (
           <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column" }}>
-            <div>
+            <div style={{ marginTop: "auto", paddingBottom: 6 }}>
               {arcView.entries.map((it, i) => {
                 const ic = fileIcon(it.name);
                 return (
@@ -915,7 +930,7 @@ export default function App() {
                 <img src={iconDB[k]} alt="" style={{ width: 40, height: 40, borderRadius: 11, objectFit: "cover", flexShrink: 0 }} />
                 <span style={{ flex: 1, minWidth: 0 }}>
                   <span style={{ fontSize: 14, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{baseName(k) || "Storage"}</span>
-                  <span style={{ fontSize: 11, color: SUB, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block" }}>{k || "/"}</span>
+                  <span style={{ fontSize: 11, color: SUB, wordBreak: "break-all", display: "block" }}>{"Internal/" + (k || "")}</span>
                 </span>
                 <span onClick={() => { const db = { ...iconDB }; delete db[k]; saveIconDB(db); }} style={{ color: RED, display: "flex", padding: 6 }}><Svg d={I.trash} size={18} /></span>
               </div>
@@ -1036,7 +1051,7 @@ const S = {
   sep: { height: 1, background: "rgba(255,255,255,.10)", margin: "4px 0" },
   iconWrap: { width: 44, height: 44, borderRadius: 13, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
   iconImg: { width: "100%", height: "100%", objectFit: "cover", borderRadius: 13 },
-  folderThumb: { position: "absolute", right: 4, bottom: 4, width: 20, height: 20, borderRadius: 5, objectFit: "cover", border: "1.5px solid " + BG },
+  folderThumb: { position: "absolute", right: 2, bottom: 2, width: 30, height: 30, borderRadius: 7, objectFit: "cover", border: "2px solid " + BG },
   cbk: { width: 22, height: 22, borderRadius: 6, background: ACC, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center" },
   rowMid: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 },
   rowDate: { fontSize: 12, color: SUB },
