@@ -63,6 +63,7 @@ const I = {
   back: <path d="M15 18l-6-6 6-6" />,
   search: <><circle cx="11" cy="11" r="7" /><path d="M21 21l-4-4" /></>,
   check: <path d="M5 12l4 4 10-11" />,
+  home: <><path d="M3 11l9-7 9 7" /><path d="M5 10v9a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-9" /><path d="M10 20v-6h4v6" /></>,
   selectAll: <><rect x="4" y="4" width="16" height="16" rx="4" /><path d="M8.5 12l2.5 2.5 4.5-5" /></>,
   chev: <path d="M6 9l6 6 6-6" />,
   refresh: <><path d="M21 12a9 9 0 1 1-2.6-6.4" /><path d="M21 4v5h-5" /></>,
@@ -134,6 +135,7 @@ export default function App() {
   const [sel, setSel] = useState(() => new Set());
   const [selMode, setSelMode] = useState(false);
   const [clip, setClip] = useState(null);
+  const [pasteMenu, setPasteMenu] = useState(false);
   const [query, setQuery] = useState(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [confirmDel, setConfirmDel] = useState(false);
@@ -178,11 +180,12 @@ export default function App() {
   const checkAccess = async () => { try { const r = await Apps.hasAllFiles(); setAllFiles(!!r.granted); } catch { setAllFiles(true); } };
   const listRef = useRef(null);
   const [padTop, setPadTop] = useState(0);
+  const visLen = useRef(0);
   useEffect(() => {
     const el = listRef.current; if (!el) return;
     const t = setTimeout(() => {
-      const ch = el.clientHeight;
-      const pt = Math.max(0, ch - 72);
+      const ch = el.clientHeight, rowH = 72, n = visLen.current;
+      const pt = Math.max(0, ch - Math.min(4, n) * rowH);
       const contentH = el.scrollHeight - padTop;
       if (pt !== padTop) { setPadTop(pt); return; }
       el.scrollTop = contentH >= ch ? pt : el.scrollHeight - ch;
@@ -227,6 +230,7 @@ export default function App() {
   const backExit = useRef(0);
   backRef.current = () => {
     if (arcView) { setArcView(null); return; }
+    if (pasteMenu) { setPasteMenu(false); return; }
     if (openMenu) { setOpenMenu(null); return; }
     if (props) { setProps(null); return; }
     if (sheet) { setSheet(null); return; }
@@ -355,8 +359,32 @@ export default function App() {
     exitSel(); await refresh();
     showToast(fail ? "Не удалено: " + fail + (ok ? ", удалено: " + ok : "") : "Удалено: " + ok);
   };
-  const grab = (mode) => { const items = [...sel].map((n) => { const e = byName(n); return e ? { name: n, uri: e.uri, type: e.type } : null; }).filter(Boolean); setClip({ mode, items }); exitSel(); };
-  const paste = async () => { if (!clip) return; for (const it of clip.items) { const to = targetUri(it.name); if (!to || it.uri === to) continue; try { if (clip.mode === "copy") await Filesystem.copy({ from: it.uri, to }); else await Filesystem.rename({ from: it.uri, to }); } catch (e) { showToast(it.name + ": " + e.message); } } setClip(null); await refresh(); };
+  const grab = (mode) => {
+    const items = [...sel].map((n) => { const e = byName(n); return e ? { name: n, uri: e.uri, type: e.type } : null; }).filter(Boolean);
+    if (!items.length) return;
+    setClip((q) => [...(q || []), { id: Date.now() + Math.random(), mode, items, srcPath: path }]);
+    exitSel();
+    showToast((mode === "copy" ? "Копировать: " : "Вырезать: ") + items.length + " об.");
+  };
+  const runTask = async (task) => {
+    for (const it of task.items) {
+      const to = targetUri(it.name);
+      if (!to || it.uri === to) continue;
+      try { if (task.mode === "copy") await Filesystem.copy({ from: it.uri, to }); else await Filesystem.rename({ from: it.uri, to }); }
+      catch (e) { showToast(it.name + ": " + e.message); }
+    }
+  };
+  const pasteAll = async () => {
+    const q = clip || []; setPasteMenu(false); setClip(null);
+    for (const t of q) await runTask(t);
+    await refresh(); showToast("Готово");
+  };
+  const pasteOne = async (task) => {
+    setPasteMenu(false);
+    setClip((q) => (q || []).filter((t) => t.id !== task.id));
+    await runTask(task); await refresh();
+  };
+  const dropTask = (id) => setClip((q) => { const n = (q || []).filter((t) => t.id !== id); return n.length ? n : null; });
 
   /* три точки тулбара: скрыть / закрепить */
   const metaToggle = (which) => {
@@ -428,7 +456,7 @@ export default function App() {
             <div key={t.id} ref={(el) => (tabRefs.current[i] = el)}
               onPointerDown={(ev) => onTabDown(ev, i)} onPointerMove={onTabMove} onPointerUp={() => onTabUp(i)} onPointerCancel={() => onTabUp(i)}
               style={{ ...S.tab, ...(i === active ? S.tabActive : {}) }}>
-              {t.saved && <span style={{ color: t.startup ? GOLD : ACC, display: "flex" }}><Svg d={t.startup ? I.star : I.pin} size={13} /></span>}
+              {t.startup && <span style={{ color: GOLD, display: "flex" }}><Svg d={I.home} size={14} /></span>}
               <span style={{ overflow: "hidden", textOverflow: "ellipsis", maxWidth: 130 }}>{t.path ? baseName(t.path) : "Storage"}</span>
             </div>
           ))}
@@ -492,7 +520,7 @@ export default function App() {
               return (
                 <div key={e.name} style={{ ...S.row, ...(isDir ? S.rowDir : {}), ...(isSel ? S.rowSel : {}), opacity: hid ? 0.5 : 1 }}
                   onPointerDown={(ev) => rDown(ev, e)} onPointerMove={rMove} onPointerUp={() => rUp(e)} onPointerCancel={() => clearTimeout(lpTimer.current)}>
-                  <span style={{ ...S.iconWrap, color: isSel ? "#fff" : ic.c, background: isSel ? ACC : "rgba(255,255,255,.05)" }}
+                  <span style={{ ...S.iconWrap, color: isSel ? ACC : ic.c, background: isSel ? "rgba(239,108,0,.16)" : "rgba(255,255,255,.05)", border: isSel ? "1px solid " + ACC : "1px solid transparent" }}
                     onPointerDown={(ev) => ev.stopPropagation()} onPointerUp={(ev) => { ev.stopPropagation(); clearTimeout(lpTimer.current); toggle(e.name); }}>
                     {isSel ? <Svg d={I.check} size={22} /> : <Svg d={ic.d} size={24} />}
                   </span>
@@ -505,7 +533,14 @@ export default function App() {
                 </div>
               );
             };
-            return visible.map(renderRow);
+            const firstFile = visible.findIndex((e) => e.type !== "directory");
+            visLen.current = visible.length;
+            return visible.map((e, i) => (
+              <React.Fragment key={e.name}>
+                {i === firstFile && firstFile > 0 && <div style={S.sep} />}
+                {renderRow(e)}
+              </React.Fragment>
+            ));
           })()}
         </div>
       </main>
@@ -535,17 +570,10 @@ export default function App() {
       ) : (
         <nav style={S.bottom}>
           <Zone><Btn onClick={() => setQuery(query === null ? "" : null)} icon={I.search} label="Поиск" /></Zone>
+          {clip && clip.length > 0 && <Zone><Btn onClick={() => setClip(null)} icon={I.x} label="Отмена" red /></Zone>}
           <Zone><Btn onClick={selectAll} icon={I.selectAll} label="Все" /></Zone>
-          <Zone>
-            {clip ? (
-              <div style={{ display: "flex", flex: 1 }}>
-                <Btn onClick={paste} icon={I.paste} label={"Вставить (" + clip.items.length + ")"} />
-                <Btn onClick={() => setClip(null)} icon={I.x} label="Отмена" flexNone />
-              </div>
-            ) : (
-              <Btn onClick={() => setCreateOpen((v) => !v)} icon={I.plus} label="Создать" />
-            )}
-          </Zone>
+          {clip && clip.length > 0 && <Zone><Btn onClick={() => (clip.length === 1 ? pasteAll() : setPasteMenu((v) => !v))} icon={I.paste} label={"Вставить (" + clip.length + ")"} /></Zone>}
+          <Zone><Btn onClick={() => setCreateOpen((v) => !v)} icon={I.plus} label="Создать" /></Zone>
         </nav>
       )}
 
@@ -757,6 +785,29 @@ export default function App() {
         );
       })()}
 
+      {/* МЕНЮ ЗАДАЧ БУФЕРА */}
+      {pasteMenu && clip && clip.length > 0 && (
+        <div style={S.backdrop} onClick={() => setPasteMenu(false)}>
+          <div style={S.sheet} onClick={(e) => e.stopPropagation()}>
+            <div style={{ ...S.sheetTitle }}>Буфер ({clip.length})</div>
+            <div style={{ maxHeight: "50vh", overflowY: "auto" }}>
+              {clip.slice().reverse().map((t, idx) => (
+                <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 2px", borderBottom: "1px solid " + LINE }}>
+                  <span style={{ color: t.mode === "cut" ? GOLD : "#6FD3A8", display: "flex" }}><Svg d={t.mode === "cut" ? I.cut : I.copy} size={20} /></span>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ fontSize: 14, display: "block" }}>{clip.length - idx}. {t.items.length === 1 ? t.items[0].name : t.items.length + " объектов"}</span>
+                    <span style={{ fontSize: 12, color: SUB }}>{t.mode === "cut" ? "переместить" : "копировать"}{t.srcPath ? " · из " + (baseName(t.srcPath) || "Storage") : ""}</span>
+                  </span>
+                  <span onClick={() => dropTask(t.id)} style={{ color: SUB, display: "flex", padding: 4 }}><Svg d={I.x} size={18} /></span>
+                </div>
+              ))}
+            </div>
+            <button style={{ ...S.accessBtn, width: "100%", marginTop: 14, padding: "12px" }} onClick={pasteAll}>Все сюда</button>
+          </div>
+        </div>
+      )}
+
+      {/* МЕНЮ ЗАДАЧ — конец */}
       {toast && <div style={S.toast}>{toast}</div>}
 
       <style>{`
@@ -815,11 +866,12 @@ const S = {
   slideWrap: { display: "flex", flexDirection: "column" },
   note: { color: SUB, textAlign: "center", padding: "60px 24px", lineHeight: 1.6 },
   row: { display: "flex", alignItems: "center", gap: 14, padding: "9px 14px", touchAction: "pan-y", borderBottom: "1px solid rgba(255,255,255,.04)" },
+  sep: { height: 1, background: "rgba(255,255,255,.12)", margin: "8px 16px" },
   iconWrap: { width: 46, height: 46, borderRadius: 23, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
   rowMid: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 },
   rowDate: { fontSize: 12, color: SUB },
   rowSize: { fontSize: 12.5, color: SUB, flexShrink: 0, marginLeft: 6 },
-  rowDir: { background: "rgba(239,108,0,.05)" },
+  rowDir: { background: "#2C2218", margin: "3px 8px", borderRadius: 14, boxShadow: "0 2px 8px rgba(0,0,0,.28)" },
   arcScreen: { position: "fixed", top: "calc(62px + env(safe-area-inset-top))", left: 0, right: 0, bottom: "calc(64px + env(safe-area-inset-bottom))", zIndex: 1250, background: BG, display: "flex", flexDirection: "column" },
   cnt: { background: "#43331F", color: GOLD, fontSize: 12, fontWeight: 700, padding: "2px 9px", borderRadius: 10, flexShrink: 0 },
   rowSel: { background: "#332417" },
@@ -830,7 +882,7 @@ const S = {
   searchClose: { border: "none", background: "transparent", color: SUB, fontSize: 24, width: 40 },
   bottom: { display: "flex", alignItems: "center", background: BAR, flexShrink: 0, borderRadius: 26, margin: "4px 8px calc(8px + env(safe-area-inset-bottom))" },
   btn: { border: "none", background: "transparent", padding: "6px 6px 7px", display: "flex", flexDirection: "column", alignItems: "center", gap: 2 },
-  selCount: { width: 28, height: 28, margin: "0 10px", background: ACC, color: "#fff", borderRadius: 14, fontWeight: 700, fontSize: 13, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  selCount: { minWidth: 28, height: 28, padding: "0 6px", margin: "0 10px", background: "rgba(239,108,0,.16)", border: "1px solid " + ACC, color: ACC, borderRadius: 14, fontWeight: 700, fontSize: 13, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
   btnLabel: { fontSize: 10, color: SUB, whiteSpace: "nowrap" },
   overlay: { position: "fixed", inset: 0, zIndex: 8 },
   menu: { position: "absolute", zIndex: 9, background: BAR, borderRadius: 12, overflow: "hidden", border: "1px solid " + LINE, boxShadow: "0 8px 32px rgba(0,0,0,.6)", minWidth: 200, animation: "dropGrow .2s cubic-bezier(.2,.9,.3,1.2)" },
