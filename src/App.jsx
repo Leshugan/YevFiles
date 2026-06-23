@@ -22,14 +22,13 @@ const ls = { get: (k) => { try { return localStorage.getItem(k); } catch { retur
   del: (k) => { try { localStorage.removeItem(k); } catch {} } };
 function buildInitial() {
   const saved = loadTabs();
-  let base = saved && saved.length ? saved : [{ id: 1, path: "" }];
-  const start = ls.get(SKEY);
-  if (start != null && !base.some((t) => t.path === start)) base = [...base, { id: Date.now(), path: start }];
-  const active = start != null ? Math.max(0, base.findIndex((t) => t.path === start)) : 0;
+  const base = saved && saved.length ? saved : [{ id: 1, path: "" }];
+  let active = base.findIndex((t) => t.startup);
+  if (active < 0) active = 0;
   return { base, active };
 }
 const loadTabs = () => { try { return JSON.parse(ls.get(TKEY)); } catch { return mem; } };
-const saveTabs = (t) => { mem = t; ls.set(TKEY, JSON.stringify(t)); };
+const saveTabs = (t) => { const keep = t.filter((x) => x.saved); mem = keep; ls.set(TKEY, JSON.stringify(keep)); };
 const loadMeta = () => { try { const m = JSON.parse(ls.get(METAKEY)) || {}; return { hidden: new Set(m.hidden || []), pinTop: new Set(m.pinTop || []), pinBot: new Set(m.pinBot || []) }; } catch { return { hidden: new Set(), pinTop: new Set(), pinBot: new Set() }; } };
 const saveMeta = (m) => ls.set(METAKEY, JSON.stringify({ hidden: [...m.hidden], pinTop: [...m.pinTop], pinBot: [...m.pinBot] }));
 
@@ -170,7 +169,7 @@ export default function App() {
   useEffect(() => { Filesystem.requestPermissions().catch(() => {}); checkAccess(); }, []);
   const checkAccess = async () => { try { const r = await Apps.hasAllFiles(); setAllFiles(!!r.granted); } catch { setAllFiles(true); } };
   const listRef = useRef(null);
-  useEffect(() => { const id = setTimeout(() => { const el = listRef.current; if (!el) return; el.scrollTop = path ? el.scrollHeight : window.innerHeight * 0.55; }, 60); return () => clearTimeout(id); }, [path, active]);
+  useEffect(() => { const id = setTimeout(() => { const el = listRef.current; if (!el) return; el.scrollTop = window.innerHeight * 0.55; }, 60); return () => clearTimeout(id); }, [path, active]);
   const silentRefresh = useCallback(async () => {
     try {
       const u = await Filesystem.getUri({ path, directory: DIR });
@@ -201,7 +200,7 @@ export default function App() {
   }, [props]);
 
   const exitSel = () => { setSel(new Set()); setSelMode(false); setConfirmDel(null); setSelMenu(false); };
-  const setTabPath = (p) => persist(tabs.map((x, i) => (i === active ? { ...x, path: p } : x)));
+  const setTabPath = (p) => setTabs((ts) => ts.map((x, i) => (i === active ? { ...x, path: p } : x)));
   const goUp = () => { if (path) setTabPath(parent(path)); };
   const closeTab = (i) => { if (tabs.length === 1) return; const t = tabs.filter((_, idx) => idx !== i); persist(t); setActive(Math.max(0, Math.min(active, t.length - 1))); };
 
@@ -309,8 +308,9 @@ export default function App() {
   };
   const onTabUp = (i) => { const d = tabDrag.current; if (d.active) { d.active = false; persistCurrent(); } else { const dir = i > active ? 1 : i < active ? -1 : 0; if (dir) { setSlide(dir); setTimeout(() => setSlide(0), 220); } setActive(i); } d.from = -1; };
 
-  const startupHere = () => { setTabsMenu(false); ls.set(SKEY, path); showToast("Запуск при открытии: " + (path ? baseName(path) : "Storage")); };
-  const resetTabs = () => { setTabsMenu(false); ls.del(SKEY); const t = [{ id: 1, path: "" }]; persist(t); setActive(0); showToast("Вкладки сброшены"); };
+  const saveAllTabs = () => { setTabsMenu(false); const t = tabs.map((x) => ({ ...x, saved: true })); persist(t); showToast("Вкладки сохранены"); };
+  const startupHere = () => { setTabsMenu(false); const t = tabs.map((x, i) => ({ ...x, startup: i === active, saved: i === active ? true : x.saved })); persist(t); showToast("Запуск при открытии: " + (path ? baseName(path) : "Storage")); };
+  const resetTabs = () => { setTabsMenu(false); setTabs((arr) => { const t = arr.map((x) => ({ ...x, saved: false, startup: false })); saveTabs(t); return t; }); showToast("Вкладки сброшены"); };
 
   /* операции через .uri */
   const refresh = () => list();
@@ -388,6 +388,8 @@ export default function App() {
             <>
               <div style={S.overlay} onClick={() => setTabsMenu(false)} />
               <div style={{ ...S.menu, position: "fixed", top: 46, left: 4, zIndex: 1200 }}>
+                <div style={S.menuItem} onClick={saveAllTabs}><span style={{ color: ACC, display: "flex" }}><Svg d={I.pin} size={20} /></span>Сохранить вкладки</div>
+                <div style={{ height: 1, background: LINE }} />
                 <div style={S.menuItem} onClick={startupHere}><span style={{ color: GOLD, display: "flex" }}><Svg d={I.star} size={20} /></span>Запуск при открытии</div>
                 <div style={{ height: 1, background: LINE }} />
                 <div style={S.menuItem} onClick={resetTabs}><span style={{ color: SUB, display: "flex" }}><Svg d={I.x} size={20} /></span>Сбросить вкладки</div>
@@ -404,6 +406,7 @@ export default function App() {
             <div key={t.id} ref={(el) => (tabRefs.current[i] = el)}
               onPointerDown={(ev) => onTabDown(ev, i)} onPointerMove={onTabMove} onPointerUp={() => onTabUp(i)} onPointerCancel={() => onTabUp(i)}
               style={{ ...S.tab, ...(i === active ? S.tabActive : {}) }}>
+              {t.saved && <span style={{ color: t.startup ? GOLD : ACC, display: "flex" }}><Svg d={t.startup ? I.star : I.pin} size={13} /></span>}
               <span style={{ overflow: "hidden", textOverflow: "ellipsis", maxWidth: 130 }}>{t.path ? baseName(t.path) : "Storage"}</span>
             </div>
           ))}
@@ -453,7 +456,7 @@ export default function App() {
             <button style={S.accessBtn} onClick={() => Apps.requestAllFiles().catch(() => {})}>Дать доступ</button>
           </div>
         )}
-        <div key={active} style={{ ...S.slideWrap, marginTop: path ? "auto" : 0, animation: slide ? `fm-in-${slide > 0 ? "r" : "l"} .22s ease` : "none" }}>
+        <div key={active} style={{ ...S.slideWrap, marginTop: 0, animation: slide ? `fm-in-${slide > 0 ? "r" : "l"} .22s ease` : "none" }}>
           {loading && null}
           {error && <div style={{ ...S.note, color: RED }}>{error}<br /><span style={{ fontSize: 12 }}>Разрешите «Доступ ко всем файлам» в настройках приложения.</span></div>}
           {!loading && !error && visible.length === 0 && <div style={S.note}>Пусто</div>}
@@ -646,8 +649,8 @@ export default function App() {
           <div style={S.crumb}>
             <span onClick={() => setArcView(null)} style={{ display: "inline-flex", alignItems: "center", gap: 6, color: ACC }}><Svg d={I.back} size={18} /> {arcView.name}</span>
           </div>
-          <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column" }}>
-            <div style={{ marginTop: "auto" }}>
+          <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", paddingTop: "40vh" }}>
+            <div>
               {arcView.entries.map((it, i) => {
                 const ic = fileIcon(it.name);
                 return (
@@ -791,7 +794,7 @@ const S = {
   rowDate: { fontSize: 12, color: SUB },
   rowSize: { fontSize: 12.5, color: SUB, flexShrink: 0, marginLeft: 6 },
   rowDir: { background: "rgba(239,108,0,.05)" },
-  arcScreen: { position: "fixed", top: 0, left: 0, right: 0, bottom: "calc(64px + env(safe-area-inset-bottom))", zIndex: 1250, background: BG, display: "flex", flexDirection: "column", paddingTop: "env(safe-area-inset-top)" },
+  arcScreen: { position: "fixed", top: "calc(62px + env(safe-area-inset-top))", left: 0, right: 0, bottom: "calc(64px + env(safe-area-inset-bottom))", zIndex: 1250, background: BG, display: "flex", flexDirection: "column" },
   cnt: { background: "#43331F", color: GOLD, fontSize: 12, fontWeight: 700, padding: "2px 9px", borderRadius: 10, flexShrink: 0 },
   rowSel: { background: "#332417" },
   name: { flex: 1, fontSize: 15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
