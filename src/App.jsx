@@ -56,8 +56,10 @@ const fmtDate = (ms) => {
 };
 const ago = (ms) => { if (!ms) return "—"; const d = new Date(ms), diff = (Date.now() - ms) / 60000; const rel = diff < 1 ? "только что" : diff < 60 ? Math.floor(diff) + " мин назад" : diff < 1440 ? Math.floor(diff / 60) + " ч назад" : Math.floor(diff / 1440) + " дн назад"; const p = (n) => String(n).padStart(2, "0"); return `${p(d.getHours())}:${p(d.getMinutes())}, ${p(d.getDate())}.${p(d.getMonth() + 1)}.${String(d.getFullYear()).slice(2)} · ${rel}`; };
 
-const MIME = { txt: "text/plain", md: "text/plain", log: "text/plain", csv: "text/csv", html: "text/html", json: "application/json", xml: "text/xml", pdf: "application/pdf", jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", gif: "image/gif", webp: "image/webp", bmp: "image/bmp", svg: "image/svg+xml", mp4: "video/mp4", mkv: "video/x-matroska", avi: "video/x-msvideo", mov: "video/quicktime", webm: "video/webm", "3gp": "video/3gpp", mp3: "audio/mpeg", wav: "audio/wav", ogg: "audio/ogg", flac: "audio/flac", m4a: "audio/mp4", aac: "audio/aac", zip: "application/zip", rar: "application/vnd.rar", "7z": "application/x-7z-compressed", apk: "application/vnd.android.package-archive" };
+const MIME = { txt: "text/plain", md: "text/plain", log: "text/plain", ini: "text/plain", cfg: "text/plain", conf: "text/plain", csv: "text/csv", html: "text/html", htm: "text/html", json: "application/json", xml: "text/xml", yml: "text/plain", yaml: "text/plain", java: "text/plain", kt: "text/plain", kts: "text/plain", js: "text/plain", jsx: "text/plain", ts: "text/plain", tsx: "text/plain", py: "text/plain", c: "text/plain", h: "text/plain", cpp: "text/plain", cc: "text/plain", cs: "text/plain", go: "text/plain", rs: "text/plain", rb: "text/plain", php: "text/plain", swift: "text/plain", sh: "text/plain", bat: "text/plain", gradle: "text/plain", properties: "text/plain", css: "text/plain", sql: "text/plain", lua: "text/plain", toml: "text/plain", pdf: "application/pdf", jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", gif: "image/gif", webp: "image/webp", bmp: "image/bmp", svg: "image/svg+xml", mp4: "video/mp4", mkv: "video/x-matroska", avi: "video/x-msvideo", mov: "video/quicktime", webm: "video/webm", "3gp": "video/3gpp", mp3: "audio/mpeg", wav: "audio/wav", ogg: "audio/ogg", flac: "audio/flac", m4a: "audio/mp4", aac: "audio/aac", zip: "application/zip", rar: "application/vnd.rar", "7z": "application/x-7z-compressed", tar: "application/x-tar", gz: "application/gzip", apk: "application/vnd.android.package-archive" };
 const mimeOf = (name) => MIME[(name.split(".").pop() || "").toLowerCase()] || "*/*";
+const TEXT_EXT = new Set(["txt", "md", "log", "ini", "cfg", "conf", "yml", "yaml", "java", "kt", "kts", "js", "jsx", "ts", "tsx", "py", "c", "h", "cpp", "cc", "cs", "go", "rs", "rb", "php", "swift", "sh", "bat", "gradle", "properties", "css", "sql", "lua", "toml", "xml", "json", "html", "htm", "csv"]);
+const defaultOpenAs = (name) => { const e = (name.split(".").pop() || "").toLowerCase(); const m = mimeOf(name); if (TEXT_EXT.has(e)) return "text/plain"; if (m.startsWith("image/")) return "image/*"; if (m.startsWith("video/")) return "video/*"; if (m.startsWith("audio/")) return "audio/*"; if (m === "application/pdf") return "application/pdf"; return "*/*"; };
 
 const I = {
   back: <path d="M15 18l-6-6 6-6" />,
@@ -65,6 +67,7 @@ const I = {
   check: <path d="M5 12l4 4 10-11" />,
   dl: <><path d="M12 3v12" /><path d="M7 11l5 5 5-5" /><path d="M5 21h14" /></>,
   bell: <><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.7 21a2 2 0 0 1-3.4 0" /></>,
+  ring: <><path d="M9 18V6l10-2v12" /><circle cx="6" cy="18" r="3" /><circle cx="16" cy="16" r="3" /><path d="M19 9c1.2.6 2 1.5 2 2.5M19 6c2.2 1 3.6 2.6 3.6 4.5" /></>,
   alarm: <><circle cx="12" cy="13" r="8" /><path d="M12 9v4l2 2" /><path d="M5 3L2 6M19 3l3 3" /></>,
   mic: <><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0" /><path d="M12 18v3" /></>,
   cam: <><path d="M3 8a2 2 0 0 1 2-2h2l1.5-2h7L19 6h0a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><circle cx="12" cy="12.5" r="3.5" /></>,
@@ -121,22 +124,22 @@ const EXT = {
 };
 const SYS_FOLDERS = {
   download: { d: I.dl, c: "#5AA9E6" }, downloads: { d: I.dl, c: "#5AA9E6" },
-  music: { d: I.audio, c: "#E36FB0" }, ringtones: { d: I.bell, c: "#E3B14F" }, notifications: { d: I.bell, c: "#E3B14F" }, alarms: { d: I.alarm, c: "#E36F6F" },
+  music: { d: I.audio, c: "#E36FB0" }, ringtones: { d: I.ring, c: "#E3B14F" }, notifications: { d: I.bell, c: "#E3B14F" }, alarms: { d: I.alarm, c: "#E36F6F" },
   pictures: { d: I.img, c: "#6FD3A8" }, dcim: { d: I.cam, c: "#6FD3A8" }, screenshots: { d: I.img, c: "#6FD3A8" },
   movies: { d: I.video, c: "#A98BE0" }, video: { d: I.video, c: "#A98BE0" }, videos: { d: I.video, c: "#A98BE0" },
   podcasts: { d: I.mic, c: "#E3B14F" }, recordings: { d: I.mic, c: "#E3B14F" },
-  documents: { d: I.doc2, c: "#5AA9E6" }, books: { d: I.doc2, c: "#5AA9E6" }, audiobooks: { d: I.audio, c: "#E36FB0" },
+  documents: { d: I.doc2, c: "#5AA9E6" },
   android: { d: I.android, c: "#A4C639" }, data: { d: I.android, c: "#A4C639" }, obb: { d: I.android, c: "#A4C639" },
   apk: { d: I.apk, c: "#A4C639" },
-  media: { d: I.img, c: "#6FD3A8" }, backups: { d: I.archive, c: "#E3B14F" }, backup: { d: I.archive, c: "#E3B14F" },
-  bannerhub: { d: I.img, c: "#E36FB0" }, fonts: { d: I.fontA, c: "#C9A227" }, books: { d: I.book, c: "#C98A4B" }, audiobooks: { d: I.book, c: "#C98A4B" },
+  bannerhub: { d: I.img, c: "#E36FB0" }, fonts: { d: I.fontA, c: "#C9A227" }, books: { d: I.book, c: "#C98A4B" },
   games: { d: I.gamepad, c: "#A4C639" }, gamehub: { d: I.gamepad, c: "#A4C639" }, emu: { d: I.gamepad, c: "#A4C639" }, arcade: { d: I.gamepad, c: "#A4C639" }, mame: { d: I.gamepad, c: "#A4C639" },
   retroarch: { d: I.gamepad, c: "#7C5CFF" }, winlator: { d: I.win, c: "#5AA9E6" }, windows: { d: I.win, c: "#5AA9E6" },
   switch: { d: I.gamepad, c: "#E60012" }, "nintendo switch": { d: I.gamepad, c: "#E60012" }, nes: { d: I.gamepad, c: "#E05252" }, dandy: { d: I.gamepad, c: "#E05252" },
-  sega: { d: I.gamepad, c: "#3A7BD5" }, ps1: { d: I.gamepad, c: "#5AA9E6" }, ps2: { d: I.gamepad, c: "#5AA9E6" }, ps3: { d: I.gamepad, c: "#5AA9E6" }, psp: { d: I.gamepad, c: "#5AA9E6" }, vita3k: { d: I.gamepad, c: "#5AA9E6" }, vita: { d: I.gamepad, c: "#5AA9E6" },
+  sega: { d: I.gamepad, c: "#3A7BD5" }, ps1: { d: I.gamepad, c: "#5AA9E6" }, ps2: { d: I.gamepad, c: "#5AA9E6" }, ps3: { d: I.gamepad, c: "#5AA9E6" }, psp: { d: I.gamepad, c: "#5AA9E6" }, vita3k: { d: I.gamepad, c: "#5AA9E6" },
   mt2: { d: I.tool, c: "#E3B14F" }, "mt manager": { d: I.tool, c: "#E3B14F" }, apkeditor: { d: I.tool, c: "#6FD3A8" },
   "smart launcher": { d: I.launcher, c: "#5AA9E6" }, smartlauncher: { d: I.launcher, c: "#5AA9E6" }, "mx player": { d: I.video, c: "#3A7BD5" }, mxplayer: { d: I.video, c: "#3A7BD5" },
 };
+const ARCH_COLORS = { zip: "#E3B14F", rar: "#9B59B6", "7z": "#5AA9E6", tar: "#6FD3A8", gz: "#6FD3A8", xz: "#6FD3A8", bz2: "#6FD3A8", jar: "#E0574F" };
 const fileIcon = (name) => {
   const ext = (name.split(".").pop() || "").toLowerCase();
   if (ext === "pdf") return { d: I.pdf, c: "#E0574F" };
@@ -146,7 +149,7 @@ const fileIcon = (name) => {
   if (EXT.img.includes(ext)) return { d: I.img, c: "#7FB3FF" };
   if (EXT.video.includes(ext)) return { d: I.video, c: "#C98BFF" };
   if (EXT.audio.includes(ext)) return { d: I.audio, c: "#FF9D6B" };
-  if (EXT.archive.includes(ext)) return { d: I.archive, c: GOLD };
+  if (EXT.archive.includes(ext)) return { d: I.archive, c: ARCH_COLORS[ext] || GOLD };
   if (EXT.code.includes(ext)) return { d: I.code, c: "#6FD3A8" };
   return { d: I.file, c: SUB };
 };
@@ -179,6 +182,7 @@ export default function App() {
   const [meta, setMeta] = useState(loadMeta);
   const [showHidden, setShowHidden] = useState(false);
   const [sortMode, setSortMode] = useState(() => ls.get(SORTKEY) || "az");
+  const [sysTop, setSysTop] = useState(() => ls.get("fm_systop_v1") === "1");
   const [headMenu, setHeadMenu] = useState(false);
   const [settings, setSettings] = useState(false);
   const [iconDB, setIconDB] = useState(() => loadMap(ICONKEY));
@@ -194,6 +198,24 @@ export default function App() {
   const [propCount, setPropCount] = useState(null);
   const [openMenu, setOpenMenu] = useState(null);
   const [arcView, setArcView] = useState(null);
+  const [arcSel, setArcSel] = useState(new Set());
+  const extractSelected = async () => {
+    const names = [...arcSel]; setArcSel(new Set());
+    setArcView((m) => (m ? { ...m, busy: "Извлекаю…" } : m));
+    let ok = 0;
+    for (const nm of names) {
+      try {
+        const entry = arcView.entries.find((x) => x.name === nm); if (!entry) continue;
+        const b64 = await arcView.zip.file(nm).async("base64");
+        const fname = nm.split("/").pop();
+        await Filesystem.writeFile({ path: join(path, fname), data: b64, directory: DIR, recursive: true });
+        ok++;
+      } catch (e) { showToast(nm + ": " + (e?.message || "")); }
+    }
+    setArcView((m) => (m ? { ...m, busy: null } : m));
+    showToast("Извлечено: " + ok + " в " + (baseName(path) || "Storage"));
+    refresh();
+  };
   const [allFiles, setAllFiles] = useState(true); // {file, mime, apps, useDefault, editHide}
 
   const cur = tabs[active], path = cur?.path || "";
@@ -316,6 +338,7 @@ export default function App() {
   const backExit = useRef(0);
   backRef.current = () => {
     if (settings) { setSettings(false); return; }
+    if (arcView && arcSel.size > 0) { setArcSel(new Set()); return; }
     if (arcView) { setArcView(null); return; }
     if (pasteMenu) { setPasteMenu(false); return; }
     if (openMenu) { setOpenMenu(null); return; }
@@ -524,6 +547,10 @@ export default function App() {
     if (ad !== bd) return ad ? -1 : 1;
     return cmp(a, b);
   });
+  if (sysTop) {
+    const isSys = (e) => e.type === "directory" && SYS_FOLDERS[e.name.toLowerCase()] ? 0 : 1;
+    visible = [...visible].sort((a, b) => isSys(a) - isSys(b));
+  }
   const rank = (e) => (meta.pinTop.has(keyOf(e.name)) ? -1 : meta.pinBot.has(keyOf(e.name)) ? 1 : 0);
   visible = [...visible].sort((a, b) => rank(a) - rank(b));
 
@@ -649,6 +676,7 @@ export default function App() {
                   </span>
                   {pinned && <span style={{ color: SUB, display: "flex" }}><Svg d={meta.pinTop.has(keyOf(e.name)) ? I.pinT : I.pinB} size={14} /></span>}
                   <span style={S.rowSize}>{isDir ? (e.count != null ? "(" + e.count + ")" : "") : fmtSizeShort(e.size)}</span>
+                  <div style={S.rowLine} />
                 </div>
               );
             };
@@ -825,21 +853,37 @@ export default function App() {
             <span onClick={() => setArcView(null)} style={{ display: "inline-flex", alignItems: "center", gap: 6, color: ACC }}><Svg d={I.back} size={18} /> {arcView.name}</span>
           </div>
           {arcView.busy && <div style={{ padding: "10px 16px", color: GOLD, fontSize: 13, textAlign: "center" }}>{arcView.busy}</div>}
+          {arcSel.size > 0 && (
+            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 14px", borderBottom: "1px solid " + LINE }}>
+              <span style={{ color: "#fff", fontWeight: 700 }}>{arcSel.size}</span>
+              <button onClick={() => setArcSel(new Set())} style={{ marginLeft: "auto", background: ROW2, border: "1px solid " + LINE, borderRadius: 8, color: SUB, fontSize: 13, padding: "7px 14px" }}>Отмена</button>
+              <button onClick={extractSelected} style={{ background: ACC, border: "none", borderRadius: 8, color: "#fff", fontWeight: 700, fontSize: 13, padding: "7px 16px" }}>Извлечь</button>
+            </div>
+          )}
           {arcView.entries == null ? (
             <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: SUB }}>Открываю архив…</div>
           ) : (
           <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column" }}>
-            <div style={{ marginTop: "auto", paddingBottom: 6 }}>
+            <div style={{ marginTop: "auto" }}>
               {arcView.entries.map((it, i) => {
                 const ic = fileIcon(it.name);
+                const asel = arcSel.has(it.name);
                 return (
-                  <div key={i} onClick={() => extractOpen(it)} style={S.row}>
-                    <span style={{ ...S.iconWrap, color: ic.c, background: "rgba(255,255,255,.05)" }}><Svg d={ic.d} size={24} /></span>
+                  <div key={i}
+                    onClick={() => { if (arcSel.size > 0) { const n = new Set(arcSel); n.has(it.name) ? n.delete(it.name) : n.add(it.name); setArcSel(n); } else extractOpen(it); }}
+                    onPointerDown={(ev) => { const t = setTimeout(() => { const n = new Set(arcSel); n.add(it.name); setArcSel(n); }, 400); ev.currentTarget._lp = t; }}
+                    onPointerUp={(ev) => clearTimeout(ev.currentTarget._lp)} onPointerMove={(ev) => clearTimeout(ev.currentTarget._lp)}
+                    style={S.row}>
+                    <span style={{ ...S.iconWrap, color: ic.c, background: asel ? "transparent" : "rgba(255,255,255,.05)" }}
+                      onClick={(ev) => { ev.stopPropagation(); const n = new Set(arcSel); n.has(it.name) ? n.delete(it.name) : n.add(it.name); setArcSel(n); }}>
+                      {asel ? <span style={S.cbk}><Svg d={I.check} size={14} /></span> : <Svg d={ic.d} size={24} />}
+                    </span>
                     <span style={S.rowMid}>
                       <span style={S.name}>{it.name}</span>
                       <span style={S.rowDate}>в архиве</span>
                     </span>
                     <span style={S.rowSize}>{fmtSizeShort(it.size)}</span>
+                    <div style={S.rowLine} />
                   </div>
                 );
               })}
@@ -920,7 +964,13 @@ export default function App() {
             <span onClick={() => setSettings(false)} style={{ display: "inline-flex", alignItems: "center", gap: 6, color: ACC }}><Svg d={I.back} size={18} /> Настройки</span>
           </div>
           <div style={{ flex: 1, overflowY: "auto", padding: "8px 14px" }}>
-            <div style={{ color: ACC, fontSize: 13, fontWeight: 700, margin: "10px 2px 8px" }}>Иконки папок</div>
+            <div style={{ color: ACC, fontSize: 13, fontWeight: 700, margin: "10px 2px 8px" }}>Сортировка</div>
+            <div style={S.menuItem} onClick={() => { const v = !sysTop; setSysTop(v); ls.set("fm_systop_v1", v ? "1" : "0"); }}>
+              <span style={{ color: sysTop ? ACC : SUB, display: "flex" }}><Svg d={I.folder} size={20} /></span>
+              Системные папки всегда сверху
+              <span style={{ marginLeft: "auto", ...S.tgl, ...(sysTop ? S.tglOn : {}) }}><span style={{ ...S.knob, ...(sysTop ? S.knobOn : {}) }} /></span>
+            </div>
+            <div style={{ color: ACC, fontSize: 13, fontWeight: 700, margin: "18px 2px 8px" }}>Иконки папок</div>
             <div style={{ color: SUB, fontSize: 12, lineHeight: 1.5, marginBottom: 12 }}>
               Чтобы задать иконку папке — создайте в ней папку <span style={{ color: GOLD }}>.iconfolder</span> и положите туда PNG/ICO. Иконка сохранится сюда, а файл удалится.
             </div>
@@ -1047,17 +1097,18 @@ const S = {
   list: { flex: 1, overflowY: "auto", overflowX: "hidden", display: "flex", flexDirection: "column" },
   slideWrap: { display: "flex", flexDirection: "column" },
   note: { color: SUB, textAlign: "center", padding: "60px 24px", lineHeight: 1.6 },
-  row: { display: "flex", alignItems: "center", gap: 14, padding: "10px 14px", touchAction: "pan-y", borderBottom: "1px solid rgba(255,255,255,.08)" },
+  row: { display: "flex", alignItems: "center", gap: 14, padding: "10px 14px", touchAction: "pan-y", position: "relative" },
+  rowLine: { position: "absolute", left: 72, right: 0, bottom: 0, height: 1, background: "rgba(255,255,255,.08)" },
   sep: { height: 1, background: "rgba(255,255,255,.10)", margin: "4px 0" },
   iconWrap: { width: 44, height: 44, borderRadius: 13, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
   iconImg: { width: "100%", height: "100%", objectFit: "cover", borderRadius: 13 },
-  folderThumb: { position: "absolute", right: 2, bottom: 2, width: 30, height: 30, borderRadius: 7, objectFit: "cover", border: "2px solid " + BG },
+  folderThumb: { position: "absolute", left: 0, bottom: 0, width: 28, height: 28, borderRadius: 7, objectFit: "cover", border: "2px solid " + BG },
   cbk: { width: 22, height: 22, borderRadius: 6, background: ACC, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center" },
   rowMid: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 },
   rowDate: { fontSize: 12, color: SUB },
-  rowSize: { fontSize: 12.5, color: SUB, flexShrink: 0, marginLeft: 6 },
+  rowSize: { fontSize: 11.5, color: "rgba(176,164,152,.5)", flexShrink: 0, marginLeft: 6 },
   rowDir: { background: "rgba(239,108,0,.04)" },
-  arcScreen: { position: "fixed", top: 62, left: 0, right: 0, bottom: "calc(64px + env(safe-area-inset-bottom))", zIndex: 1250, background: BG, display: "flex", flexDirection: "column" },
+  arcScreen: { position: "fixed", top: 62, left: 0, right: 0, bottom: "calc(74px + env(safe-area-inset-bottom))", zIndex: 1250, background: BG, display: "flex", flexDirection: "column" },
   cnt: { background: "#43331F", color: GOLD, fontSize: 12, fontWeight: 700, padding: "2px 9px", borderRadius: 10, flexShrink: 0 },
   rowSel: { background: "#332417" },
   name: { flex: 1, fontSize: 15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
