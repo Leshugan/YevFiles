@@ -170,7 +170,7 @@ export default function App() {
   useEffect(() => { Filesystem.requestPermissions().catch(() => {}); checkAccess(); }, []);
   const checkAccess = async () => { try { const r = await Apps.hasAllFiles(); setAllFiles(!!r.granted); } catch { setAllFiles(true); } };
   const listRef = useRef(null);
-  useEffect(() => { const id = setTimeout(() => { const el = listRef.current; if (el) el.scrollTop = el.scrollHeight; }, 60); return () => clearTimeout(id); }, [path, active]);
+  useEffect(() => { const id = setTimeout(() => { const el = listRef.current; if (el) el.scrollTop = path ? el.scrollHeight : 0; }, 60); return () => clearTimeout(id); }, [path, active]);
   const silentRefresh = useCallback(async () => {
     try {
       const u = await Filesystem.getUri({ path, directory: DIR });
@@ -201,7 +201,7 @@ export default function App() {
   }, [props]);
 
   const exitSel = () => { setSel(new Set()); setSelMode(false); setConfirmDel(null); setSelMenu(false); };
-  const setTabPath = (p) => persist(tabs.map((x, i) => (i === active ? { ...x, path: p } : x)));
+  const setTabPath = (p) => setTabs((ts) => ts.map((x, i) => (i === active ? { ...x, path: p } : x)));
   const goUp = () => { const t = tabs[active]; if (t && t.saved && t.root != null && path === t.root) return; if (path) setTabPath(parent(path)); };
   const closeTab = (i) => { if (tabs.length === 1) return; const t = tabs.filter((_, idx) => idx !== i); persist(t); setActive(Math.max(0, Math.min(active, t.length - 1))); };
 
@@ -219,7 +219,6 @@ export default function App() {
     if (query !== null) { setQuery(null); return; }
     if (selMode) { exitSel(); return; }
     { const t = tabs[active]; const atRoot = t && t.saved && t.root != null && path === t.root; if (path && !atRoot) { goUp(); return; } }
-    if (tabs.length > 1) { closeTab(active); return; }
     CapApp.exitApp();
   };
   useEffect(() => {
@@ -651,7 +650,7 @@ export default function App() {
           <div style={S.crumb}>
             <span onClick={() => setArcView(null)} style={{ display: "inline-flex", alignItems: "center", gap: 6, color: ACC }}><Svg d={I.back} size={18} /> {arcView.name}</span>
           </div>
-          <div style={{ flex: 1, overflowY: "auto" }}>
+          <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column" }}>
             <div style={{ marginTop: "auto" }}>
               {arcView.entries.map((it, i) => {
                 const ic = fileIcon(it.name);
@@ -788,7 +787,7 @@ const S = {
   hbtn: { border: "none", background: "transparent", color: TXT, width: 40, height: 48, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" },
   crumb: { padding: "8px 16px", fontSize: 13, background: BG, flexShrink: 0, borderBottom: "1px solid #241A11", overflow: "hidden", whiteSpace: "nowrap" },
   list: { flex: 1, overflowY: "auto", overflowX: "hidden", display: "flex", flexDirection: "column" },
-  slideWrap: { marginTop: "auto", paddingTop: "55vh", paddingBottom: "50vh" },
+  slideWrap: { marginTop: "auto" },
   note: { color: SUB, textAlign: "center", padding: "60px 24px", lineHeight: 1.6 },
   row: { display: "flex", alignItems: "center", gap: 14, padding: "9px 14px", touchAction: "pan-y", borderBottom: "1px solid rgba(255,255,255,.04)" },
   iconWrap: { width: 46, height: 46, borderRadius: 23, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
