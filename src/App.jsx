@@ -63,6 +63,13 @@ const I = {
   back: <path d="M15 18l-6-6 6-6" />,
   search: <><circle cx="11" cy="11" r="7" /><path d="M21 21l-4-4" /></>,
   check: <path d="M5 12l4 4 10-11" />,
+  dl: <><path d="M12 3v12" /><path d="M7 11l5 5 5-5" /><path d="M5 21h14" /></>,
+  bell: <><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.7 21a2 2 0 0 1-3.4 0" /></>,
+  alarm: <><circle cx="12" cy="13" r="8" /><path d="M12 9v4l2 2" /><path d="M5 3L2 6M19 3l3 3" /></>,
+  mic: <><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0" /><path d="M12 18v3" /></>,
+  cam: <><path d="M3 8a2 2 0 0 1 2-2h2l1.5-2h7L19 6h0a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><circle cx="12" cy="12.5" r="3.5" /></>,
+  android: <><path d="M7 9a5 5 0 0 1 10 0v1H7z" /><path d="M8.5 6.5L7 4M15.5 6.5L17 4" /><rect x="7" y="11" width="10" height="8" rx="2" /></>,
+  doc2: <><path d="M6 2h9l5 5v15H6z" /><path d="M14 2v6h6" /><path d="M9 13h6M9 16h6" /></>,
   home: <><path d="M3 11l9-7 9 7" /><path d="M5 10v9a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-9" /><path d="M10 20v-6h4v6" /></>,
   selectAll: <><rect x="4" y="4" width="16" height="16" rx="4" /><path d="M8.5 12l2.5 2.5 4.5-5" /></>,
   chev: <path d="M6 9l6 6 6-6" />,
@@ -105,6 +112,17 @@ const EXT = {
   archive: ["zip", "rar", "7z", "tar", "gz", "apk", "obb"],
   code: ["js", "jsx", "ts", "json", "html", "css", "xml", "py", "java", "kt", "c", "cpp", "sh"],
 };
+const SYS_FOLDERS = {
+  download: { d: I.dl, c: "#5AA9E6" }, downloads: { d: I.dl, c: "#5AA9E6" },
+  music: { d: I.audio, c: "#E36FB0" }, ringtones: { d: I.bell, c: "#E3B14F" }, notifications: { d: I.bell, c: "#E3B14F" }, alarms: { d: I.alarm, c: "#E36F6F" },
+  pictures: { d: I.img, c: "#6FD3A8" }, dcim: { d: I.cam, c: "#6FD3A8" }, screenshots: { d: I.img, c: "#6FD3A8" },
+  movies: { d: I.video, c: "#A98BE0" }, video: { d: I.video, c: "#A98BE0" }, videos: { d: I.video, c: "#A98BE0" },
+  podcasts: { d: I.mic, c: "#E3B14F" }, recordings: { d: I.mic, c: "#E3B14F" },
+  documents: { d: I.doc2, c: "#5AA9E6" }, books: { d: I.doc2, c: "#5AA9E6" }, audiobooks: { d: I.audio, c: "#E36FB0" },
+  android: { d: I.android, c: "#A4C639" }, data: { d: I.android, c: "#A4C639" }, obb: { d: I.android, c: "#A4C639" },
+  fonts: { d: I.code, c: "#B0A498" }, games: { d: I.apk, c: "#A4C639" }, apk: { d: I.apk, c: "#A4C639" },
+  media: { d: I.img, c: "#6FD3A8" }, backups: { d: I.archive, c: "#E3B14F" }, backup: { d: I.archive, c: "#E3B14F" },
+};
 const fileIcon = (name) => {
   const ext = (name.split(".").pop() || "").toLowerCase();
   if (ext === "pdf") return { d: I.pdf, c: "#E0574F" };
@@ -136,6 +154,8 @@ export default function App() {
   const [selMode, setSelMode] = useState(false);
   const [clip, setClip] = useState(null);
   const [pasteMenu, setPasteMenu] = useState(false);
+  const [progress, setProgress] = useState(null);
+  const cancelRef = useRef(false);
   const [query, setQuery] = useState(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [confirmDel, setConfirmDel] = useState(false);
@@ -227,7 +247,7 @@ export default function App() {
 
   const exitSel = () => { setSel(new Set()); setSelMode(false); setConfirmDel(null); setSelMenu(false); };
   const setTabPath = (p) => setTabs((ts) => ts.map((x, i) => (i === active ? { ...x, path: p } : x)));
-  const goUp = () => { if (path) setTabPath(parent(path)); };
+  const goUp = () => { if (path) { setSlide(-1); setTimeout(() => setSlide(0), 220); setTabPath(parent(path)); } };
   const closeTab = (i) => { if (tabs.length === 1) return; const t = tabs.filter((_, idx) => idx !== i); persist(t); setActive(Math.max(0, Math.min(active, t.length - 1))); };
 
   const backRef = useRef(() => {});
@@ -245,7 +265,7 @@ export default function App() {
     if (createOpen) { setCreateOpen(false); return; }
     if (query !== null) { setQuery(null); return; }
     if (selMode) { exitSel(); return; }
-    if (path) { goUp(); return; }
+    { const t = tabs[active]; const atStart = t && t.startup && (t.startupPath || "") === path; if (path && !atStart) { goUp(); return; } }
     const now = Date.now();
     if (now - backExit.current < 2000) { CapApp.exitApp(); }
     else { backExit.current = now; showToast("Нажмите «Назад» ещё раз для выхода"); }
@@ -315,7 +335,7 @@ export default function App() {
   const resetDefault = () => { const defs = loadMap(DEFKEY); delete defs[openMenu.mime]; saveMap(DEFKEY, defs); showToast("Привязка сброшена"); };
   const open = (e) => {
     if (selMode) { toggle(e.name); return; }
-    if (e.type === "directory") setTabPath(join(path, e.name));
+    if (e.type === "directory") { setSlide(1); setTimeout(() => setSlide(0), 220); setTabPath(join(path, e.name)); }
     else openExternal(e);
   };
 
@@ -341,7 +361,7 @@ export default function App() {
   const onTabUp = (i) => { const d = tabDrag.current; if (d.active) { d.active = false; persistCurrent(); } else { const dir = i > active ? 1 : i < active ? -1 : 0; if (dir) { setSlide(dir); setTimeout(() => setSlide(0), 220); } setActive(i); } d.from = -1; };
 
   const saveAllTabs = () => { setTabsMenu(false); const t = tabs.map((x) => ({ ...x, saved: true })); persist(t); showToast("Вкладки сохранены"); };
-  const startupHere = () => { setTabsMenu(false); const t = tabs.map((x, i) => ({ ...x, startup: i === active, saved: i === active ? true : x.saved })); persist(t); showToast("Запуск при открытии: " + (path ? baseName(path) : "Storage")); };
+  const startupHere = () => { setTabsMenu(false); const t = tabs.map((x, i) => ({ ...x, startup: i === active, startupPath: i === active ? path : x.startupPath, saved: i === active ? true : x.saved })); persist(t); showToast("Запуск при открытии: " + (path ? baseName(path) : "Storage")); };
   const resetTabs = () => { setTabsMenu(false); setTabs((arr) => { const t = arr.map((x) => ({ ...x, saved: false, startup: false })); saveTabs(t); return t; }); showToast("Вкладки сброшены"); };
 
   /* операции через .uri */
@@ -360,10 +380,19 @@ export default function App() {
     } else await Filesystem.deleteFile({ path: e.uri });
   };
   const doDelete = async () => {
-    const names = [...sel]; setConfirmDel(null); let ok = 0, fail = 0;
-    for (const name of names) { const e = byName(name); if (!e) { fail++; continue; } try { await delTree(e); ok++; } catch { fail++; } }
+    const items = [...sel].map(byName).filter(Boolean); setConfirmDel(null);
+    cancelRef.current = false; let ok = 0, fail = 0;
+    setProgress({ current: 0, total: items.length, name: "", mode: "del" });
+    for (let i = 0; i < items.length; i++) {
+      if (cancelRef.current) break;
+      const e = items[i];
+      setProgress((p) => ({ current: i + 1, total: items.length, name: e.name, mode: "del", bg: p && p.bg }));
+      Apps.notifyProgress({ title: "Удаление", text: e.name, progress: i + 1, max: items.length }).catch(() => {});
+      try { await delTree(e); ok++; } catch { fail++; }
+    }
+    setProgress(null); Apps.cancelNotify().catch(() => {});
     exitSel(); await refresh();
-    showToast(fail ? "Не удалено: " + fail + (ok ? ", удалено: " + ok : "") : "Удалено: " + ok);
+    showToast(cancelRef.current ? "Отменено" : fail ? "Не удалено: " + fail + (ok ? ", удалено: " + ok : "") : "Удалено: " + ok);
   };
   const grab = (mode) => {
     const items = [...sel].map((n) => { const e = byName(n); return e ? { name: n, uri: e.uri, type: e.type } : null; }).filter(Boolean);
@@ -380,16 +409,24 @@ export default function App() {
       catch (e) { showToast(it.name + ": " + e.message); }
     }
   };
-  const pasteAll = async () => {
-    const q = clip || []; setPasteMenu(false); setClip(null);
-    for (const t of q) await runTask(t);
-    await refresh(); showToast("Готово");
+  const runQueue = async (queue) => {
+    const all = [];
+    for (const t of queue) for (const it of t.items) all.push({ it, mode: t.mode });
+    const total = all.length; cancelRef.current = false;
+    setProgress({ current: 0, total, name: "" });
+    for (let i = 0; i < all.length; i++) {
+      if (cancelRef.current) break;
+      const { it, mode } = all[i];
+      setProgress((p) => ({ current: i + 1, total, name: it.name, mode, bg: p && p.bg }));
+      Apps.notifyProgress({ title: mode === "cut" ? "Перемещение" : "Копирование", text: it.name, progress: i + 1, max: total }).catch(() => {});
+      const to = targetUri(it.name);
+      if (to && it.uri !== to) { try { if (mode === "copy") await Filesystem.copy({ from: it.uri, to }); else await Filesystem.rename({ from: it.uri, to }); } catch (e) { showToast(it.name + ": " + e.message); } }
+    }
+    setProgress(null); Apps.cancelNotify().catch(() => {});
+    await refresh(); showToast(cancelRef.current ? "Отменено" : "Готово");
   };
-  const pasteOne = async (task) => {
-    setPasteMenu(false);
-    setClip((q) => (q || []).filter((t) => t.id !== task.id));
-    await runTask(task); await refresh();
-  };
+  const pasteAll = async () => { const q = clip || []; setPasteMenu(false); setClip(null); await runQueue(q); };
+  const pasteOne = async (task) => { setPasteMenu(false); setClip((q) => (q || []).filter((t) => t.id !== task.id)); await runQueue([task]); };
   const dropTask = (id) => setClip((q) => { const n = (q || []).filter((t) => t.id !== id); return n.length ? n : null; });
 
   /* три точки тулбара: скрыть / закрепить */
@@ -446,7 +483,7 @@ export default function App() {
               <div style={{ ...S.menu, position: "fixed", top: 46, left: 4, zIndex: 1200 }}>
                 <div style={S.menuItem} onClick={saveAllTabs}><span style={{ color: ACC, display: "flex" }}><Svg d={I.pin} size={20} /></span>Сохранить вкладки</div>
                 <div style={{ height: 1, background: LINE }} />
-                <div style={S.menuItem} onClick={startupHere}><span style={{ color: GOLD, display: "flex" }}><Svg d={I.star} size={20} /></span>Запуск при открытии</div>
+                <div style={S.menuItem} onClick={startupHere}><span style={{ color: GOLD, display: "flex" }}><Svg d={I.home} size={20} /></span>Запуск при открытии</div>
                 <div style={{ height: 1, background: LINE }} />
                 <div style={S.menuItem} onClick={resetTabs}><span style={{ color: SUB, display: "flex" }}><Svg d={I.x} size={20} /></span>Сбросить вкладки</div>
                 {tabs.length > 1 && <>
@@ -511,7 +548,7 @@ export default function App() {
             <button style={S.accessBtn} onClick={() => Apps.requestAllFiles().catch(() => {})}>Дать доступ</button>
           </div>
         )}
-        <div key={active} style={{ ...S.slideWrap, marginTop: 0, animation: slide ? `fm-in-${slide > 0 ? "r" : "l"} .22s ease` : "none" }}>
+        <div key={active + "|" + path} style={{ ...S.slideWrap, marginTop: 0, animation: slide ? `fm-in-${slide > 0 ? "r" : "l"} .26s cubic-bezier(.4,0,.2,1)` : "none" }}>
           {loading && null}
           {error && <div style={{ ...S.note, color: RED }}>{error}<br /><span style={{ fontSize: 12 }}>Разрешите «Доступ ко всем файлам» в настройках приложения.</span></div>}
           {!loading && !error && visible.length === 0 && <div style={S.note}>Пусто</div>}
@@ -520,14 +557,15 @@ export default function App() {
             const renderRow = (e) => {
               const isSel = sel.has(e.name), hid = isHidden(e);
               const isDir = e.type === "directory";
-              const ic = isDir ? { d: I.folder, c: ACC } : fileIcon(e.name);
+              const sf = isDir ? SYS_FOLDERS[e.name.toLowerCase()] : null;
+              const ic = isDir ? { d: (sf && sf.d) || I.folder, c: (sf && sf.c) || ACC } : fileIcon(e.name);
               const pinned = meta.pinTop.has(keyOf(e.name)) || meta.pinBot.has(keyOf(e.name));
               return (
                 <div key={e.name} style={{ ...S.row, ...(isDir ? S.rowDir : {}), ...(isSel ? S.rowSel : {}), opacity: hid ? 0.5 : 1 }}
                   onPointerDown={(ev) => rDown(ev, e)} onPointerMove={rMove} onPointerUp={() => rUp(e)} onPointerCancel={() => clearTimeout(lpTimer.current)}>
-                  <span style={{ ...S.iconWrap, color: ic.c, background: "rgba(255,255,255,.05)" }}
+                  <span style={{ ...S.iconWrap, color: ic.c, background: isSel ? "transparent" : "rgba(255,255,255,.05)" }}
                     onPointerDown={(ev) => ev.stopPropagation()} onPointerUp={(ev) => { ev.stopPropagation(); clearTimeout(lpTimer.current); toggle(e.name); }}>
-                    {isSel ? <span style={S.cbk}><Svg d={I.check} size={16} /></span> : <Svg d={ic.d} size={24} />}
+                    {isSel ? <span style={S.cbk}><Svg d={I.check} size={14} /></span> : <Svg d={ic.d} size={24} />}
                   </span>
                   <span style={S.rowMid}>
                     <span style={{ ...S.name, fontWeight: isDir ? 600 : 400, display: "flex", alignItems: "center", gap: 6 }}>
@@ -542,7 +580,7 @@ export default function App() {
               );
             };
             const firstFile = visible.findIndex((e) => e.type !== "directory");
-            const startupPath = (tabs.find((t) => t.startup) || {}).path;
+            const startupPath = (tabs.find((t) => t.startup) || {}).startupPath;
             visLen.current = visible.length;
             return visible.map((e, i) => (
               <React.Fragment key={e.name}>
@@ -565,8 +603,8 @@ export default function App() {
       {selMode ? (
         <nav style={{ ...S.bottom, justifyContent: "flex-start" }}>
           <div style={S.selCount}>
-            <span style={{ fontSize: 15, fontWeight: 700, color: "#fff", lineHeight: 1 }}>{sel.size}</span>
-            <span style={{ fontSize: 10, color: SUB, lineHeight: 1.3 }}>{fmtSizeShort([...sel].reduce((a, n) => { const e = byName(n); return a + (e && e.type !== "directory" ? e.size || 0 : 0); }, 0))}</span>
+            <span style={{ fontSize: 14, fontWeight: 700, color: "#fff", lineHeight: 1 }}>{sel.size}</span>
+            <span style={{ fontSize: 9, color: SUB, lineHeight: 1.2, marginTop: 2, whiteSpace: "nowrap" }}>{fmtSizeShort([...sel].reduce((a, n) => { const e = byName(n); return a + (e && e.type !== "directory" ? e.size || 0 : 0); }, 0))}</span>
           </div>
           <div style={{ display: "flex", overflowX: "auto", flex: 1, justifyContent: "flex-end" }}>
             <Btn onClick={exitSel} icon={I.x} label="Отмена" flexNone />
@@ -826,11 +864,39 @@ export default function App() {
       )}
 
       {/* МЕНЮ ЗАДАЧ — конец */}
+      {/* ПРОГРЕСС КОПИРОВАНИЯ */}
+      {progress && !progress.bg && (
+        <div style={S.backdrop}>
+          <div style={{ ...S.sheet, paddingBottom: 24 }} onClick={(e) => e.stopPropagation()}>
+            <div style={S.sheetTitle}>{progress.mode === "del" ? "Удаление" : progress.mode === "cut" ? "Перемещение" : "Копирование"} {progress.current}/{progress.total}</div>
+            <div style={{ height: 8, background: ROW2, borderRadius: 4, overflow: "hidden", margin: "6px 0 12px" }}>
+              <div style={{ height: "100%", width: (progress.total ? Math.round(progress.current / progress.total * 100) : 0) + "%", background: ACC, transition: "width .15s" }} />
+            </div>
+            <div style={{ fontSize: 13, color: SUB, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginBottom: 16 }}>{progress.name}</div>
+            <div style={{ display: "flex", gap: 10 }}>
+              <button style={{ ...S.sheetGhost, flex: 1, borderColor: LINE }} onClick={() => setProgress((p) => ({ ...p, bg: true }))}>Свернуть</button>
+              <button style={{ ...S.sheetGhost, flex: 1, color: RED, borderColor: LINE }} onClick={() => { cancelRef.current = true; }}>Отменить</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {progress && progress.bg && (
+        <div onClick={() => setProgress((p) => ({ ...p, bg: false }))} style={{ position: "fixed", left: 12, right: 12, bottom: "calc(78px + env(safe-area-inset-bottom))", zIndex: 1400, background: BAR, border: "1px solid " + LINE, borderRadius: 14, padding: "10px 14px", display: "flex", alignItems: "center", gap: 10, boxShadow: "0 4px 16px rgba(0,0,0,.4)" }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, color: TXT }}>{progress.mode === "del" ? "Удаление" : progress.mode === "cut" ? "Перемещение" : "Копирование"} {progress.current}/{progress.total}</div>
+            <div style={{ height: 4, background: ROW2, borderRadius: 2, overflow: "hidden", marginTop: 5 }}>
+              <div style={{ height: "100%", width: (progress.total ? Math.round(progress.current / progress.total * 100) : 0) + "%", background: ACC }} />
+            </div>
+          </div>
+          <span onClick={(e) => { e.stopPropagation(); cancelRef.current = true; }} style={{ color: RED, display: "flex", padding: 4 }}><Svg d={I.x} size={18} /></span>
+        </div>
+      )}
+
       {toast && <div style={S.toast}>{toast}</div>}
 
       <style>{`
-        @keyframes fm-in-r{from{transform:translateX(14%);opacity:.4}to{transform:none;opacity:1}}
-        @keyframes fm-in-l{from{transform:translateX(-14%);opacity:.4}to{transform:none;opacity:1}}
+        @keyframes fm-in-r{from{transform:translateX(100%)}to{transform:translateX(0)}}
+        @keyframes fm-in-l{from{transform:translateX(-100%)}to{transform:translateX(0)}}
         @keyframes dropGrow{from{opacity:0;transform:scale(.88)}to{opacity:1;transform:scale(1)}}
         @keyframes sUp{from{transform:translateY(60px);opacity:0}to{transform:translateY(0);opacity:1}}
         @keyframes fS{from{opacity:0}to{opacity:1}}
@@ -886,7 +952,7 @@ const S = {
   row: { display: "flex", alignItems: "center", gap: 14, padding: "10px 14px", touchAction: "pan-y", borderBottom: "1px solid rgba(255,255,255,.08)" },
   sep: { height: 1, background: "rgba(255,255,255,.10)", margin: "4px 0" },
   iconWrap: { width: 44, height: 44, borderRadius: 13, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
-  cbk: { width: 26, height: 26, borderRadius: 7, background: ACC, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center" },
+  cbk: { width: 22, height: 22, borderRadius: 6, background: ACC, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center" },
   rowMid: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 },
   rowDate: { fontSize: 12, color: SUB },
   rowSize: { fontSize: 12.5, color: SUB, flexShrink: 0, marginLeft: 6 },
@@ -901,7 +967,7 @@ const S = {
   searchClose: { border: "none", background: "transparent", color: SUB, fontSize: 24, width: 40 },
   bottom: { display: "flex", alignItems: "center", background: BAR, flexShrink: 0, borderRadius: 26, margin: "4px 8px calc(8px + env(safe-area-inset-bottom))" },
   btn: { border: "none", background: "transparent", padding: "6px 6px 7px", display: "flex", flexDirection: "column", alignItems: "center", gap: 2 },
-  selCount: { minWidth: 36, padding: "0 8px", margin: "0 6px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  selCount: { width: 52, padding: "0 2px", marginRight: 4, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", flexShrink: 0 },
   btnLabel: { fontSize: 10, color: SUB, whiteSpace: "nowrap" },
   overlay: { position: "fixed", inset: 0, zIndex: 8 },
   menu: { position: "absolute", zIndex: 9, background: BAR, borderRadius: 12, overflow: "hidden", border: "1px solid " + LINE, boxShadow: "0 8px 32px rgba(0,0,0,.6)", minWidth: 200, animation: "dropGrow .2s cubic-bezier(.2,.9,.3,1.2)" },
