@@ -44,6 +44,9 @@ const splitExt = (name, isDir) => {
   return { base: name.slice(0, i), ext: name.slice(i + 1) };
 };
 const fmtSize = (b) => { if (b == null) return "—"; const u = ["Б", "КБ", "МБ", "ГБ"]; let i = 0, n = b; while (n >= 1024 && i < 3) { n /= 1024; i++; } return (i ? n.toFixed(1) : n) + " " + u[i] + (i ? " (" + b.toLocaleString("ru") + " Б)" : ""); };
+const fmtShort = (b) => { if (b == null) return ""; const u = ["Б", "КБ", "МБ", "ГБ"]; let i = 0, n = b; while (n >= 1024 && i < 3) { n /= 1024; i++; } return (i ? n.toFixed(1) : n) + " " + u[i]; };
+const fmtSizeShort = (b) => { if (b == null) return ""; const u = ["Б", "КБ", "МБ", "ГБ"]; let i = 0, n = b; while (n >= 1024 && i < 3) { n /= 1024; i++; } return (i ? n.toFixed(1) : n) + " " + u[i]; };
+const fmtDate = (ms) => { if (!ms) return ""; const d = new Date(ms); return d.toLocaleDateString("ru") + " " + d.toLocaleTimeString("ru", { hour: "2-digit", minute: "2-digit" }); };
 const ago = (ms) => { if (!ms) return "—"; const d = new Date(ms), diff = (Date.now() - ms) / 60000; const rel = diff < 1 ? "только что" : diff < 60 ? Math.floor(diff) + " мин назад" : diff < 1440 ? Math.floor(diff / 60) + " ч назад" : Math.floor(diff / 1440) + " дн назад"; const p = (n) => String(n).padStart(2, "0"); return `${p(d.getHours())}:${p(d.getMinutes())}, ${p(d.getDate())}.${p(d.getMonth() + 1)}.${String(d.getFullYear()).slice(2)} · ${rel}`; };
 
 const MIME = { txt: "text/plain", md: "text/plain", log: "text/plain", csv: "text/csv", html: "text/html", json: "application/json", xml: "text/xml", pdf: "application/pdf", jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", gif: "image/gif", webp: "image/webp", bmp: "image/bmp", svg: "image/svg+xml", mp4: "video/mp4", mkv: "video/x-matroska", avi: "video/x-msvideo", mov: "video/quicktime", webm: "video/webm", "3gp": "video/3gpp", mp3: "audio/mpeg", wav: "audio/wav", ogg: "audio/ogg", flac: "audio/flac", m4a: "audio/mp4", aac: "audio/aac", zip: "application/zip", rar: "application/vnd.rar", "7z": "application/x-7z-compressed", apk: "application/vnd.android.package-archive" };
@@ -52,6 +55,7 @@ const mimeOf = (name) => MIME[(name.split(".").pop() || "").toLowerCase()] || "*
 const I = {
   back: <path d="M15 18l-6-6 6-6" />,
   search: <><circle cx="11" cy="11" r="7" /><path d="M21 21l-4-4" /></>,
+  check: <path d="M5 12l4 4 10-11" />,
   selectAll: <><rect x="4" y="4" width="16" height="16" rx="4" /><path d="M8.5 12l2.5 2.5 4.5-5" /></>,
   chev: <path d="M6 9l6 6 6-6" />,
   refresh: <><path d="M21 12a9 9 0 1 1-2.6-6.4" /><path d="M21 4v5h-5" /></>,
@@ -72,7 +76,7 @@ const I = {
   folder: <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />,
   file: <><path d="M6 2h9l5 5v15H6z" /><path d="M14 2v6h6" /></>,
   txt: <><path d="M6 2h9l5 5v15H6z" /><path d="M14 2v6h6" /><path d="M9 13h6M9 16h6M9 10h3" /></>,
-  pdf: <><path d="M6 2h9l5 5v15H6z" /><path d="M14 2v6h6" /><text x="11.5" y="18.5" fontSize="6.5" fontWeight="700" textAnchor="middle" fill="currentColor" stroke="none">PDF</text></>,
+  pdf: <><path d="M6 2h9l5 5v15H6z" /><path d="M14 2v6h6" /><rect x="8" y="13.5" width="8" height="5" rx="1.2" fill="currentColor" stroke="none" /><path d="M9.6 16h4.8" stroke="#1C140C" strokeWidth="1.1" /></>,
   apk: <><path d="M7 9a5 5 0 0 1 10 0v1H7z" /><path d="M8.5 6.5L7 4M15.5 6.5L17 4" /><circle cx="10" cy="7.4" r=".6" fill="currentColor" stroke="none" /><circle cx="14" cy="7.4" r=".6" fill="currentColor" stroke="none" /><rect x="7" y="11" width="10" height="9" rx="2" /></>,
   lnk: <><rect x="4" y="4" width="16" height="16" rx="2" /><path d="M9 15l6-6M10.5 9H15v4.5" /></>,
   img: <><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><path d="M21 15l-5-5L5 21" /></>,
@@ -165,6 +169,15 @@ export default function App() {
 
   useEffect(() => { Filesystem.requestPermissions().catch(() => {}); checkAccess(); }, []);
   const checkAccess = async () => { try { const r = await Apps.hasAllFiles(); setAllFiles(!!r.granted); } catch { setAllFiles(true); } };
+  const silentRefresh = useCallback(async () => {
+    try {
+      const u = await Filesystem.getUri({ path, directory: DIR });
+      let files;
+      try { const r = await Apps.list({ uri: u.uri }); files = r.files; } catch { return; }
+      setEntries((prev) => { const a = JSON.stringify((prev || []).map((x) => x.name + x.size + x.mtime)); const b = JSON.stringify((files || []).map((x) => x.name + x.size + x.mtime)); return a === b ? prev : (files || []); });
+    } catch {}
+  }, [path]);
+  useEffect(() => { const id = setInterval(silentRefresh, 2500); return () => clearInterval(id); }, [silentRefresh]);
   useEffect(() => { list(); exitSel(); setQuery(null); /* eslint-disable-next-line */ }, [active, path]);
   useEffect(() => { let h; CapApp.addListener("resume", () => list()).then((l) => (h = l)); return () => h && h.remove(); }, [list]);
   useEffect(() => {
@@ -416,9 +429,15 @@ export default function App() {
           : <span style={{ color: SUB }}>/storage</span>}
       </div>
 
+      {!allFiles && (
+        <div style={S.accessBar}>
+          <div style={{ flex: 1, fontSize: 13, lineHeight: 1.4 }}>Нет доступа ко всем файлам — архивы, PDF и APK не видны.</div>
+          <button style={S.accessBtn} onClick={() => Apps.requestAllFiles().catch(() => {})}>Дать доступ</button>
+        </div>
+      )}
       {/* СПИСОК */}
       <main style={S.list} onTouchStart={onTS} onTouchMove={onTM}>
-        {!allFiles && (
+        {false && (
           <div style={S.accessBar}>
             <div style={{ flex: 1, fontSize: 13, lineHeight: 1.4 }}>Нет доступа ко всем файлам — архивы, PDF и APK не видны.</div>
             <button style={S.accessBtn} onClick={() => Apps.requestAllFiles().catch(() => {})}>Дать доступ</button>
@@ -434,15 +453,18 @@ export default function App() {
             const isDir = e.type === "directory";
             const pinned = meta.pinTop.has(keyOf(e.name)) || meta.pinBot.has(keyOf(e.name));
             return (
-              <div key={e.name} style={{ ...S.row, ...(isDir ? S.rowDir : {}), ...(isSel ? S.rowSel : {}), opacity: hid ? 0.5 : 1 }}
+              <div key={e.name} style={{ ...S.row, ...(isSel ? S.rowSel : {}), opacity: hid ? 0.5 : 1 }}
                 onPointerDown={(ev) => rDown(ev, e)} onPointerMove={rMove} onPointerUp={() => rUp(e)} onPointerCancel={() => clearTimeout(lpTimer.current)}>
-                <span style={{ color: isSel ? ACC : ic.c, display: "flex" }}
+                <span style={{ ...S.iconWrap, color: isSel ? "#fff" : ic.c, background: isSel ? ACC : "rgba(255,255,255,.05)" }}
                   onPointerDown={(ev) => ev.stopPropagation()} onPointerUp={(ev) => { ev.stopPropagation(); clearTimeout(lpTimer.current); toggle(e.name); }}>
-                  {isSel ? <span style={S.checkOn}>✓</span> : <Svg d={ic.d} size={25} />}
+                  {isSel ? <Svg d={I.check} size={22} /> : <Svg d={ic.d} size={24} />}
                 </span>
-                <span style={{ ...S.name, fontWeight: isDir ? 600 : 400 }}>{e.name}</span>
-                {isDir && e.count != null && <span style={S.cnt}>{e.count}</span>}
-                {pinned && <span style={{ color: SUB, display: "flex" }}><Svg d={meta.pinTop.has(keyOf(e.name)) ? I.pinT : I.pinB} size={15} /></span>}
+                <span style={S.rowMid}>
+                  <span style={{ ...S.name, fontWeight: isDir ? 600 : 400 }}>{e.name}</span>
+                  {e.mtime ? <span style={S.rowDate}>{fmtDate(e.mtime)}</span> : null}
+                </span>
+                {pinned && <span style={{ color: SUB, display: "flex" }}><Svg d={meta.pinTop.has(keyOf(e.name)) ? I.pinT : I.pinB} size={14} /></span>}
+                <span style={S.rowSize}>{isDir ? (e.count != null ? "(" + e.count + ")" : "") : fmtSizeShort(e.size)}</span>
               </div>
             );
           })}
@@ -465,8 +487,8 @@ export default function App() {
             <Btn onClick={exitSel} icon={I.x} label="Отмена" flexNone />
             <Btn onClick={() => setProps(one)} icon={I.info} label="Свойства" flexNone disabled={sel.size !== 1} />
             <Btn onClick={() => grab("cut")} icon={I.cut} label="Вырезать" flexNone />
-            <Btn onClick={() => grab("copy")} icon={I.copy} label="Копир." flexNone />
             <Btn onClick={(ev) => { const r = ev.currentTarget.getBoundingClientRect(); setConfirmDel({ left: r.left, top: r.top }); }} icon={I.trash} label="Удалить" red flexNone />
+            <Btn onClick={() => grab("copy")} icon={I.copy} label="Копир." flexNone />
             <Btn onClick={() => { const e = one; const sp = splitExt(e.name, e.type === "directory"); setSheet({ kind: "rename", old: e.name, base: sp.base, ext: sp.ext, editExt: false }); }} icon={I.rename} label="Имя" flexNone disabled={sel.size !== 1} />
             <Btn onClick={() => setSelMenu((v) => !v)} icon={I.dots} label="Ещё" flexNone />
           </div>
@@ -739,26 +761,30 @@ function Btn({ onClick, icon, text, label, accent, red, flexNone, disabled }) {
 
 const S = {
   app: { display: "flex", flexDirection: "column", height: "100vh", background: BG, color: TXT, fontFamily: "system-ui,-apple-system,Roboto,sans-serif", overflow: "hidden" },
-  tabsbar: { display: "flex", alignItems: "center", background: BAR, flexShrink: 0, height: 50, borderRadius: "0 0 16px 16px" },
+  tabsbar: { display: "flex", alignItems: "center", background: BAR, flexShrink: 0, height: 50, margin: "8px 8px 4px", borderRadius: 24 },
   tabs: { display: "flex", overflowX: "auto", flex: 1, alignItems: "center", gap: 6, padding: "0 4px", height: "100%" },
   tab: { display: "flex", alignItems: "center", gap: 6, padding: "0 12px", height: 34, borderRadius: 17, fontSize: 13.5, color: SUB, whiteSpace: "nowrap", background: "#241A11", flexShrink: 0 },
-  tabActive: { color: "#fff", background: ACC },
+  tabActive: { color: "#fff", background: ACC, fontWeight: 600, boxShadow: "0 2px 10px rgba(239,108,0,.45)" },
   tabX: { fontSize: 17, color: SUB, padding: "0 2px" },
   hbtn: { border: "none", background: "transparent", color: TXT, width: 40, height: 48, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" },
   crumb: { padding: "8px 16px", fontSize: 13, background: BG, flexShrink: 0, borderBottom: "1px solid #241A11", overflow: "hidden", whiteSpace: "nowrap" },
   list: { flex: 1, overflowY: "auto", overflowX: "hidden", display: "flex", flexDirection: "column" },
   slideWrap: { marginTop: "auto" },
   note: { color: SUB, textAlign: "center", padding: "60px 24px", lineHeight: 1.6 },
-  row: { display: "flex", alignItems: "center", gap: 14, padding: "12px 16px", margin: "3px 8px", borderRadius: 12, background: ROW2, touchAction: "pan-y" },
+  row: { display: "flex", alignItems: "center", gap: 14, padding: "9px 14px", touchAction: "pan-y", borderBottom: "1px solid rgba(255,255,255,.04)" },
+  iconWrap: { width: 46, height: 46, borderRadius: 23, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  rowMid: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 },
+  rowDate: { fontSize: 12, color: SUB },
+  rowSize: { fontSize: 12.5, color: SUB, flexShrink: 0, marginLeft: 6 },
   rowDir: { background: "#2C2114" },
   cnt: { background: "#43331F", color: GOLD, fontSize: 12, fontWeight: 700, padding: "2px 9px", borderRadius: 10, flexShrink: 0 },
-  rowSel: { background: "#3A2A18", outline: "1px solid " + ACC },
+  rowSel: { background: "#332417" },
   name: { flex: 1, fontSize: 15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
   checkOn: { width: 26, height: 26, borderRadius: 13, background: ACC, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15 },
   searchBar: { display: "flex", alignItems: "center", background: ROW2, padding: 8, gap: 8, flexShrink: 0 },
   searchInput: { flex: 1, padding: "10px 12px", borderRadius: 8, border: "1px solid " + LINE, background: BAR, color: TXT, fontSize: 15, outline: "none" },
   searchClose: { border: "none", background: "transparent", color: SUB, fontSize: 24, width: 40 },
-  bottom: { display: "flex", alignItems: "center", background: BAR, paddingBottom: "env(safe-area-inset-bottom)", flexShrink: 0, borderRadius: "16px 16px 0 0" },
+  bottom: { display: "flex", alignItems: "center", background: BAR, flexShrink: 0, borderRadius: 26, margin: "4px 8px calc(8px + env(safe-area-inset-bottom))" },
   btn: { border: "none", background: "transparent", padding: "6px 6px 7px", display: "flex", flexDirection: "column", alignItems: "center", gap: 2 },
   selCount: { width: 28, height: 28, margin: "0 10px", background: ACC, color: "#fff", borderRadius: 14, fontWeight: 700, fontSize: 13, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
   btnLabel: { fontSize: 10, color: SUB, whiteSpace: "nowrap" },
