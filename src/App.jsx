@@ -70,6 +70,12 @@ const I = {
   cam: <><path d="M3 8a2 2 0 0 1 2-2h2l1.5-2h7L19 6h0a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><circle cx="12" cy="12.5" r="3.5" /></>,
   android: <><path d="M7 9a5 5 0 0 1 10 0v1H7z" /><path d="M8.5 6.5L7 4M15.5 6.5L17 4" /><rect x="7" y="11" width="10" height="8" rx="2" /></>,
   doc2: <><path d="M6 2h9l5 5v15H6z" /><path d="M14 2v6h6" /><path d="M9 13h6M9 16h6" /></>,
+  gamepad: <><path d="M7 11h2M8 10v2M15 11h.01M17 12h.01" /><rect x="2" y="7" width="20" height="11" rx="5" /></>,
+  win: <><rect x="3" y="4" width="18" height="16" rx="1" /><path d="M3 9h18M11 9v11" /></>,
+  fontA: <><path d="M5 19l5-13 5 13M7 14h6" /><path d="M17 19V9M17 9c2 0 3 1 3 2s-1 2-3 2" /></>,
+  launcher: <><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></>,
+  book: <><path d="M4 4h11a3 3 0 0 1 3 3v13H7a3 3 0 0 0-3 3z" /><path d="M4 4v16" /></>,
+  tool: <><path d="M14 7a4 4 0 0 1-5 5l-5 5 2 2 5-5a4 4 0 0 0 5-5z" /><path d="M14 7l3-3 3 3-3 3z" /></>,
   home: <><path d="M3 11l9-7 9 7" /><path d="M5 10v9a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-9" /><path d="M10 20v-6h4v6" /></>,
   selectAll: <><rect x="4" y="4" width="16" height="16" rx="4" /><path d="M8.5 12l2.5 2.5 4.5-5" /></>,
   chev: <path d="M6 9l6 6 6-6" />,
@@ -120,8 +126,15 @@ const SYS_FOLDERS = {
   podcasts: { d: I.mic, c: "#E3B14F" }, recordings: { d: I.mic, c: "#E3B14F" },
   documents: { d: I.doc2, c: "#5AA9E6" }, books: { d: I.doc2, c: "#5AA9E6" }, audiobooks: { d: I.audio, c: "#E36FB0" },
   android: { d: I.android, c: "#A4C639" }, data: { d: I.android, c: "#A4C639" }, obb: { d: I.android, c: "#A4C639" },
-  fonts: { d: I.code, c: "#B0A498" }, games: { d: I.apk, c: "#A4C639" }, apk: { d: I.apk, c: "#A4C639" },
+  apk: { d: I.apk, c: "#A4C639" },
   media: { d: I.img, c: "#6FD3A8" }, backups: { d: I.archive, c: "#E3B14F" }, backup: { d: I.archive, c: "#E3B14F" },
+  bannerhub: { d: I.img, c: "#E36FB0" }, fonts: { d: I.fontA, c: "#C9A227" }, books: { d: I.book, c: "#C98A4B" }, audiobooks: { d: I.book, c: "#C98A4B" },
+  games: { d: I.gamepad, c: "#A4C639" }, gamehub: { d: I.gamepad, c: "#A4C639" }, emu: { d: I.gamepad, c: "#A4C639" }, arcade: { d: I.gamepad, c: "#A4C639" }, mame: { d: I.gamepad, c: "#A4C639" },
+  retroarch: { d: I.gamepad, c: "#7C5CFF" }, winlator: { d: I.win, c: "#5AA9E6" }, windows: { d: I.win, c: "#5AA9E6" },
+  switch: { d: I.gamepad, c: "#E60012" }, "nintendo switch": { d: I.gamepad, c: "#E60012" }, nes: { d: I.gamepad, c: "#E05252" }, dandy: { d: I.gamepad, c: "#E05252" },
+  sega: { d: I.gamepad, c: "#3A7BD5" }, ps1: { d: I.gamepad, c: "#5AA9E6" }, ps2: { d: I.gamepad, c: "#5AA9E6" }, ps3: { d: I.gamepad, c: "#5AA9E6" }, psp: { d: I.gamepad, c: "#5AA9E6" }, vita3k: { d: I.gamepad, c: "#5AA9E6" }, vita: { d: I.gamepad, c: "#5AA9E6" },
+  mt2: { d: I.tool, c: "#E3B14F" }, "mt manager": { d: I.tool, c: "#E3B14F" }, apkeditor: { d: I.tool, c: "#6FD3A8" },
+  "smart launcher": { d: I.launcher, c: "#5AA9E6" }, smartlauncher: { d: I.launcher, c: "#5AA9E6" }, "mx player": { d: I.video, c: "#3A7BD5" }, mxplayer: { d: I.video, c: "#3A7BD5" },
 };
 const fileIcon = (name) => {
   const ext = (name.split(".").pop() || "").toLowerCase();
@@ -199,22 +212,22 @@ export default function App() {
   useEffect(() => { Filesystem.requestPermissions().catch(() => {}); checkAccess(); }, []);
   const checkAccess = async () => { try { const r = await Apps.hasAllFiles(); setAllFiles(!!r.granted); } catch { setAllFiles(true); } };
   const listRef = useRef(null);
-  const [padTop, setPadTop] = useState(0);
+  const spacerRef = useRef(null);
   const visLen = useRef(0);
   const scrollPos = useRef({});
   const pathKeyRef = useRef("");
   pathKeyRef.current = active + "|" + path;
   useLayoutEffect(() => {
-    const el = listRef.current; if (!el) return;
+    const el = listRef.current, sp = spacerRef.current; if (!el || !sp) return;
     const ch = el.clientHeight, rowH = 72, n = visLen.current;
     const pt = Math.max(0, ch - Math.min(4, n) * rowH);
-    if (pt !== padTop) { setPadTop(pt); return; }
+    sp.style.height = pt + "px";
     const key = active + "|" + path;
     const saved = scrollPos.current[key];
     if (saved != null) { el.scrollTop = saved; return; }
     const contentH = el.scrollHeight - pt;
     el.scrollTop = contentH >= ch ? pt : el.scrollHeight - ch;
-  }, [path, active, entries, padTop]);
+  }, [path, active, entries]);
   const onListScroll = (e) => { scrollPos.current[pathKeyRef.current] = e.currentTarget.scrollTop; };
   const silentRefresh = useCallback(async () => {
     try {
@@ -247,7 +260,7 @@ export default function App() {
 
   const exitSel = () => { setSel(new Set()); setSelMode(false); setConfirmDel(null); setSelMenu(false); };
   const setTabPath = (p) => setTabs((ts) => ts.map((x, i) => (i === active ? { ...x, path: p } : x)));
-  const goUp = () => { if (path) { setSlide(-1); setTimeout(() => setSlide(0), 220); setTabPath(parent(path)); } };
+  const goUp = () => { if (path) { setSlide(-1); setTimeout(() => setSlide(0), 300); setTabPath(parent(path)); } };
   const closeTab = (i) => { if (tabs.length === 1) return; const t = tabs.filter((_, idx) => idx !== i); persist(t); setActive(Math.max(0, Math.min(active, t.length - 1))); };
 
   const backRef = useRef(() => {});
@@ -335,12 +348,12 @@ export default function App() {
   const resetDefault = () => { const defs = loadMap(DEFKEY); delete defs[openMenu.mime]; saveMap(DEFKEY, defs); showToast("Привязка сброшена"); };
   const open = (e) => {
     if (selMode) { toggle(e.name); return; }
-    if (e.type === "directory") { setSlide(1); setTimeout(() => setSlide(0), 220); setTabPath(join(path, e.name)); }
+    if (e.type === "directory") { setSlide(1); setTimeout(() => setSlide(0), 300); setTabPath(join(path, e.name)); }
     else openExternal(e);
   };
 
   const addTab = () => { const id = Date.now(); const t = [...tabs, { id, path: "" }]; persist(t); setActive(t.length - 1); };
-  const switchTab = (dir) => { const ni = active + dir; if (ni < 0 || ni >= tabs.length) return; setSlide(dir); setActive(ni); setTimeout(() => setSlide(0), 220); };
+  const switchTab = (dir) => { const ni = active + dir; if (ni < 0 || ni >= tabs.length) return; setSlide(dir); setActive(ni); setTimeout(() => setSlide(0), 300); };
   const sx = useRef(0), sy = useRef(0), swiped = useRef(false);
   const onTS = (e) => { sx.current = e.touches[0].clientX; sy.current = e.touches[0].clientY; swiped.current = false; };
   const onTM = (e) => { const dx = e.touches[0].clientX - sx.current, dy = e.touches[0].clientY - sy.current; if (!swiped.current && Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 1.5) { swiped.current = true; switchTab(dx > 0 ? -1 : 1); } };
@@ -358,7 +371,7 @@ export default function App() {
       if (target !== d.from && target >= 0) { moveTab(d.from, target); d.from = target; }
     }
   };
-  const onTabUp = (i) => { const d = tabDrag.current; if (d.active) { d.active = false; persistCurrent(); } else { const dir = i > active ? 1 : i < active ? -1 : 0; if (dir) { setSlide(dir); setTimeout(() => setSlide(0), 220); } setActive(i); } d.from = -1; };
+  const onTabUp = (i) => { const d = tabDrag.current; if (d.active) { d.active = false; persistCurrent(); } else { const dir = i > active ? 1 : i < active ? -1 : 0; if (dir) { setSlide(dir); setTimeout(() => setSlide(0), 300); } setActive(i); } d.from = -1; };
 
   const saveAllTabs = () => { setTabsMenu(false); const t = tabs.map((x) => ({ ...x, saved: true })); persist(t); showToast("Вкладки сохранены"); };
   const startupHere = () => { setTabsMenu(false); const t = tabs.map((x, i) => ({ ...x, startup: i === active, startupPath: i === active ? path : x.startupPath, saved: i === active ? true : x.saved })); persist(t); showToast("Запуск при открытии: " + (path ? baseName(path) : "Storage")); };
@@ -548,11 +561,11 @@ export default function App() {
             <button style={S.accessBtn} onClick={() => Apps.requestAllFiles().catch(() => {})}>Дать доступ</button>
           </div>
         )}
-        <div key={active + "|" + path} style={{ ...S.slideWrap, marginTop: 0, animation: slide ? `fm-in-${slide > 0 ? "r" : "l"} .26s cubic-bezier(.4,0,.2,1)` : "none" }}>
+        <div key={active + "|" + path} style={{ ...S.slideWrap, marginTop: 0, willChange: "transform", animation: slide ? `fm-in-${slide > 0 ? "r" : "l"} .28s cubic-bezier(.22,.61,.36,1)` : "none" }}>
           {loading && null}
           {error && <div style={{ ...S.note, color: RED }}>{error}<br /><span style={{ fontSize: 12 }}>Разрешите «Доступ ко всем файлам» в настройках приложения.</span></div>}
           {!loading && !error && visible.length === 0 && <div style={S.note}>Пусто</div>}
-          <div style={{ height: padTop }} />
+          <div ref={spacerRef} style={{ height: 0 }} />
           {(() => {
             const renderRow = (e) => {
               const isSel = sel.has(e.name), hid = isHidden(e);
@@ -568,9 +581,9 @@ export default function App() {
                     {isSel ? <span style={S.cbk}><Svg d={I.check} size={14} /></span> : <Svg d={ic.d} size={24} />}
                   </span>
                   <span style={S.rowMid}>
-                    <span style={{ ...S.name, fontWeight: isDir ? 600 : 400, display: "flex", alignItems: "center", gap: 6 }}>
-                      {isDir && startupPath != null && join(path, e.name) === startupPath && <span style={{ color: GOLD, display: "flex" }}><Svg d={I.home} size={15} /></span>}
-                      {e.name}
+                    <span style={{ ...S.name, fontWeight: isDir ? 600 : 400, display: "flex", alignItems: "center", gap: 7 }}>
+                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.name}</span>
+                      {isDir && startupPath != null && join(path, e.name) === startupPath && <span style={{ color: GOLD, display: "flex", flexShrink: 0 }}><Svg d={I.home} size={15} /></span>}
                     </span>
                     {!isDir && e.mtime ? <span style={S.rowDate}>{fmtDate(e.mtime)}</span> : null}
                   </span>
