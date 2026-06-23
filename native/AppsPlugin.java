@@ -9,6 +9,9 @@ import android.content.pm.PackageInfo;
 import android.content.pm.PackageInstaller;
 import android.content.pm.ResolveInfo;
 import android.os.FileObserver;
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.IntentSender;
 import android.graphics.Bitmap;
@@ -127,7 +130,22 @@ public class AppsPlugin extends Plugin {
                     o.put("name", k.getName());
                     boolean isDir = k.isDirectory();
                     o.put("type", isDir ? "directory" : "file");
-                    if (isDir) { File[] sub = k.listFiles(); o.put("count", sub != null ? sub.length : 0); }
+                    if (isDir) {
+                        File[] sub = k.listFiles();
+                        int cnt = 0; File thumb = null; long thumbTime = 0;
+                        if (sub != null) {
+                            for (File sf : sub) {
+                                if (sf.getName().startsWith(".")) continue;
+                                cnt++;
+                                String ln = sf.getName().toLowerCase();
+                                if (!sf.isDirectory() && (ln.endsWith(".jpg") || ln.endsWith(".jpeg") || ln.endsWith(".png") || ln.endsWith(".webp") || ln.endsWith(".gif") || ln.endsWith(".bmp"))) {
+                                    if (sf.lastModified() >= thumbTime) { thumbTime = sf.lastModified(); thumb = sf; }
+                                }
+                            }
+                        }
+                        o.put("count", cnt);
+                        if (thumb != null) o.put("thumb", "file://" + thumb.getAbsolutePath());
+                    }
                     o.put("size", k.length());
                     o.put("mtime", k.lastModified());
                     o.put("uri", "file://" + k.getAbsolutePath());
@@ -140,6 +158,26 @@ public class AppsPlugin extends Plugin {
         } catch (Exception e) {
             call.reject(e.getMessage());
         }
+    }
+
+    @PluginMethod
+    public void apkIcon(PluginCall call) {
+        String uriStr = call.getString("uri");
+        if (uriStr == null) { call.reject("no uri"); return; }
+        try {
+            File f = toFile(uriStr);
+            String p = f.getAbsolutePath();
+            PackageManager pm = getContext().getPackageManager();
+            android.content.pm.PackageInfo pi = pm.getPackageArchiveInfo(p, 0);
+            JSObject ret = new JSObject();
+            if (pi != null) {
+                pi.applicationInfo.sourceDir = p;
+                pi.applicationInfo.publicSourceDir = p;
+                Drawable icon = pi.applicationInfo.loadIcon(pm);
+                ret.put("icon", drawableToBase64(icon));
+            }
+            call.resolve(ret);
+        } catch (Exception e) { call.reject(e.getMessage()); }
     }
 
     @PluginMethod
@@ -242,6 +280,37 @@ public class AppsPlugin extends Plugin {
         if (Build.VERSION.SDK_INT >= 33) getContext().registerReceiver(r, filter, Context.RECEIVER_NOT_EXPORTED);
         else getContext().registerReceiver(r, filter);
         instRegistered = true;
+    }
+
+    @PluginMethod
+    public void notifyProgress(PluginCall call) {
+        String title = call.getString("title", "Операция");
+        int progress = call.getInt("progress", 0);
+        int max = call.getInt("max", 100);
+        String text = call.getString("text", "");
+        try {
+            NotificationManager nm = (NotificationManager) getContext().getSystemService(Context.NOTIFICATION_SERVICE);
+            String ch = "yev_progress";
+            Notification.Builder b;
+            if (Build.VERSION.SDK_INT >= 26) {
+                NotificationChannel c = new NotificationChannel(ch, "Операции с файлами", NotificationManager.IMPORTANCE_LOW);
+                nm.createNotificationChannel(c);
+                b = new Notification.Builder(getContext(), ch);
+            } else {
+                b = new Notification.Builder(getContext());
+            }
+            b.setContentTitle(title).setContentText(text)
+             .setSmallIcon(android.R.drawable.stat_sys_download)
+             .setProgress(max, progress, false).setOngoing(true).setOnlyAlertOnce(true);
+            nm.notify(777, b.build());
+            call.resolve();
+        } catch (Exception e) { call.reject(e.getMessage()); }
+    }
+
+    @PluginMethod
+    public void cancelNotify(PluginCall call) {
+        try { NotificationManager nm = (NotificationManager) getContext().getSystemService(Context.NOTIFICATION_SERVICE); nm.cancel(777); } catch (Exception ignored) {}
+        call.resolve();
     }
 
     @PluginMethod
