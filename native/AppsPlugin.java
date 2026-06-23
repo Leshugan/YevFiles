@@ -1,6 +1,9 @@
 package leshugan.fm;
 
 import android.content.Intent;
+import android.content.IntentFilter;
+import android.content.Context;
+import android.content.BroadcastReceiver;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageInstaller;
@@ -39,6 +42,7 @@ import java.util.List;
 public class AppsPlugin extends Plugin {
 
     private FileObserver observer;
+    private boolean instRegistered = false;
 
     @PluginMethod
     public void query(PluginCall call) {
@@ -185,6 +189,7 @@ public class AppsPlugin extends Plugin {
         try {
             File f = toFile(uriStr);
             if (!f.exists()) { call.reject("Файл не найден: " + f.getAbsolutePath()); return; }
+            registerInstallReceiver();
             PackageInstaller pi = getContext().getPackageManager().getPackageInstaller();
             PackageInstaller.SessionParams params = new PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL);
             int sessionId = pi.createSession(params);
@@ -197,8 +202,7 @@ public class AppsPlugin extends Plugin {
             session.fsync(out);
             in.close();
             out.close();
-            Intent statusIntent = new Intent(getContext(), getClass());
-            statusIntent.setAction("leshugan.fm.INSTALL_RESULT");
+            Intent statusIntent = new Intent("leshugan.fm.INSTALL_RESULT").setPackage(getContext().getPackageName());
             int flags = PendingIntent.FLAG_UPDATE_CURRENT;
             if (Build.VERSION.SDK_INT >= 31) flags |= PendingIntent.FLAG_MUTABLE;
             PendingIntent pending = PendingIntent.getBroadcast(getContext(), sessionId, statusIntent, flags);
@@ -221,6 +225,23 @@ public class AppsPlugin extends Plugin {
             getContext().startActivity(i);
             call.resolve();
         } catch (Exception e) { call.reject(e.getMessage()); }
+    }
+
+    private void registerInstallReceiver() {
+        if (instRegistered) return;
+        BroadcastReceiver r = new BroadcastReceiver() {
+            @Override public void onReceive(Context c, Intent i) {
+                int status = i.getIntExtra(PackageInstaller.EXTRA_STATUS, -1);
+                if (status == PackageInstaller.STATUS_PENDING_USER_ACTION) {
+                    Intent confirm = i.getParcelableExtra(Intent.EXTRA_INTENT);
+                    if (confirm != null) { confirm.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); c.startActivity(confirm); }
+                }
+            }
+        };
+        IntentFilter filter = new IntentFilter("leshugan.fm.INSTALL_RESULT");
+        if (Build.VERSION.SDK_INT >= 33) getContext().registerReceiver(r, filter, Context.RECEIVER_NOT_EXPORTED);
+        else getContext().registerReceiver(r, filter);
+        instRegistered = true;
     }
 
     @PluginMethod
