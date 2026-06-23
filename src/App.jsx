@@ -177,7 +177,18 @@ export default function App() {
   useEffect(() => { Filesystem.requestPermissions().catch(() => {}); checkAccess(); }, []);
   const checkAccess = async () => { try { const r = await Apps.hasAllFiles(); setAllFiles(!!r.granted); } catch { setAllFiles(true); } };
   const listRef = useRef(null);
-  useEffect(() => { const id = setTimeout(() => { const el = listRef.current; if (!el) return; el.scrollTop = window.innerHeight * 0.78; }, 60); return () => clearTimeout(id); }, [path, active]);
+  const [padTop, setPadTop] = useState(0);
+  useEffect(() => {
+    const el = listRef.current; if (!el) return;
+    const t = setTimeout(() => {
+      const ch = el.clientHeight;
+      const pt = Math.max(0, ch - 72);
+      const contentH = el.scrollHeight - padTop;
+      if (pt !== padTop) { setPadTop(pt); return; }
+      el.scrollTop = contentH >= ch ? pt : el.scrollHeight - ch;
+    }, 60);
+    return () => clearTimeout(t);
+  }, [path, active, entries, padTop]);
   const silentRefresh = useCallback(async () => {
     try {
       const u = await Filesystem.getUri({ path, directory: DIR });
@@ -471,6 +482,7 @@ export default function App() {
           {loading && null}
           {error && <div style={{ ...S.note, color: RED }}>{error}<br /><span style={{ fontSize: 12 }}>Разрешите «Доступ ко всем файлам» в настройках приложения.</span></div>}
           {!loading && !error && visible.length === 0 && <div style={S.note}>Пусто</div>}
+          <div style={{ height: padTop }} />
           {(() => {
             const renderRow = (e) => {
               const isSel = sel.has(e.name), hid = isHidden(e);
@@ -493,13 +505,7 @@ export default function App() {
                 </div>
               );
             };
-            const dirs = visible.filter((e) => e.type === "directory");
-            const files = visible.filter((e) => e.type !== "directory");
-            return (<>
-              {dirs.map(renderRow)}
-              <div style={{ flex: "1 0 auto" }} />
-              {files.map(renderRow)}
-            </>);
+            return visible.map(renderRow);
           })()}
         </div>
       </main>
@@ -669,8 +675,8 @@ export default function App() {
           <div style={S.crumb}>
             <span onClick={() => setArcView(null)} style={{ display: "inline-flex", alignItems: "center", gap: 6, color: ACC }}><Svg d={I.back} size={18} /> {arcView.name}</span>
           </div>
-          <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", paddingTop: "40vh" }}>
-            <div>
+          <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column" }}>
+            <div style={{ marginTop: "auto" }}>
               {arcView.entries.map((it, i) => {
                 const ic = fileIcon(it.name);
                 return (
@@ -806,7 +812,7 @@ const S = {
   hbtn: { border: "none", background: "transparent", color: TXT, width: 40, height: 48, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" },
   crumb: { padding: "8px 16px", fontSize: 13, background: BG, flexShrink: 0, borderBottom: "1px solid #241A11", overflow: "hidden", whiteSpace: "nowrap" },
   list: { flex: 1, overflowY: "auto", overflowX: "hidden", display: "flex", flexDirection: "column" },
-  slideWrap: { display: "flex", flexDirection: "column", minHeight: "calc(100dvh - 140px)" },
+  slideWrap: { display: "flex", flexDirection: "column" },
   note: { color: SUB, textAlign: "center", padding: "60px 24px", lineHeight: 1.6 },
   row: { display: "flex", alignItems: "center", gap: 14, padding: "9px 14px", touchAction: "pan-y", borderBottom: "1px solid rgba(255,255,255,.04)" },
   iconWrap: { width: 46, height: 46, borderRadius: 23, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
