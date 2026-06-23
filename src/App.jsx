@@ -525,9 +525,9 @@ export default function App() {
               return (
                 <div key={e.name} style={{ ...S.row, ...(isDir ? S.rowDir : {}), ...(isSel ? S.rowSel : {}), opacity: hid ? 0.5 : 1 }}
                   onPointerDown={(ev) => rDown(ev, e)} onPointerMove={rMove} onPointerUp={() => rUp(e)} onPointerCancel={() => clearTimeout(lpTimer.current)}>
-                  <span style={{ ...S.iconWrap, color: isSel ? ACC : ic.c, background: isSel ? "rgba(239,108,0,.16)" : "rgba(255,255,255,.05)", border: isSel ? "1px solid " + ACC : "1px solid transparent" }}
+                  <span style={{ ...S.iconWrap, color: ic.c, background: "rgba(255,255,255,.05)" }}
                     onPointerDown={(ev) => ev.stopPropagation()} onPointerUp={(ev) => { ev.stopPropagation(); clearTimeout(lpTimer.current); toggle(e.name); }}>
-                    {isSel ? <Svg d={I.check} size={22} /> : <Svg d={ic.d} size={24} />}
+                    {isSel ? <span style={S.cbk}><Svg d={I.check} size={16} /></span> : <Svg d={ic.d} size={24} />}
                   </span>
                   <span style={S.rowMid}>
                     <span style={{ ...S.name, fontWeight: isDir ? 600 : 400, display: "flex", alignItems: "center", gap: 6 }}>
@@ -546,7 +546,6 @@ export default function App() {
             visLen.current = visible.length;
             return visible.map((e, i) => (
               <React.Fragment key={e.name}>
-                {i === firstFile && firstFile > 0 && <div style={S.sep} />}
                 {renderRow(e)}
               </React.Fragment>
             ));
@@ -565,7 +564,10 @@ export default function App() {
       {/* НИЖНЯЯ ПАНЕЛЬ */}
       {selMode ? (
         <nav style={{ ...S.bottom, justifyContent: "flex-start" }}>
-          <div style={{ ...S.selCount }}>{sel.size}</div>
+          <div style={S.selCount}>
+            <span style={{ fontSize: 15, fontWeight: 700, color: "#fff", lineHeight: 1 }}>{sel.size}</span>
+            <span style={{ fontSize: 10, color: SUB, lineHeight: 1.3 }}>{fmtSizeShort([...sel].reduce((a, n) => { const e = byName(n); return a + (e && e.type !== "directory" ? e.size || 0 : 0); }, 0))}</span>
+          </div>
           <div style={{ display: "flex", overflowX: "auto", flex: 1, justifyContent: "flex-end" }}>
             <Btn onClick={exitSel} icon={I.x} label="Отмена" flexNone />
             <Btn onClick={() => setProps(one)} icon={I.info} label="Свойства" flexNone disabled={sel.size !== 1} />
@@ -881,13 +883,14 @@ const S = {
   list: { flex: 1, overflowY: "auto", overflowX: "hidden", display: "flex", flexDirection: "column" },
   slideWrap: { display: "flex", flexDirection: "column" },
   note: { color: SUB, textAlign: "center", padding: "60px 24px", lineHeight: 1.6 },
-  row: { display: "flex", alignItems: "center", gap: 14, padding: "9px 14px", touchAction: "pan-y", borderBottom: "1px solid rgba(255,255,255,.04)" },
+  row: { display: "flex", alignItems: "center", gap: 14, padding: "10px 14px", touchAction: "pan-y", borderBottom: "1px solid rgba(255,255,255,.08)" },
   sep: { height: 1, background: "rgba(255,255,255,.10)", margin: "4px 0" },
   iconWrap: { width: 44, height: 44, borderRadius: 13, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  cbk: { width: 26, height: 26, borderRadius: 7, background: ACC, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center" },
   rowMid: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 },
   rowDate: { fontSize: 12, color: SUB },
   rowSize: { fontSize: 12.5, color: SUB, flexShrink: 0, marginLeft: 6 },
-  rowDir: { background: "#2C2218", margin: "3px 8px", borderRadius: 14, boxShadow: "0 2px 8px rgba(0,0,0,.28)" },
+  rowDir: { background: "rgba(239,108,0,.04)" },
   arcScreen: { position: "fixed", top: "calc(62px + env(safe-area-inset-top))", left: 0, right: 0, bottom: "calc(64px + env(safe-area-inset-bottom))", zIndex: 1250, background: BG, display: "flex", flexDirection: "column" },
   cnt: { background: "#43331F", color: GOLD, fontSize: 12, fontWeight: 700, padding: "2px 9px", borderRadius: 10, flexShrink: 0 },
   rowSel: { background: "#332417" },
@@ -898,7 +901,7 @@ const S = {
   searchClose: { border: "none", background: "transparent", color: SUB, fontSize: 24, width: 40 },
   bottom: { display: "flex", alignItems: "center", background: BAR, flexShrink: 0, borderRadius: 26, margin: "4px 8px calc(8px + env(safe-area-inset-bottom))" },
   btn: { border: "none", background: "transparent", padding: "6px 6px 7px", display: "flex", flexDirection: "column", alignItems: "center", gap: 2 },
-  selCount: { minWidth: 28, height: 28, padding: "0 6px", margin: "0 10px", background: "rgba(239,108,0,.16)", border: "1px solid " + ACC, color: ACC, borderRadius: 9, fontWeight: 700, fontSize: 13, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  selCount: { minWidth: 36, padding: "0 8px", margin: "0 6px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", flexShrink: 0 },
   btnLabel: { fontSize: 10, color: SUB, whiteSpace: "nowrap" },
   overlay: { position: "fixed", inset: 0, zIndex: 8 },
   menu: { position: "absolute", zIndex: 9, background: BAR, borderRadius: 12, overflow: "hidden", border: "1px solid " + LINE, boxShadow: "0 8px 32px rgba(0,0,0,.6)", minWidth: 200, animation: "dropGrow .2s cubic-bezier(.2,.9,.3,1.2)" },
