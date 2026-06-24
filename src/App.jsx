@@ -73,7 +73,7 @@ const I = {
   cam: <><path d="M3 8a2 2 0 0 1 2-2h2l1.5-2h7L19 6h0a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><circle cx="12" cy="12.5" r="3.5" /></>,
   android: <><path d="M7 9a5 5 0 0 1 10 0v1H7z" /><path d="M8.5 6.5L7 4M15.5 6.5L17 4" /><rect x="7" y="11" width="10" height="8" rx="2" /></>,
   doc2: <><path d="M6 2h9l5 5v15H6z" /><path d="M14 2v6h6" /><path d="M9 13h6M9 16h6" /></>,
-  gamepad: <><rect x="2" y="6" width="20" height="12" rx="3" /><rect x="9" y="9" width="6" height="6" rx="1" /><path d="M5 10v4M3.5 12h3" /><path d="M17 10h.01M19 12h.01M17 14h.01" /><path d="M5 18l1.5 2.5a2 2 0 0 0 1.7 1H9M19 18l-1.5 2.5a2 2 0 0 1-1.7 1H15" /></>,
+  gamepad: <><rect x="2.5" y="6" width="19" height="12" rx="3.5" /><rect x="9" y="9.5" width="6" height="5" rx="1" /><path d="M5.5 10.5v3M4 12h3" /><circle cx="17" cy="10.5" r=".6" fill="currentColor" /><circle cx="18.5" cy="12" r=".6" fill="currentColor" /><circle cx="15.5" cy="12" r=".6" fill="currentColor" /><circle cx="17" cy="13.5" r=".6" fill="currentColor" /></>,
   win: <><rect x="3" y="4" width="18" height="16" rx="1" /><path d="M3 9h18M11 9v11" /></>,
   fontA: <><path d="M5 19l5-13 5 13M7 14h6" /><path d="M17 19V9M17 9c2 0 3 1 3 2s-1 2-3 2" /></>,
   launcher: <><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></>,
@@ -234,7 +234,22 @@ export default function App() {
     el.scrollTop = contentH >= ch ? pt : el.scrollHeight - ch;
   }, [arcView && arcView.entries]);
   const [shared, setShared] = useState([]);
-  const checkShared = async () => { try { const r = await Apps.getShared(); setShared(r.files || []); } catch {} };
+  const [sharedMode, setSharedMode] = useState("save");
+  const checkShared = async () => {
+    try {
+      const r = await Apps.getShared();
+      const files = r.files || [];
+      if (files.length && r.mode === "open") {
+        // "Открыть в YevFiles" — сохраняем во временную папку и открываем меню выбора
+        const t = await Apps.saveSharedTemp();
+        setShared([]);
+        if (t && t.uri) await showOpenMenu({ name: t.name, uri: t.uri, type: "file" }, mimeOf(t.name));
+      } else {
+        setSharedMode("save");
+        setShared(files);
+      }
+    } catch {}
+  };
   useEffect(() => { checkShared(); const h = CapApp.addListener("resume", checkShared); return () => { h.then((x) => x.remove()).catch(() => {}); }; }, []);
   const saveSharedHere = async () => {
     try { const u = await Filesystem.getUri({ path, directory: DIR }); const r = await Apps.saveShared({ dir: u.uri }); showToast("Сохранено: " + (r.saved || 0) + " в " + (baseName(path) || "Storage")); setShared([]); refresh(); }
@@ -412,6 +427,8 @@ export default function App() {
 
   const openExternal = async (e) => {
     const mime = mimeOf(e.name);
+    // apk — особый: всегда меню выбора (Установить / Открыть с помощью / как архив), без авто-привязки
+    if (/\.apk$/i.test(e.name)) { await showOpenMenu(e, mime); return; }
     const cat = defaultOpenAs(e.name);
     const defs = loadMap(DEFKEY);
     const d = defs[cat] || defs[mime];
@@ -553,23 +570,27 @@ export default function App() {
     const all = [];
     for (const t of queue) for (const it of t.items) all.push({ it, mode: t.mode });
     const total = all.length; cancelRef.current = false;
-    setProgress({ current: 0, total, name: "" });
+    setProgress({ current: 0, total, name: "", unit: "items" });
+    // подписка на по-файловый прогресс из нативного copyTree
+    let sub = null;
+    try { sub = await Apps.addListener("opProgress", (ev) => { setProgress((p) => (p ? { ...p, sub: { done: ev.done, total: ev.total, name: ev.name } } : p)); }); } catch {}
     for (let i = 0; i < all.length; i++) {
       if (cancelRef.current) break;
       const { it, mode } = all[i];
-      setProgress((p) => ({ current: i + 1, total, name: it.name, mode, bg: p && p.bg }));
-      Apps.notifyProgress({ title: mode === "cut" ? "Перемещение" : "Копирование", text: it.name, progress: i + 1, max: total }).catch(() => {});
+      setProgress((p) => ({ ...(p || {}), current: i, total, name: it.name, mode, sub: null }));
       const to = targetUri(it.name);
       if (it.type === "directory" && curUri && curUri === it.uri) { continue; }
       if (to && it.uri !== to) {
         try {
           if (mode === "copy") {
             if (it.type === "directory") await Apps.copyTree({ from: it.uri, to });
-            else await Filesystem.copy({ from: it.uri, to });
-          } else await Filesystem.rename({ from: it.uri, to });
+            else { await Filesystem.copy({ from: it.uri, to }); Apps.notifyProgress({ title: "Копирование", text: it.name, progress: i + 1, max: total }).catch(() => {}); }
+          } else { await Filesystem.rename({ from: it.uri, to }); Apps.notifyProgress({ title: "Перемещение", text: it.name, progress: i + 1, max: total }).catch(() => {}); }
         } catch (e) { showToast(it.name + ": " + e.message); }
       }
+      setProgress((p) => ({ ...(p || {}), current: i + 1, total, sub: null }));
     }
+    if (sub && sub.remove) sub.remove();
     setProgress(null); Apps.cancelNotify().catch(() => {});
     await refresh(); showToast(cancelRef.current ? "Отменено" : "Готово");
   };
@@ -1111,32 +1132,43 @@ export default function App() {
 
       {/* МЕНЮ ЗАДАЧ — конец */}
       {/* ПРОГРЕСС КОПИРОВАНИЯ */}
-      {progress && !progress.bg && (
+      {progress && !progress.bg && (() => {
+        // процент: если есть по-файловый прогресс внутри элемента — учитываем его
+        const sub = progress.sub;
+        const pct = progress.total ? Math.round(((progress.current + (sub && sub.total ? sub.done / sub.total : 0)) / progress.total) * 100) : 0;
+        const label = progress.mode === "del" ? "Удаление" : progress.mode === "cut" ? "Перемещение" : "Копирование";
+        return (
         <div style={S.backdrop}>
           <div style={{ ...S.sheet, paddingBottom: 24 }} onClick={(e) => e.stopPropagation()}>
-            <div style={S.sheetTitle}>{progress.mode === "del" ? "Удаление" : progress.mode === "cut" ? "Перемещение" : "Копирование"} {progress.current}/{progress.total}</div>
+            <div style={S.sheetTitle}>{label} {Math.min(progress.current + (sub ? 1 : 0), progress.total)}/{progress.total}</div>
             <div style={{ height: 8, background: ROW2, borderRadius: 4, overflow: "hidden", margin: "6px 0 12px" }}>
-              <div style={{ height: "100%", width: (progress.total ? Math.round(progress.current / progress.total * 100) : 0) + "%", background: ACC, transition: "width .15s" }} />
+              <div style={{ height: "100%", width: pct + "%", background: ACC, transition: "width .2s" }} />
             </div>
-            <div style={{ fontSize: 13, color: SUB, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginBottom: 16 }}>{progress.name}</div>
+            <div style={{ fontSize: 13, color: SUB, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginBottom: 16 }}>{sub && sub.name ? sub.name : progress.name}{sub && sub.total ? "  (" + sub.done + "/" + sub.total + ")" : ""}</div>
             <div style={{ display: "flex", gap: 10 }}>
-              <button style={{ ...S.sheetGhost, flex: 1, borderColor: LINE }} onClick={() => setProgress((p) => ({ ...p, bg: true }))}>Свернуть</button>
+              <button style={{ ...S.sheetGhost, flex: 1, borderColor: LINE }} onClick={() => setProgress((p) => ({ ...p, bg: true }))}>Свернуть в уведомления</button>
               <button style={{ ...S.sheetGhost, flex: 1, color: RED, borderColor: LINE }} onClick={() => { cancelRef.current = true; }}>Отменить</button>
             </div>
           </div>
         </div>
-      )}
-      {progress && progress.bg && (
+        );
+      })()}
+      {progress && progress.bg && (() => {
+        const sub = progress.sub;
+        const pct = progress.total ? Math.round(((progress.current + (sub && sub.total ? sub.done / sub.total : 0)) / progress.total) * 100) : 0;
+        const label = progress.mode === "del" ? "Удаление" : progress.mode === "cut" ? "Перемещение" : "Копирование";
+        return (
         <div onClick={() => setProgress((p) => ({ ...p, bg: false }))} style={{ position: "fixed", left: 12, right: 12, bottom: "calc(78px + env(safe-area-inset-bottom))", zIndex: 1400, background: BAR, border: "1px solid " + LINE, borderRadius: 16, padding: "10px 14px", display: "flex", alignItems: "center", gap: 10, boxShadow: "0 1px 0 rgba(255,255,255,.06) inset, 0 2px 6px rgba(0,0,0,.35), 0 12px 32px rgba(0,0,0,.55)" }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 13, color: TXT }}>{progress.mode === "del" ? "Удаление" : progress.mode === "cut" ? "Перемещение" : "Копирование"} {progress.current}/{progress.total}</div>
+            <div style={{ fontSize: 13, color: TXT }}>{label} {Math.min(progress.current + (sub ? 1 : 0), progress.total)}/{progress.total}</div>
             <div style={{ height: 4, background: ROW2, borderRadius: 2, overflow: "hidden", marginTop: 5 }}>
-              <div style={{ height: "100%", width: (progress.total ? Math.round(progress.current / progress.total * 100) : 0) + "%", background: ACC }} />
+              <div style={{ height: "100%", width: pct + "%", background: ACC, transition: "width .2s" }} />
             </div>
           </div>
           <span onClick={(e) => { e.stopPropagation(); cancelRef.current = true; }} style={{ color: RED, display: "flex", padding: 4 }}><Svg d={I.x} size={18} /></span>
         </div>
-      )}
+        );
+      })()}
 
       {toast && <div style={S.toast}>{toast}</div>}
 
