@@ -73,7 +73,7 @@ const I = {
   cam: <><path d="M3 8a2 2 0 0 1 2-2h2l1.5-2h7L19 6h0a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><circle cx="12" cy="12.5" r="3.5" /></>,
   android: <><path d="M7 9a5 5 0 0 1 10 0v1H7z" /><path d="M8.5 6.5L7 4M15.5 6.5L17 4" /><rect x="7" y="11" width="10" height="8" rx="2" /></>,
   doc2: <><path d="M6 2h9l5 5v15H6z" /><path d="M14 2v6h6" /><path d="M9 13h6M9 16h6" /></>,
-  gamepad: <><path d="M7 11h2M8 10v2M15 11h.01M17 12h.01" /><rect x="2" y="7" width="20" height="11" rx="5" /></>,
+  gamepad: <><rect x="2" y="6" width="20" height="12" rx="3" /><rect x="9" y="9" width="6" height="6" rx="1" /><path d="M5 10v4M3.5 12h3" /><path d="M17 10h.01M19 12h.01M17 14h.01" /><path d="M5 18l1.5 2.5a2 2 0 0 0 1.7 1H9M19 18l-1.5 2.5a2 2 0 0 1-1.7 1H15" /></>,
   win: <><rect x="3" y="4" width="18" height="16" rx="1" /><path d="M3 9h18M11 9v11" /></>,
   fontA: <><path d="M5 19l5-13 5 13M7 14h6" /><path d="M17 19V9M17 9c2 0 3 1 3 2s-1 2-3 2" /></>,
   launcher: <><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></>,
@@ -604,17 +604,23 @@ export default function App() {
   };
   let visible = entries.filter((e) => showHidden || !isHidden(e));
   if (query) visible = visible.filter((e) => e.name.toLowerCase().includes(query.toLowerCase()));
+  const isSysFolder = (e) => e.type === "directory" && !!SYS_FOLDERS[e.name.toLowerCase()];
+  const rank = (e) => (meta.pinTop.has(keyOf(e.name)) ? -1 : meta.pinBot.has(keyOf(e.name)) ? 1 : 0);
   visible = [...visible].sort((a, b) => {
+    // 1) закреплённые сверху/снизу
+    const ra = rank(a), rb = rank(b);
+    if (ra !== rb) return ra - rb;
+    // 2) системные папки сверху (если включено)
+    if (sysTop) {
+      const sa = isSysFolder(a) ? 0 : 1, sb = isSysFolder(b) ? 0 : 1;
+      if (sa !== sb) return sa - sb;
+    }
+    // 3) папки выше файлов
     const ad = a.type === "directory", bd = b.type === "directory";
     if (ad !== bd) return ad ? -1 : 1;
+    // 4) обычная сортировка
     return cmp(a, b);
   });
-  if (sysTop) {
-    const isSys = (e) => e.type === "directory" && SYS_FOLDERS[e.name.toLowerCase()] ? 0 : 1;
-    visible = [...visible].sort((a, b) => isSys(a) - isSys(b));
-  }
-  const rank = (e) => (meta.pinTop.has(keyOf(e.name)) ? -1 : meta.pinBot.has(keyOf(e.name)) ? 1 : 0);
-  visible = [...visible].sort((a, b) => rank(a) - rank(b));
 
   const lpTimer = useRef(), lpFired = useRef(false), moved = useRef(false), pX = useRef(0), pY = useRef(0);
   const rDown = (ev, e) => { lpFired.current = false; moved.current = false; pX.current = ev.clientX; pY.current = ev.clientY; lpTimer.current = setTimeout(() => { lpFired.current = true; buzz(15); toggle(e.name); }, 450); };
@@ -983,6 +989,16 @@ export default function App() {
         return (
           <div style={S.backdrop} onClick={() => setOpenMenu(null)}>
             <div style={S.sheet} onClick={(e) => e.stopPropagation()}>
+              {/\.apk$/i.test(openMenu.file.name) && openMenu.apkInfo && (
+                <div style={{ padding: "10px 12px", margin: "0 0 12px", background: ROW2, borderRadius: 12, fontSize: 13, lineHeight: 1.7, color: SUB }}>
+                  {openMenu.apkInfo.label && <div style={{ color: TXT, fontWeight: 600, fontSize: 14, marginBottom: 2 }}>{openMenu.apkInfo.label}</div>}
+                  {openMenu.apkInfo.package && <div style={{ color: "#7FB4E6", wordBreak: "break-all" }}>{openMenu.apkInfo.package}</div>}
+                  {openMenu.apkInfo.versionName && <div>Версия: <span style={{ color: TXT }}>{openMenu.apkInfo.versionName} ({openMenu.apkInfo.versionCode})</span></div>}
+                  {openMenu.apkInfo.installed && <div>Установлено: <span style={{ color: GOLD }}>{openMenu.apkInfo.installedVersionName || "—"}</span></div>}
+                  <div>Целевая ОС: <span style={{ color: TXT }}>SDK {openMenu.apkInfo.targetSdk}</span></div>
+                  {openMenu.apkInfo.minSdk != null && <div>Минимальная ОС: <span style={{ color: TXT }}>SDK {openMenu.apkInfo.minSdk}</span></div>}
+                </div>
+              )}
               <div style={{ display: "flex", alignItems: "center", marginBottom: 14 }}>
                 <div style={{ ...S.sheetTitle, marginBottom: 0, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{openMenu.file.name}</div>
                 <button style={{ ...S.iconBtn, color: openMenu.editHide ? ACC : SUB }} onClick={() => setOpenMenu({ ...openMenu, editHide: !openMenu.editHide })}><Svg d={I.rename} size={20} /></button>
@@ -1018,22 +1034,11 @@ export default function App() {
                 </div>
               )}
               {!openMenu.editHide && /\.apk$/i.test(openMenu.file.name) && (
-                <>
-                  {openMenu.apkInfo && (
-                    <div style={{ padding: "10px 12px", margin: "0 0 8px", background: ROW2, borderRadius: 12, fontSize: 13, lineHeight: 1.7, color: SUB }}>
-                      {openMenu.apkInfo.package && <div style={{ color: "#7FB4E6", wordBreak: "break-all" }}>{openMenu.apkInfo.package}</div>}
-                      {openMenu.apkInfo.versionName && <div>Версия: <span style={{ color: TXT }}>{openMenu.apkInfo.versionName} ({openMenu.apkInfo.versionCode})</span></div>}
-                      {openMenu.apkInfo.installed && <div>Установлено: <span style={{ color: GOLD }}>{openMenu.apkInfo.installedVersionName || "—"}</span></div>}
-                      <div>Целевая ОС: <span style={{ color: TXT }}>SDK {openMenu.apkInfo.targetSdk}</span></div>
-                      {openMenu.apkInfo.minSdk != null && <div>Минимальная ОС: <span style={{ color: TXT }}>SDK {openMenu.apkInfo.minSdk}</span></div>}
-                    </div>
-                  )}
-                  <div onClick={() => { setOpenMenu(null); Apps.installApk({ uri: openMenu.file.uri }).catch((er) => showToast("Ошибка: " + (er?.message || ""))); }}
-                    style={{ ...S.appRow, color: "#6FD3A8" }}>
-                    <span style={{ width: 38, display: "flex", justifyContent: "center" }}><Svg d={I.plus} size={28} /></span>
-                    <span style={{ flex: 1, fontSize: 15 }}>{openMenu.apkInfo && openMenu.apkInfo.installed ? "Обновить / переустановить" : "Установить"}</span>
-                  </div>
-                </>
+                <div onClick={() => { setOpenMenu(null); Apps.installApk({ uri: openMenu.file.uri }).catch((er) => showToast("Ошибка: " + (er?.message || ""))); }}
+                  style={{ ...S.appRow, color: "#6FD3A8" }}>
+                  <span style={{ width: 38, display: "flex", justifyContent: "center" }}><Svg d={I.plus} size={28} /></span>
+                  <span style={{ flex: 1, fontSize: 15 }}>{openMenu.apkInfo && openMenu.apkInfo.installed ? "Обновить / переустановить" : "Установить"}</span>
+                </div>
               )}
               {!openMenu.editHide && (
                 <>
