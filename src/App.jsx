@@ -413,16 +413,17 @@ export default function App() {
     try { await Apps.open({ uri: om.file.uri, mime: mimeOf(om.file.name), packageName: app.packageName, activityName: app.activityName }); }
     catch (err) { showToast("Не удалось открыть: " + (err?.message || "")); }
   };
+  const arcAnchor = useRef(null);
   const openArchive = async (e) => {
     setOpenMenu(null);
-    setArcView({ name: e.name, entries: null });
+    setArcView({ name: e.name, entries: null, anchor: arcAnchor.current });
     try {
       const r = await Filesystem.readFile({ path: e.uri });
       const zip = await JSZip.loadAsync(r.data, { base64: true });
       const entries = [];
       zip.forEach((rel, f) => { if (!f.dir) entries.push({ name: rel, size: (f._data && f._data.uncompressedSize) || 0 }); });
       entries.sort((a, b) => a.name.localeCompare(b.name));
-      setArcView({ name: e.name, entries, zip });
+      setArcView({ name: e.name, entries, zip, anchor: arcAnchor.current });
     } catch (err) { setArcView(null); showToast("Не удалось открыть архив: " + (err?.message || "")); }
   };
   const extractOpen = async (entry) => {
@@ -439,10 +440,10 @@ export default function App() {
     } catch (err) { setArcView((m) => (m ? { ...m, busy: null } : m)); showToast("Не удалось открыть: " + (err?.message || "")); }
   };
   const resetDefault = () => { const defs = loadMap(DEFKEY); delete defs[openMenu.mime]; saveMap(DEFKEY, defs); showToast("Привязка сброшена"); };
-  const open = (e) => {
+  const open = (e, ev) => {
     if (selMode) { toggle(e.name); return; }
     if (e.type === "directory") { setSlide(1); setTimeout(() => setSlide(0), 300); setTabPath(join(path, e.name)); }
-    else openExternal(e);
+    else { arcAnchor.current = ev && ev.currentTarget ? ev.currentTarget.getBoundingClientRect().top : null; openExternal(e); }
   };
 
   const addTab = () => { const id = Date.now(); const t = [...tabs, { id, path: "" }]; persist(t); setActive(t.length - 1); };
@@ -577,7 +578,7 @@ export default function App() {
   const lpTimer = useRef(), lpFired = useRef(false), moved = useRef(false), pX = useRef(0), pY = useRef(0);
   const rDown = (ev, e) => { lpFired.current = false; moved.current = false; pX.current = ev.clientX; pY.current = ev.clientY; lpTimer.current = setTimeout(() => { lpFired.current = true; buzz(15); toggle(e.name); }, 450); };
   const rMove = (ev) => { if (Math.abs(ev.clientX - pX.current) > 10 || Math.abs(ev.clientY - pY.current) > 10) { moved.current = true; clearTimeout(lpTimer.current); } };
-  const rUp = (e) => { clearTimeout(lpTimer.current); if (lpFired.current || moved.current) return; open(e); };
+  const rUp = (e, ev) => { clearTimeout(lpTimer.current); if (lpFired.current || moved.current) return; open(e, ev); };
 
   const one = sel.size === 1 ? byName([...sel][0]) : null;
 
@@ -655,11 +656,16 @@ export default function App() {
         </div>
       )}
       {shared.length > 0 && (
-        <div style={{ ...S.accessBar, background: "#2A2016", borderBottom: "1px solid " + ACC }}>
-          <div style={{ flex: 1, fontSize: 13, lineHeight: 1.4 }}>Сохранить {shared.length === 1 ? "«" + shared[0].name + "»" : shared.length + " файл(ов)"} в эту папку?</div>
-          <button style={{ ...S.accessBtn, background: "transparent", border: "1px solid " + LINE, color: SUB }} onClick={dismissShared}>Нет</button>
-          <button style={S.accessBtn} onClick={saveSharedHere}>Сохранить</button>
-        </div>
+        <>
+          <div style={S.savePop}>
+            <Svg d={I.dl} size={20} />
+            <span style={{ flex: 1, fontSize: 13.5, lineHeight: 1.35 }}>Сохранить {shared.length === 1 ? "«" + shared[0].name + "»" : shared.length + " файл(ов)"} в эту папку?</span>
+          </div>
+          <div style={S.saveBar}>
+            <button style={S.saveCancel} onClick={dismissShared}>Отмена</button>
+            <button style={S.saveHere} onClick={saveSharedHere}><Svg d={I.check} size={16} /> Сохранить здесь</button>
+          </div>
+        </>
       )}
       {/* СПИСОК */}
       <main ref={listRef} style={S.list} onScroll={onListScroll} onTouchStart={onTS} onTouchMove={onTM}>
@@ -683,7 +689,7 @@ export default function App() {
               const pinned = meta.pinTop.has(keyOf(e.name)) || meta.pinBot.has(keyOf(e.name));
               return (
                 <div key={e.name} style={{ ...S.row, ...(isDir ? S.rowDir : {}), ...(isSel ? S.rowSel : {}), opacity: hid ? 0.5 : 1 }}
-                  onPointerDown={(ev) => rDown(ev, e)} onPointerMove={rMove} onPointerUp={() => rUp(e)} onPointerCancel={() => clearTimeout(lpTimer.current)}>
+                  onPointerDown={(ev) => rDown(ev, e)} onPointerMove={rMove} onPointerUp={(ev) => rUp(e, ev)} onPointerCancel={() => clearTimeout(lpTimer.current)}>
                   <span style={{ ...S.iconWrap, color: ic.c, background: isSel ? "transparent" : "rgba(255,255,255,.05)", overflow: "hidden", position: "relative" }}
                     onPointerDown={(ev) => ev.stopPropagation()} onPointerUp={(ev) => { ev.stopPropagation(); clearTimeout(lpTimer.current); toggle(e.name); }}>
                     {isSel ? <span style={S.cbk}><Svg d={I.check} size={14} /></span>
@@ -885,7 +891,7 @@ export default function App() {
             <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: SUB }}>Открываю архив…</div>
           ) : (
           <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column" }}>
-            <div style={{ marginTop: "auto" }}>
+            <div style={arcView.anchor != null ? { paddingTop: Math.max(0, arcView.anchor - 62) } : { marginTop: "auto" }}>
               {arcView.entries.map((it, i) => {
                 const ic = fileIcon(it.name);
                 const asel = arcSel.has(it.name);
@@ -1172,6 +1178,10 @@ const S = {
   sheetField: { width: "100%", background: ROW2, border: "1px solid " + LINE, borderRadius: 12, padding: "12px 14px", color: TXT, fontSize: 15, marginBottom: 16, outline: "none" },
   sheetGhost: { flex: 1, background: ROW2, border: "1px solid " + LINE, borderRadius: 12, padding: 13, color: SUB, fontSize: 14, cursor: "pointer" },
   sheetOk: { flex: 1, background: ACC, border: "none", borderRadius: 12, padding: 13, color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer" },
+  savePop: { position: "fixed", top: "calc(68px + env(safe-area-inset-top))", left: 10, right: 10, zIndex: 1260, display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", background: BAR, color: TXT, borderRadius: 18, border: "1px solid " + ACC, boxShadow: "0 8px 28px rgba(0,0,0,.55)" },
+  saveBar: { position: "fixed", left: 10, right: 10, bottom: "calc(10px + env(safe-area-inset-bottom))", zIndex: 1260, display: "flex", alignItems: "center", gap: 8, padding: 6, background: BAR, borderRadius: 22, boxShadow: "0 8px 28px rgba(0,0,0,.55)" },
+  saveCancel: { background: "transparent", border: "none", borderRadius: 16, color: SUB, fontSize: 14, padding: "10px 18px" },
+  saveHere: { marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6, background: ACC, border: "none", borderRadius: 16, color: "#fff", fontWeight: 700, fontSize: 14, padding: "10px 20px" },
   accessBar: { display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: "#3A2A14", borderBottom: "1px solid " + LINE },
   accessBtn: { flexShrink: 0, background: ACC, border: "none", borderRadius: 8, color: "#fff", fontSize: 13, fontWeight: 700, padding: "8px 14px" },
   sortRow: { padding: "13px 4px", fontSize: 15, color: TXT, borderBottom: "1px solid " + LINE, display: "flex", alignItems: "center" },
