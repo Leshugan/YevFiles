@@ -421,6 +421,7 @@ export default function App() {
   const showOpenMenu = async (e, mime) => {
     const cat = OPEN_AS.some(([m]) => m === mime) ? mime : defaultOpenAs(e.name);
     setOpenMenu({ file: e, mime: cat, apps: null, useDefault: false, editHide: false });
+    if (/\.apk$/i.test(e.name)) { Apps.apkInfo({ uri: e.uri }).then((info) => setOpenMenu((m) => (m && m.file === e ? { ...m, apkInfo: info } : m))).catch(() => {}); }
     try {
       const { apps } = await Apps.query({ uri: e.uri, mime });
       setOpenMenu((m) => (m && m.file === e ? { ...m, apps: apps || [] } : m));
@@ -461,7 +462,8 @@ export default function App() {
       await Filesystem.writeFile({ path: tmp, data: b64, directory: DIR, recursive: true });
       const u = await Filesystem.getUri({ path: tmp, directory: DIR });
       setArcView(null);
-      if (/\.apk$/i.test(fname)) await Apps.installApk({ uri: u.uri });
+      const fe = { name: fname, uri: u.uri, type: "file" };
+      if (/\.apk$/i.test(fname)) await showOpenMenu(fe, mimeOf(fname)); // меню с вариантами (Установить / Открыть с помощью)
       else await Apps.open({ uri: u.uri, mime: mimeOf(fname) });
     } catch (err) { setArcView((m) => (m ? { ...m, busy: null } : m)); showToast("Не удалось открыть: " + (err?.message || "")); }
   };
@@ -1016,11 +1018,22 @@ export default function App() {
                 </div>
               )}
               {!openMenu.editHide && /\.apk$/i.test(openMenu.file.name) && (
-                <div onClick={() => { setOpenMenu(null); Apps.installApk({ uri: openMenu.file.uri }).catch((er) => showToast("Ошибка: " + (er?.message || ""))); }}
-                  style={{ ...S.appRow, color: "#6FD3A8" }}>
-                  <span style={{ width: 38, display: "flex", justifyContent: "center" }}><Svg d={I.plus} size={28} /></span>
-                  <span style={{ flex: 1, fontSize: 15 }}>Установить</span>
-                </div>
+                <>
+                  {openMenu.apkInfo && (
+                    <div style={{ padding: "10px 12px", margin: "0 0 8px", background: ROW2, borderRadius: 12, fontSize: 13, lineHeight: 1.7, color: SUB }}>
+                      {openMenu.apkInfo.package && <div style={{ color: "#7FB4E6", wordBreak: "break-all" }}>{openMenu.apkInfo.package}</div>}
+                      {openMenu.apkInfo.versionName && <div>Версия: <span style={{ color: TXT }}>{openMenu.apkInfo.versionName} ({openMenu.apkInfo.versionCode})</span></div>}
+                      {openMenu.apkInfo.installed && <div>Установлено: <span style={{ color: GOLD }}>{openMenu.apkInfo.installedVersionName || "—"}</span></div>}
+                      <div>Целевая ОС: <span style={{ color: TXT }}>SDK {openMenu.apkInfo.targetSdk}</span></div>
+                      {openMenu.apkInfo.minSdk != null && <div>Минимальная ОС: <span style={{ color: TXT }}>SDK {openMenu.apkInfo.minSdk}</span></div>}
+                    </div>
+                  )}
+                  <div onClick={() => { setOpenMenu(null); Apps.installApk({ uri: openMenu.file.uri }).catch((er) => showToast("Ошибка: " + (er?.message || ""))); }}
+                    style={{ ...S.appRow, color: "#6FD3A8" }}>
+                    <span style={{ width: 38, display: "flex", justifyContent: "center" }}><Svg d={I.plus} size={28} /></span>
+                    <span style={{ flex: 1, fontSize: 15 }}>{openMenu.apkInfo && openMenu.apkInfo.installed ? "Обновить / переустановить" : "Установить"}</span>
+                  </div>
+                </>
               )}
               {!openMenu.editHide && (
                 <>
