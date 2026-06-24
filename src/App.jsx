@@ -125,6 +125,20 @@ const ArcBadge = ({ name }) => {
     </svg>
   );
 };
+const ThumbIcon = ({ uri, cached, request, release, fallback }) => {
+  const ref = useRef(null);
+  useEffect(() => {
+    if (cached) return;
+    const el = ref.current; if (!el) return;
+    const io = new IntersectionObserver((ents) => {
+      ents.forEach((en) => { if (en.isIntersecting) request(uri); else release(uri); });
+    }, { rootMargin: "200px 0px" }); // буфер ~3 строки ниже/выше экрана
+    io.observe(el);
+    return () => { io.disconnect(); release(uri); };
+  }, [uri, cached]);
+  if (cached) return <img src={cached} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 13 }} />;
+  return <span ref={ref} style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "100%", height: "100%" }}>{fallback}</span>;
+};
 const EXT = {
   img: ["jpg", "jpeg", "png", "gif", "webp", "bmp", "svg", "heic"],
   video: ["mp4", "mkv", "avi", "mov", "webm", "3gp", "flv"],
@@ -197,8 +211,7 @@ export default function App() {
   const [settings, setSettings] = useState(false);
   const [iconDB, setIconDB] = useState(() => loadMap(ICONKEY));
   const saveIconDB = (db) => { setIconDB(db); saveMap(ICONKEY, db); };
-  const [apkIcons, setApkIcons] = useState({});
-  const [pdfThumbs, setPdfThumbs] = useState({});
+  const [thumbs, setThumbs] = useState({});
   const isImg = (n) => /\.(png|jpg|jpeg|webp|gif|bmp)$/i.test(n);
   const isPdf = (n) => /\.pdf$/i.test(n);
   const cfs = (u) => { try { return Capacitor.convertFileSrc(u); } catch { return u; } };
@@ -210,6 +223,16 @@ export default function App() {
   const [arcView, setArcView] = useState(null);
   const [arcSel, setArcSel] = useState(new Set());
   const arcLp = useRef(false), arcLpT = useRef(null), arcPX = useRef(0), arcPY = useRef(0);
+  const arcListRef = useRef(null), arcSpacerRef = useRef(null);
+  useLayoutEffect(() => {
+    const el = arcListRef.current, sp = arcSpacerRef.current;
+    if (!el || !sp || !arcView || !arcView.entries) return;
+    const ch = el.clientHeight, rowH = 72, n = arcView.entries.length;
+    const pt = Math.max(0, ch - Math.min(4, n) * rowH);
+    sp.style.height = pt + "px";
+    const contentH = el.scrollHeight - pt;
+    el.scrollTop = contentH >= ch ? pt : el.scrollHeight - ch;
+  }, [arcView && arcView.entries]);
   const [shared, setShared] = useState([]);
   const checkShared = async () => { try { const r = await Apps.getShared(); setShared(r.files || []); } catch {} };
   useEffect(() => { checkShared(); const h = CapApp.addListener("resume", checkShared); return () => { h.then((x) => x.remove()).catch(() => {}); }; }, []);
@@ -295,30 +318,33 @@ export default function App() {
     el.scrollTop = contentH >= ch ? pt : el.scrollHeight - ch;
   }, [path, active, entries]);
   const onListScroll = (e) => { scrollPos.current[pathKeyRef.current] = e.currentTarget.scrollTop; };
-  useEffect(() => {
-    const apks = entries.filter((e) => e.type !== "directory" && /\.apk$/i.test(e.name) && !apkIcons[e.uri]);
-    if (!apks.length) return;
-    let stop = false;
-    (async () => {
-      for (const a of apks) {
-        if (stop) return;
-        try { const r = await Apps.apkIcon({ uri: a.uri }); if (r && r.icon) setApkIcons((m) => ({ ...m, [a.uri]: r.icon })); } catch {}
-      }
-    })();
-    return () => { stop = true; };
-  }, [entries]);
-  useEffect(() => {
-    const pdfs = entries.filter((e) => e.type !== "directory" && /\.pdf$/i.test(e.name) && !pdfThumbs[e.uri]);
-    if (!pdfs.length) return;
-    let stop = false;
-    (async () => {
-      for (const p of pdfs) {
-        if (stop) return;
-        try { const r = await Apps.pdfThumb({ uri: p.uri }); if (r && r.thumb) setPdfThumbs((m) => ({ ...m, [p.uri]: r.thumb })); } catch {}
-      }
-    })();
-    return () => { stop = true; };
-  }, [entries]);
+  // Фоновая подгрузка превью: только видимые на экране строки, ограниченная нагрузка
+  const thumbQueue = useRef([]);
+  const thumbRunning = useRef(0);
+  const thumbWanted = useRef(new Set());
+  const THUMB_CONCURRENCY = 2;
+  const pumpThumbs = useCallback(() => {
+    while (thumbRunning.current < THUMB_CONCURRENCY && thumbQueue.current.length) {
+      const uri = thumbQueue.current.shift();
+      if (thumbs[uri] || !thumbWanted.current.has(uri)) continue;
+      thumbRunning.current++;
+      Apps.thumb({ uri })
+        .then((r) => { if (r && r.thumb) setThumbs((m) => ({ ...m, [uri]: r.thumb })); })
+        .catch(() => {})
+        .finally(() => { thumbRunning.current--; setTimeout(pumpThumbs, 30); });
+    }
+  }, [thumbs]);
+  const requestThumb = useCallback((uri) => {
+    if (!uri || thumbs[uri] || thumbWanted.current.has(uri)) return;
+    thumbWanted.current.add(uri);
+    thumbQueue.current.push(uri);
+    pumpThumbs();
+  }, [thumbs, pumpThumbs]);
+  const releaseThumb = useCallback((uri) => { thumbWanted.current.delete(uri); }, []);
+  // очистка кэша превью раз за сессию
+  useEffect(() => { Apps.thumbSweep && Apps.thumbSweep().catch(() => {}); }, []);
+  // при смене папки сбрасываем очередь желаемых (новые строки сами запросят)
+  useEffect(() => { thumbQueue.current = []; thumbWanted.current = new Set(); }, [path, active]);
   const silentRefresh = useCallback(async () => {
     try {
       const u = await Filesystem.getUri({ path, directory: DIR });
@@ -416,14 +442,14 @@ export default function App() {
   const arcAnchor = useRef(null);
   const openArchive = async (e) => {
     setOpenMenu(null);
-    setArcView({ name: e.name, entries: null, anchor: arcAnchor.current });
+    setArcView({ name: e.name, entries: null });
     try {
       const r = await Filesystem.readFile({ path: e.uri });
       const zip = await JSZip.loadAsync(r.data, { base64: true });
       const entries = [];
       zip.forEach((rel, f) => { if (!f.dir) entries.push({ name: rel, size: (f._data && f._data.uncompressedSize) || 0 }); });
       entries.sort((a, b) => a.name.localeCompare(b.name));
-      setArcView({ name: e.name, entries, zip, anchor: arcAnchor.current });
+      setArcView({ name: e.name, entries, zip });
     } catch (err) { setArcView(null); showToast("Не удалось открыть архив: " + (err?.message || "")); }
   };
   const extractOpen = async (entry) => {
@@ -694,10 +720,10 @@ export default function App() {
                     onPointerDown={(ev) => ev.stopPropagation()} onPointerUp={(ev) => { ev.stopPropagation(); clearTimeout(lpTimer.current); toggle(e.name); }}>
                     {isSel ? <span style={S.cbk}><Svg d={I.check} size={14} /></span>
                       : (isDir && iconDB[keyOf(e.name)]) ? <img src={iconDB[keyOf(e.name)]} alt="" style={S.iconImg} />
-                      : (!isDir && isImg(e.name)) ? <img src={cfs(e.uri)} alt="" loading="lazy" style={S.iconImg} />
-                      : (!isDir && /\.apk$/i.test(e.name) && apkIcons[e.uri]) ? <img src={apkIcons[e.uri]} alt="" style={S.iconImg} />
-                      : (!isDir && isPdf(e.name) && pdfThumbs[e.uri]) ? <img src={pdfThumbs[e.uri]} alt="" style={S.iconImg} />
-                      : (!isDir && !/\.apk$/i.test(e.name) && EXT.archive.includes((e.name.split(".").pop() || "").toLowerCase())) ? <ArcBadge name={e.name} />
+                      : (!isDir && (isImg(e.name) || isPdf(e.name) || /\.apk$/i.test(e.name))) ?
+                          <ThumbIcon uri={e.uri} cached={thumbs[e.uri]} request={requestThumb} release={releaseThumb}
+                            fallback={/\.apk$/i.test(e.name) ? <Svg d={ic.d} size={24} /> : isPdf(e.name) ? <Svg d={ic.d} size={24} /> : <Svg d={ic.d} size={24} />} />
+                      : (!isDir && EXT.archive.includes((e.name.split(".").pop() || "").toLowerCase())) ? <ArcBadge name={e.name} />
                       : <Svg d={ic.d} size={24} />}
                     {isDir && !isSel && !iconDB[keyOf(e.name)] && e.thumb ? <img src={cfs(e.thumb)} alt="" loading="lazy" style={S.folderThumb} /> : null}
                   </span>
@@ -890,8 +916,9 @@ export default function App() {
           {arcView.entries == null ? (
             <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: SUB }}>Открываю архив…</div>
           ) : (
-          <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column" }}>
-            <div style={arcView.anchor != null ? { paddingTop: Math.max(0, arcView.anchor - 62) } : { marginTop: "auto" }}>
+          <div ref={arcListRef} style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column" }}>
+            <div ref={arcSpacerRef} style={{ height: 0 }} />
+            <div>
               {arcView.entries.map((it, i) => {
                 const ic = fileIcon(it.name);
                 const asel = arcSel.has(it.name);
@@ -1151,7 +1178,7 @@ const S = {
   arcSelBar: { position: "absolute", left: "50%", transform: "translateX(-50%)", bottom: 10, display: "flex", alignItems: "center", gap: 8, padding: "6px 8px 6px 14px", background: BAR, borderRadius: 22, boxShadow: "0 6px 24px rgba(0,0,0,.55)" },
   arcSelCancel: { background: "transparent", border: "none", borderRadius: 14, color: SUB, fontSize: 13, padding: "7px 12px" },
   arcSelGo: { display: "inline-flex", alignItems: "center", gap: 5, background: ACC, border: "none", borderRadius: 14, color: "#fff", fontWeight: 700, fontSize: 13, padding: "7px 14px" },
-  arcScreen: { position: "fixed", top: 62, left: 0, right: 0, bottom: "calc(88px + env(safe-area-inset-bottom))", zIndex: 1250, background: BG, display: "flex", flexDirection: "column" },
+  arcScreen: { position: "fixed", top: 62, left: 0, right: 0, bottom: "calc(70px + env(safe-area-inset-bottom))", zIndex: 1250, background: BG, display: "flex", flexDirection: "column" },
   cnt: { background: "#43331F", color: GOLD, fontSize: 12, fontWeight: 700, padding: "2px 9px", borderRadius: 10, flexShrink: 0 },
   rowSel: { background: "#332417" },
   name: { flex: 1, fontSize: 15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
@@ -1179,9 +1206,9 @@ const S = {
   sheetGhost: { flex: 1, background: ROW2, border: "1px solid " + LINE, borderRadius: 12, padding: 13, color: SUB, fontSize: 14, cursor: "pointer" },
   sheetOk: { flex: 1, background: ACC, border: "none", borderRadius: 12, padding: 13, color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer" },
   savePop: { position: "fixed", top: "calc(68px + env(safe-area-inset-top))", left: 10, right: 10, zIndex: 1260, display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", background: BAR, color: TXT, borderRadius: 18, border: "1px solid " + ACC, boxShadow: "0 8px 28px rgba(0,0,0,.55)" },
-  saveBar: { position: "fixed", left: 10, right: 10, bottom: "calc(10px + env(safe-area-inset-bottom))", zIndex: 1260, display: "flex", alignItems: "center", gap: 8, padding: 6, background: BAR, borderRadius: 22, boxShadow: "0 8px 28px rgba(0,0,0,.55)" },
-  saveCancel: { background: "transparent", border: "none", borderRadius: 16, color: SUB, fontSize: 14, padding: "10px 18px" },
-  saveHere: { marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6, background: ACC, border: "none", borderRadius: 16, color: "#fff", fontWeight: 700, fontSize: 14, padding: "10px 20px" },
+  saveBar: { position: "fixed", left: 8, right: 8, bottom: "calc(8px + env(safe-area-inset-bottom))", zIndex: 1260, display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, height: 56, padding: "0 10px", background: BAR, borderRadius: 26, boxShadow: "0 8px 28px rgba(0,0,0,.55)" },
+  saveCancel: { background: "transparent", border: "none", borderRadius: 16, color: SUB, fontSize: 14, padding: "10px 16px" },
+  saveHere: { display: "inline-flex", alignItems: "center", gap: 6, background: "rgba(239,108,0,.16)", border: "1px solid " + ACC, borderRadius: 16, color: ACC, fontWeight: 600, fontSize: 14, padding: "9px 18px" },
   accessBar: { display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: "#3A2A14", borderBottom: "1px solid " + LINE },
   accessBtn: { flexShrink: 0, background: ACC, border: "none", borderRadius: 8, color: "#fff", fontSize: 13, fontWeight: 700, padding: "8px 14px" },
   sortRow: { padding: "13px 4px", fontSize: 15, color: TXT, borderBottom: "1px solid " + LINE, display: "flex", alignItems: "center" },
