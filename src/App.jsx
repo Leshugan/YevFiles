@@ -899,7 +899,7 @@ export default function App() {
         <>
           <div style={{ position: "fixed", inset: 0, zIndex: 1290 }} onClick={() => setConfirmDel(null)} />
           <div style={{ position: "fixed", zIndex: 1300, left: Math.max(8, Math.min(confirmDel.left - 6, window.innerWidth - 150)), top: confirmDel.top - 56,
-            display: "flex", gap: 8, background: BAR, border: "1px solid " + LINE, borderRadius: 12, padding: 8, boxShadow: "0 8px 28px rgba(0,0,0,.6)", animation: "dropGrow .15s ease" }}>
+            display: "flex", gap: 8, background: BAR, border: "1px solid " + LINE, borderRadius: 14, padding: 8, boxShadow: "0 1px 0 rgba(255,255,255,.07) inset, 0 4px 12px rgba(0,0,0,.4), 0 18px 48px rgba(0,0,0,.62)", animation: "dropGrow .15s ease" }}>
             <button onClick={doDelete} style={{ background: RED, border: "none", borderRadius: 8, color: "#fff", fontSize: 14, fontWeight: 700, padding: "8px 18px" }}>Да</button>
             <button onClick={() => setConfirmDel(null)} style={{ background: ROW2, border: "1px solid " + LINE, borderRadius: 8, color: SUB, fontSize: 14, padding: "8px 18px" }}>Нет</button>
           </div>
@@ -1096,7 +1096,7 @@ export default function App() {
         </div>
       )}
       {progress && progress.bg && (
-        <div onClick={() => setProgress((p) => ({ ...p, bg: false }))} style={{ position: "fixed", left: 12, right: 12, bottom: "calc(78px + env(safe-area-inset-bottom))", zIndex: 1400, background: BAR, border: "1px solid " + LINE, borderRadius: 14, padding: "10px 14px", display: "flex", alignItems: "center", gap: 10, boxShadow: "0 4px 16px rgba(0,0,0,.4)" }}>
+        <div onClick={() => setProgress((p) => ({ ...p, bg: false }))} style={{ position: "fixed", left: 12, right: 12, bottom: "calc(78px + env(safe-area-inset-bottom))", zIndex: 1400, background: BAR, border: "1px solid " + LINE, borderRadius: 16, padding: "10px 14px", display: "flex", alignItems: "center", gap: 10, boxShadow: "0 1px 0 rgba(255,255,255,.06) inset, 0 2px 6px rgba(0,0,0,.35), 0 12px 32px rgba(0,0,0,.55)" }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 13, color: TXT }}>{progress.mode === "del" ? "Удаление" : progress.mode === "cut" ? "Перемещение" : "Копирование"} {progress.current}/{progress.total}</div>
             <div style={{ height: 4, background: ROW2, borderRadius: 2, overflow: "hidden", marginTop: 5 }}>
@@ -1154,10 +1154,10 @@ function Btn({ onClick, icon, text, label, accent, red, flexNone, disabled }) {
 
 const S = {
   app: { display: "flex", flexDirection: "column", height: "100vh", background: BG, color: TXT, fontFamily: "system-ui,-apple-system,Roboto,sans-serif", overflow: "hidden" },
-  tabsbar: { display: "flex", alignItems: "center", background: BAR, flexShrink: 0, height: 50, margin: "8px 8px 4px", borderRadius: 24 },
+  tabsbar: { display: "flex", alignItems: "center", background: BAR, flexShrink: 0, height: 50, margin: "8px 8px 4px", borderRadius: 24, boxShadow: "0 1px 0 rgba(255,255,255,.06) inset, 0 2px 6px rgba(0,0,0,.35), 0 12px 32px rgba(0,0,0,.55)" },
   tabs: { display: "flex", overflowX: "auto", flex: 1, alignItems: "center", justifyContent: "center", gap: 6, padding: "0 4px", height: "100%" },
   tab: { display: "flex", alignItems: "center", gap: 6, padding: "0 12px", height: 34, borderRadius: 17, fontSize: 13.5, color: SUB, whiteSpace: "nowrap", background: "#241A11", flexShrink: 0, border: "1px solid transparent" },
-  tabActive: { color: ACC, background: "rgba(239,108,0,.14)", border: "1px solid " + ACC, fontWeight: 600 },
+  tabActive: { color: ACC, background: "rgba(239,108,0,.14)", border: "1px solid " + ACC, fontWeight: 600, boxShadow: "0 0 0 1px rgba(239,108,0,.15), 0 2px 8px rgba(239,108,0,.15)" },
   tabX: { fontSize: 17, color: SUB, padding: "0 2px" },
   hbtn: { border: "none", background: "transparent", color: TXT, width: 40, height: 48, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" },
   crumb: { padding: "8px 16px", fontSize: 13, background: BG, flexShrink: 0, borderBottom: "1px solid #241A11", overflow: "hidden", whiteSpace: "nowrap" },
@@ -1175,7 +1175,7 @@ const S = {
   rowDate: { fontSize: 12, color: SUB },
   rowSize: { fontSize: 11.5, color: "rgba(176,164,152,.5)", flexShrink: 0, marginLeft: 6 },
   rowDir: { background: "rgba(239,108,0,.04)" },
-  arcSelBar: { position: "absolute", left: "50%", transform: "translateX(-50%)", bottom: 10, display: "flex", alignItems: "center", gap: 8, padding: "6px 8px 6px 14px", background: BAR, borderRadius: 22, boxShadow: "0 6px 24px rgba(0,0,0,.55)" },
+  arcSelBar: { position: "absolute", left: "50%", transform: "translateX(-50%)", bottom: 10, display: "flex", alignItems: "center", gap: 8, padding: "6px 8px 6px 14px", background: BAR, borderRadius: 22, boxShadow: "0 1px 0 rgba(255,255,255,.07) inset, 0 4px 12px rgba(0,0,0,.4), 0 18px 48px rgba(0,0,0,.62)", animation: "dropGrow .2s cubic-bezier(.2,.9,.3,1.1)" },
   arcSelCancel: { background: "transparent", border: "none", borderRadius: 14, color: SUB, fontSize: 13, padding: "7px 12px" },
   arcSelGo: { display: "inline-flex", alignItems: "center", gap: 5, background: ACC, border: "none", borderRadius: 14, color: "#fff", fontWeight: 700, fontSize: 13, padding: "7px 14px" },
   arcScreen: { position: "fixed", top: 62, left: 0, right: 0, bottom: "calc(70px + env(safe-area-inset-bottom))", zIndex: 1250, background: BG, display: "flex", flexDirection: "column" },
@@ -1186,12 +1186,12 @@ const S = {
   searchBar: { display: "flex", alignItems: "center", background: ROW2, padding: 8, gap: 8, flexShrink: 0 },
   searchInput: { flex: 1, padding: "10px 12px", borderRadius: 8, border: "1px solid " + LINE, background: BAR, color: TXT, fontSize: 15, outline: "none" },
   searchClose: { border: "none", background: "transparent", color: SUB, fontSize: 24, width: 40 },
-  bottom: { display: "flex", alignItems: "center", background: BAR, flexShrink: 0, borderRadius: 26, margin: "4px 8px calc(8px + env(safe-area-inset-bottom))" },
+  bottom: { display: "flex", alignItems: "center", background: BAR, flexShrink: 0, borderRadius: 26, margin: "4px 8px calc(8px + env(safe-area-inset-bottom))", boxShadow: "0 1px 0 rgba(255,255,255,.06) inset, 0 2px 6px rgba(0,0,0,.35), 0 12px 32px rgba(0,0,0,.55)" },
   btn: { border: "none", background: "transparent", padding: "6px 6px 7px", display: "flex", flexDirection: "column", alignItems: "center", gap: 2 },
   selCount: { minWidth: 26, padding: "0 6px", marginRight: 10, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
   btnLabel: { fontSize: 10, color: SUB, whiteSpace: "nowrap" },
   overlay: { position: "fixed", inset: 0, zIndex: 8 },
-  menu: { position: "absolute", zIndex: 9, background: BAR, borderRadius: 12, overflow: "hidden", border: "1px solid " + LINE, boxShadow: "0 8px 32px rgba(0,0,0,.6)", minWidth: 200, animation: "dropGrow .2s cubic-bezier(.2,.9,.3,1.2)" },
+  menu: { position: "absolute", zIndex: 9, background: BAR, borderRadius: 12, overflow: "hidden", border: "1px solid " + LINE, boxShadow: "0 1px 0 rgba(255,255,255,.07) inset, 0 4px 12px rgba(0,0,0,.4), 0 18px 48px rgba(0,0,0,.62)", minWidth: 200, animation: "dropGrow .2s cubic-bezier(.2,.9,.3,1.2)" },
   menuItem: { display: "flex", alignItems: "center", gap: 12, padding: "13px 14px", fontSize: 14, color: TXT, whiteSpace: "nowrap" },
   createItem: { padding: "14px 22px", fontSize: 15, color: TXT },
   ctxTitle: { padding: "10px 14px", fontSize: 12, color: SUB, borderBottom: "1px solid " + LINE, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 210 },
@@ -1199,14 +1199,14 @@ const S = {
   tglOn: { background: ACC },
   knob: { position: "absolute", top: 2, left: 2, width: 18, height: 18, borderRadius: 9, background: "#fff", transition: "left .15s" },
   knobOn: { left: 18 },
-  backdrop: { position: "fixed", inset: 0, background: "rgba(0,0,0,.55)", display: "flex", alignItems: "flex-end", zIndex: 1400, backdropFilter: "blur(3px)" },
-  sheet: { width: "100%", maxWidth: 420, margin: "0 auto", background: BAR, borderRadius: "20px 20px 0 0", padding: "20px 20px 36px", animation: "sUp .34s cubic-bezier(.2,.9,.3,1)", maxHeight: "88vh", overflowY: "auto" },
+  backdrop: { position: "fixed", inset: 0, background: "rgba(0,0,0,.62)", display: "flex", alignItems: "flex-end", zIndex: 1400, backdropFilter: "blur(5px)", animation: "fS .2s ease" },
+  sheet: { width: "100%", maxWidth: 420, margin: "0 auto", background: BAR, borderRadius: "22px 22px 0 0", padding: "20px 20px 36px", animation: "sUp .34s cubic-bezier(.2,.9,.3,1)", maxHeight: "88vh", overflowY: "auto", boxShadow: "0 -1px 0 rgba(255,255,255,.06) inset, 0 -8px 40px rgba(0,0,0,.6)" },
   sheetTitle: { fontWeight: 700, fontSize: 17, marginBottom: 16 },
   sheetField: { width: "100%", background: ROW2, border: "1px solid " + LINE, borderRadius: 12, padding: "12px 14px", color: TXT, fontSize: 15, marginBottom: 16, outline: "none" },
   sheetGhost: { flex: 1, background: ROW2, border: "1px solid " + LINE, borderRadius: 12, padding: 13, color: SUB, fontSize: 14, cursor: "pointer" },
   sheetOk: { flex: 1, background: ACC, border: "none", borderRadius: 12, padding: 13, color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer" },
-  savePop: { position: "fixed", top: "calc(68px + env(safe-area-inset-top))", left: 10, right: 10, zIndex: 1260, display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", background: BAR, color: TXT, borderRadius: 18, border: "1px solid " + ACC, boxShadow: "0 8px 28px rgba(0,0,0,.55)" },
-  saveBar: { position: "fixed", left: 8, right: 8, bottom: "calc(8px + env(safe-area-inset-bottom))", zIndex: 1260, display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, height: 56, padding: "0 10px", background: BAR, borderRadius: 26, boxShadow: "0 8px 28px rgba(0,0,0,.55)" },
+  savePop: { position: "fixed", top: "calc(68px + env(safe-area-inset-top))", left: 10, right: 10, zIndex: 1260, display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", background: BAR, color: TXT, borderRadius: 18, boxShadow: "0 0 0 1px rgba(239,108,0,.5), 0 1px 0 rgba(255,255,255,.07) inset, 0 8px 24px rgba(0,0,0,.5), 0 16px 44px rgba(239,108,0,.18)", animation: "dropGrow .22s cubic-bezier(.2,.9,.3,1.1)" },
+  saveBar: { position: "fixed", left: 8, right: 8, bottom: "calc(8px + env(safe-area-inset-bottom))", zIndex: 1260, display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, height: 56, padding: "0 10px", background: BAR, borderRadius: 26, boxShadow: "0 1px 0 rgba(255,255,255,.07) inset, 0 4px 12px rgba(0,0,0,.4), 0 18px 48px rgba(0,0,0,.62)", animation: "sUp .28s cubic-bezier(.2,.9,.3,1)" },
   saveCancel: { background: "transparent", border: "none", borderRadius: 16, color: SUB, fontSize: 14, padding: "10px 16px" },
   saveHere: { display: "inline-flex", alignItems: "center", gap: 6, background: "rgba(239,108,0,.16)", border: "1px solid " + ACC, borderRadius: 16, color: ACC, fontWeight: 600, fontSize: 14, padding: "9px 18px" },
   accessBar: { display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: "#3A2A14", borderBottom: "1px solid " + LINE },
@@ -1218,5 +1218,5 @@ const S = {
   appRow: { display: "flex", alignItems: "center", gap: 14, padding: "10px 2px", borderBottom: "1px solid " + LINE },
   cbox: { width: 22, height: 22, borderRadius: 6, border: "2px solid " + SUB, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, color: "#fff", flexShrink: 0 },
   cboxOn: { background: ACC, borderColor: ACC },
-  toast: { position: "fixed", left: "50%", bottom: 90, transform: "translateX(-50%)", background: ROW2, color: TXT, padding: "10px 18px", borderRadius: 20, fontSize: 13, border: "1px solid " + LINE, boxShadow: "0 6px 24px rgba(0,0,0,.5)", zIndex: 1500, animation: "fS .2s ease", maxWidth: "80%", textAlign: "center" },
+  toast: { position: "fixed", left: "50%", bottom: 90, transform: "translateX(-50%)", background: ROW2, color: TXT, padding: "10px 18px", borderRadius: 20, fontSize: 13, border: "1px solid " + LINE, boxShadow: "0 1px 0 rgba(255,255,255,.06) inset, 0 2px 6px rgba(0,0,0,.35), 0 12px 32px rgba(0,0,0,.55)", zIndex: 1500, animation: "fS .2s ease", maxWidth: "80%", textAlign: "center" },
 };
