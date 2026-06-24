@@ -234,21 +234,19 @@ export default function App() {
     el.scrollTop = contentH >= ch ? pt : el.scrollHeight - ch;
   }, [arcView && arcView.entries]);
   const [shared, setShared] = useState([]);
-  const [sharedMode, setSharedMode] = useState("save");
   const checkShared = async () => {
     try {
       const r = await Apps.getShared();
       const files = r.files || [];
-      if (files.length && r.mode === "open") {
-        // "Открыть в YevFiles" — сохраняем во временную папку и открываем меню выбора
-        const t = await Apps.saveSharedTemp();
-        setShared([]);
-        if (t && t.uri) await showOpenMenu({ name: t.name, uri: t.uri, type: "file" }, mimeOf(t.name));
-      } else {
-        setSharedMode("save");
-        setShared(files);
-      }
+      setShared(files);
     } catch {}
+  };
+  const openSharedHere = async () => {
+    try {
+      const t = await Apps.saveSharedTemp();
+      setShared([]);
+      if (t && t.uri) await showOpenMenu({ name: t.name, uri: t.uri, type: "file" }, mimeOf(t.name));
+    } catch (e) { showToast("Не удалось открыть: " + (e?.message || "")); }
   };
   useEffect(() => { checkShared(); const h = CapApp.addListener("resume", checkShared); return () => { h.then((x) => x.remove()).catch(() => {}); }; }, []);
   const saveSharedHere = async () => {
@@ -727,10 +725,11 @@ export default function App() {
         <>
           <div style={S.savePop}>
             <Svg d={I.dl} size={20} />
-            <span style={{ flex: 1, fontSize: 13.5, lineHeight: 1.35 }}>Сохранить {shared.length === 1 ? "«" + shared[0].name + "»" : shared.length + " файл(ов)"} в эту папку?</span>
+            <span style={{ flex: 1, fontSize: 13.5, lineHeight: 1.35 }}>{shared.length === 1 ? "«" + shared[0].name + "»" : shared.length + " файл(ов)"} — открыть или сохранить сюда?</span>
           </div>
           <div style={S.saveBar}>
             <button style={S.saveCancel} onClick={dismissShared}>Отмена</button>
+            <button style={S.saveOpen} onClick={openSharedHere}><Svg d={I.folder} size={16} /> Открыть</button>
             <button style={S.saveHere} onClick={saveSharedHere}><Svg d={I.check} size={16} /> Сохранить здесь</button>
           </div>
         </>
@@ -1271,6 +1270,7 @@ const S = {
   savePop: { position: "fixed", top: "calc(68px + env(safe-area-inset-top))", left: 10, right: 10, zIndex: 1260, display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", background: BAR, color: TXT, borderRadius: 18, boxShadow: "0 0 0 1px rgba(239,108,0,.5), 0 1px 0 rgba(255,255,255,.07) inset, 0 8px 24px rgba(0,0,0,.5), 0 16px 44px rgba(239,108,0,.18)", animation: "dropGrow .22s cubic-bezier(.2,.9,.3,1.1)" },
   saveBar: { position: "fixed", left: 8, right: 8, bottom: "calc(8px + env(safe-area-inset-bottom))", zIndex: 1260, display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, height: 56, padding: "0 10px", background: BAR, borderRadius: 26, boxShadow: "0 1px 0 rgba(255,255,255,.07) inset, 0 4px 12px rgba(0,0,0,.4), 0 18px 48px rgba(0,0,0,.62)", animation: "sUp .28s cubic-bezier(.2,.9,.3,1)" },
   saveCancel: { background: "transparent", border: "none", borderRadius: 16, color: SUB, fontSize: 14, padding: "10px 16px" },
+  saveOpen: { display: "inline-flex", alignItems: "center", gap: 6, background: "transparent", border: "1px solid " + LINE, borderRadius: 16, color: TXT, fontWeight: 600, fontSize: 14, padding: "9px 16px" },
   saveHere: { display: "inline-flex", alignItems: "center", gap: 6, background: "rgba(239,108,0,.16)", border: "1px solid " + ACC, borderRadius: 16, color: ACC, fontWeight: 600, fontSize: 14, padding: "9px 18px" },
   accessBar: { display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: "#3A2A14", borderBottom: "1px solid " + LINE },
   accessBtn: { flexShrink: 0, background: ACC, border: "none", borderRadius: 8, color: "#fff", fontSize: 13, fontWeight: 700, padding: "8px 14px" },
