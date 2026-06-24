@@ -34,7 +34,13 @@ jobs:
         run: npx cap add android
 
       - name: Generate app icons
-        run: npx @capacitor/assets generate --android --assetPath resources
+        run: |
+          # Рендерим icon.svg (собран из наших же глифов) в icon.png через sharp
+          if [ -f resources/icon.svg ]; then
+            npm i -g sharp-cli >/dev/null 2>&1 || npm i sharp >/dev/null 2>&1 || true
+            node -e "const s=require('sharp');s('resources/icon.svg',{density:300}).resize(1024,1024).png().toFile('resources/icon.png').then(()=>console.log('svg->png ok')).catch(e=>{console.log('render skip:',e.message)})" || echo "sharp render skipped, using existing icon.png"
+          fi
+          npx @capacitor/assets generate --android --assetPath resources
 
       - name: Add Android permissions
         run: |
@@ -58,9 +64,9 @@ jobs:
           if ! grep -q "android.intent.action.SEND" "$MAN"; then
             sed -i 's#</activity>#<intent-filter android:label="Сохранить в..."><action android:name="android.intent.action.SEND" /><category android:name="android.intent.category.DEFAULT" /><data android:mimeType="*/*" /></intent-filter><intent-filter android:label="Сохранить в..."><action android:name="android.intent.action.SEND_MULTIPLE" /><category android:name="android.intent.category.DEFAULT" /><data android:mimeType="*/*" /></intent-filter></activity>#' "$MAN"
           fi
-          # Приём "Открыть с помощью" (ACTION_VIEW)
+          # Приём "Открыть с помощью" (ACTION_VIEW) — метка "Открыть в YevFiles"
           if ! grep -q "yevview" "$MAN"; then
-            sed -i 's#</activity>#<intent-filter android:label="Сохранить в..."><!--yevview--><action android:name="android.intent.action.VIEW" /><category android:name="android.intent.category.DEFAULT" /><category android:name="android.intent.category.BROWSABLE" /><data android:scheme="content" android:mimeType="*/*" /></intent-filter></activity>#' "$MAN"
+            sed -i 's#</activity>#<intent-filter android:label="Открыть в YevFiles"><!--yevview--><action android:name="android.intent.action.VIEW" /><category android:name="android.intent.category.DEFAULT" /><category android:name="android.intent.category.BROWSABLE" /><data android:scheme="content" android:mimeType="*/*" /></intent-filter></activity>#' "$MAN"
           fi
           echo "----- manifest -----"
           grep -E "uses-permission|requestLegacy|appsfp|YevDocuments|action.SEND|yevview" "$MAN" || true
