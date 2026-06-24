@@ -382,6 +382,40 @@ public class AppsPlugin extends Plugin {
     }
 
     @PluginMethod
+    public void copyTree(PluginCall call) {
+        String fromStr = call.getString("from");
+        String toStr = call.getString("to");
+        if (fromStr == null || toStr == null) { call.reject("no from/to"); return; }
+        try {
+            File src = toFile(fromStr);
+            File dst = toFile(toStr);
+            // снимок: запоминаем целевой путь, чтобы НЕ заходить в него при обходе источника
+            copyRecursive(src, dst, dst.getCanonicalPath());
+            JSObject ret = new JSObject(); ret.put("ok", true); call.resolve(ret);
+        } catch (Exception e) { call.reject(e.getMessage()); }
+    }
+
+    private void copyRecursive(File src, File dst, String skipPath) throws Exception {
+        // не копируем сам объект назначения внутрь себя
+        if (src.getCanonicalPath().equals(skipPath)) return;
+        if (src.isDirectory()) {
+            if (!dst.exists()) dst.mkdirs();
+            File[] kids = src.listFiles();
+            if (kids != null) for (File c : kids) {
+                // пропускаем целевую подпапку, если она внутри источника (защита от бесконечной рекурсии)
+                if (c.getCanonicalPath().equals(skipPath)) continue;
+                copyRecursive(c, new File(dst, c.getName()), skipPath);
+            }
+        } else {
+            java.io.FileInputStream in = new java.io.FileInputStream(src);
+            java.io.FileOutputStream out = new java.io.FileOutputStream(dst);
+            byte[] buf = new byte[65536]; int r;
+            while ((r = in.read(buf)) > 0) out.write(buf, 0, r);
+            in.close(); out.close();
+        }
+    }
+
+    @PluginMethod
     public void hasAllFiles(PluginCall call) {
         boolean granted;
         if (Build.VERSION.SDK_INT >= 30) granted = Environment.isExternalStorageManager();
