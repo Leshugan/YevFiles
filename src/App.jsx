@@ -538,13 +538,13 @@ export default function App() {
     for (const it of task.items) {
       const to = targetUri(it.name);
       if (!to || it.uri === to) continue;
-      // защита от рекурсии: нельзя копировать/перемещать папку внутрь себя или своей подпапки
-      if (it.type === "directory" && curUri && (curUri === it.uri || curUri.startsWith(it.uri + "/"))) {
-        showToast("Нельзя поместить «" + it.name + "» внутрь себя");
-        continue;
-      }
-      try { if (task.mode === "copy") await Filesystem.copy({ from: it.uri, to }); else await Filesystem.rename({ from: it.uri, to }); }
-      catch (e) { showToast(it.name + ": " + e.message); }
+      if (it.type === "directory" && curUri && curUri === it.uri) continue;
+      try {
+        if (task.mode === "copy") {
+          if (it.type === "directory") await Apps.copyTree({ from: it.uri, to });
+          else await Filesystem.copy({ from: it.uri, to });
+        } else await Filesystem.rename({ from: it.uri, to });
+      } catch (e) { showToast(it.name + ": " + e.message); }
     }
   };
   const runQueue = async (queue) => {
@@ -558,8 +558,15 @@ export default function App() {
       setProgress((p) => ({ current: i + 1, total, name: it.name, mode, bg: p && p.bg }));
       Apps.notifyProgress({ title: mode === "cut" ? "Перемещение" : "Копирование", text: it.name, progress: i + 1, max: total }).catch(() => {});
       const to = targetUri(it.name);
-      if (it.type === "directory" && curUri && (curUri === it.uri || curUri.startsWith(it.uri + "/"))) { showToast("Нельзя поместить «" + it.name + "» внутрь себя"); continue; }
-      if (to && it.uri !== to) { try { if (mode === "copy") await Filesystem.copy({ from: it.uri, to }); else await Filesystem.rename({ from: it.uri, to }); } catch (e) { showToast(it.name + ": " + e.message); } }
+      if (it.type === "directory" && curUri && curUri === it.uri) { continue; }
+      if (to && it.uri !== to) {
+        try {
+          if (mode === "copy") {
+            if (it.type === "directory") await Apps.copyTree({ from: it.uri, to });
+            else await Filesystem.copy({ from: it.uri, to });
+          } else await Filesystem.rename({ from: it.uri, to });
+        } catch (e) { showToast(it.name + ": " + e.message); }
+      }
     }
     setProgress(null); Apps.cancelNotify().catch(() => {});
     await refresh(); showToast(cancelRef.current ? "Отменено" : "Готово");
