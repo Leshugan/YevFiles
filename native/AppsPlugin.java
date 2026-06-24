@@ -160,6 +160,109 @@ public class AppsPlugin extends Plugin {
         }
     }
 
+    private File thumbDir() {
+        File d = new File(android.os.Environment.getExternalStorageDirectory(), ".yev_thumbs");
+        if (!d.exists()) d.mkdirs();
+        return d;
+    }
+    private String thumbKey(File src) {
+        // ключ = хэш пути + mtime, чтобы кэш инвалидировался при изменении файла
+        String base = src.getAbsolutePath() + "|" + src.lastModified() + "|" + src.length();
+        return Integer.toHexString(base.hashCode()) + "_" + src.lastModified();
+    }
+
+    @PluginMethod
+    public void thumb(PluginCall call) {
+        String uriStr = call.getString("uri");
+        if (uriStr == null) { call.reject("no uri"); return; }
+        try {
+            File f = toFile(uriStr);
+            if (!f.exists()) { call.resolve(new JSObject()); return; }
+            File cacheFile = new File(thumbDir(), thumbKey(f) + ".jpg");
+            JSObject ret = new JSObject();
+            // готовое превью из кэша
+            if (cacheFile.exists()) {
+                byte[] data = readAll(new FileInputStream(cacheFile));
+                ret.put("thumb", "data:image/jpeg;base64," + Base64.encodeToString(data, Base64.NO_WRAP));
+                call.resolve(ret); return;
+            }
+            // удалить устаревшие кэши этого же файла (другой mtime)
+            String prefix = Integer.toHexString((f.getAbsolutePath() + "|").hashCode());
+            File[] stale = thumbDir().listFiles();
+            String name = f.getName().toLowerCase();
+            Bitmap b = null;
+            if (name.matches(".*\\.(jpg|jpeg|png|webp|gif|bmp)$")) {
+                android.graphics.BitmapFactory.Options o = new android.graphics.BitmapFactory.Options();
+                o.inJustDecodeBounds = true;
+                android.graphics.BitmapFactory.decodeFile(f.getAbsolutePath(), o);
+                int s = 1; while (o.outWidth / s > 200 || o.outHeight / s > 200) s *= 2;
+                android.graphics.BitmapFactory.Options o2 = new android.graphics.BitmapFactory.Options();
+                o2.inSampleSize = s;
+                b = android.graphics.BitmapFactory.decodeFile(f.getAbsolutePath(), o2);
+            } else if (name.endsWith(".pdf")) {
+                android.os.ParcelFileDescriptor pfd = android.os.ParcelFileDescriptor.open(f, android.os.ParcelFileDescriptor.MODE_READ_ONLY);
+                android.graphics.pdf.PdfRenderer r = new android.graphics.pdf.PdfRenderer(pfd);
+                if (r.getPageCount() > 0) {
+                    android.graphics.pdf.PdfRenderer.Page page = r.openPage(0);
+                    int w = 150, h = (int) (150f * page.getHeight() / Math.max(1, page.getWidth())); if (h <= 0) h = 190;
+                    b = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888); b.eraseColor(0xFFFFFFFF);
+                    page.render(b, null, null, android.graphics.pdf.PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY); page.close();
+                }
+                r.close(); pfd.close();
+            } else if (name.endsWith(".apk")) {
+                PackageManager pm = getContext().getPackageManager();
+                android.content.pm.PackageInfo pi = pm.getPackageArchiveInfo(f.getAbsolutePath(), 0);
+                if (pi != null) { pi.applicationInfo.sourceDir = f.getAbsolutePath(); pi.applicationInfo.publicSourceDir = f.getAbsolutePath();
+                    Drawable d = pi.applicationInfo.loadIcon(pm); b = drawableToBitmap(d); }
+            }
+            if (b == null) { call.resolve(ret); return; }
+            // даунскейл до ~150px
+            int mx = Math.max(b.getWidth(), b.getHeight());
+            if (mx > 150) { float sc = 150f / mx; b = Bitmap.createScaledBitmap(b, Math.round(b.getWidth() * sc), Math.round(b.getHeight() * sc), true); }
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            b.compress(Bitmap.CompressFormat.JPEG, 80, out);
+            byte[] bytes = out.toByteArray();
+            try { OutputStream fos = new java.io.FileOutputStream(cacheFile); fos.write(bytes); fos.close(); } catch (Exception ignored) {}
+            ret.put("thumb", "data:image/jpeg;base64," + Base64.encodeToString(bytes, Base64.NO_WRAP));
+            call.resolve(ret);
+        } catch (Exception e) { call.resolve(new JSObject()); }
+    }
+
+    @PluginMethod
+    public void thumbSweep(PluginCall call) {
+        // удаляет кэши старше 30 дней или сверх лимита, чтобы папка не разрасталась
+        try {
+            File dir = thumbDir();
+            File[] files = dir.listFiles();
+            if (files != null) {
+                long now = System.currentTimeMillis();
+                long maxAge = 30L * 24 * 3600 * 1000;
+                long total = 0;
+                java.util.Arrays.sort(files, (a, c) -> Long.compare(c.lastModified(), a.lastModified()));
+                for (File f : files) {
+                    total += f.length();
+                    if (now - f.lastModified() > maxAge || total > 80L * 1024 * 1024) f.delete();
+                }
+            }
+            call.resolve(new JSObject());
+        } catch (Exception e) { call.resolve(new JSObject()); }
+    }
+
+    private Bitmap drawableToBitmap(Drawable d) {
+        int w = Math.max(1, d.getIntrinsicWidth()), h = Math.max(1, d.getIntrinsicHeight());
+        Bitmap b = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+        android.graphics.Canvas c = new android.graphics.Canvas(b);
+        d.setBounds(0, 0, w, h); d.draw(c);
+        return b;
+    }
+
+    private byte[] readAll(InputStream in) throws Exception {
+        ByteArrayOutputStream o = new ByteArrayOutputStream();
+        byte[] buf = new byte[65536]; int r;
+        while ((r = in.read(buf)) > 0) o.write(buf, 0, r);
+        in.close(); return o.toByteArray();
+    }
+
     @PluginMethod
     public void pdfThumb(PluginCall call) {
         String uriStr = call.getString("uri");
