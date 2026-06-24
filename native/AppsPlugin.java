@@ -290,6 +290,25 @@ public class AppsPlugin extends Plugin {
     }
 
     @PluginMethod
+    public void saveSharedTemp(PluginCall call) {
+        try {
+            if (MainActivity.pendingShared.isEmpty()) { call.resolve(new JSObject()); return; }
+            android.net.Uri u = MainActivity.pendingShared.get(0);
+            String name = queryName(u);
+            File dir = new File(android.os.Environment.getExternalStorageDirectory(), "Download/.yevtmp");
+            if (!dir.exists()) dir.mkdirs();
+            File out = new File(dir, name);
+            java.io.InputStream in = getContext().getContentResolver().openInputStream(u);
+            java.io.FileOutputStream fos = new java.io.FileOutputStream(out);
+            byte[] buf = new byte[65536]; int r;
+            while ((r = in.read(buf)) > 0) fos.write(buf, 0, r);
+            fos.close(); in.close();
+            MainActivity.pendingShared.clear();
+            JSObject ret = new JSObject(); ret.put("uri", "file://" + out.getAbsolutePath()); ret.put("name", name); call.resolve(ret);
+        } catch (Exception e) { call.reject(e.getMessage()); }
+    }
+
+    @PluginMethod
     public void getShared(PluginCall call) {
         try {
             JSArray arr = new JSArray();
@@ -300,7 +319,7 @@ public class AppsPlugin extends Plugin {
                 o.put("mime", getContext().getContentResolver().getType(u));
                 arr.put(o);
             }
-            JSObject ret = new JSObject(); ret.put("files", arr); call.resolve(ret);
+            JSObject ret = new JSObject(); ret.put("files", arr); ret.put("mode", MainActivity.pendingMode); call.resolve(ret);
         } catch (Exception e) { call.reject(e.getMessage()); }
     }
 
@@ -411,6 +430,8 @@ public class AppsPlugin extends Plugin {
         call.resolve(ret);
     }
 
+    private int[] copyCounter = new int[2]; // [done, total]
+
     @PluginMethod
     public void copyTree(PluginCall call) {
         String fromStr = call.getString("from");
@@ -419,20 +440,30 @@ public class AppsPlugin extends Plugin {
         try {
             File src = toFile(fromStr);
             File dst = toFile(toStr);
-            // снимок: запоминаем целевой путь, чтобы НЕ заходить в него при обходе источника
-            copyRecursive(src, dst, dst.getCanonicalPath());
-            JSObject ret = new JSObject(); ret.put("ok", true); call.resolve(ret);
+            String skip = dst.getCanonicalPath();
+            copyCounter[0] = 0;
+            copyCounter[1] = countFiles(src, skip);
+            copyRecursive(src, dst, skip);
+            JSObject ret = new JSObject(); ret.put("ok", true); ret.put("total", copyCounter[1]); call.resolve(ret);
         } catch (Exception e) { call.reject(e.getMessage()); }
     }
 
+    private int countFiles(File src, String skipPath) {
+        try { if (src.getCanonicalPath().equals(skipPath)) return 0; } catch (Exception e) { return 0; }
+        if (src.isDirectory()) {
+            int c = 0; File[] kids = src.listFiles();
+            if (kids != null) for (File k : kids) c += countFiles(k, skipPath);
+            return c;
+        }
+        return 1;
+    }
+
     private void copyRecursive(File src, File dst, String skipPath) throws Exception {
-        // не копируем сам объект назначения внутрь себя
         if (src.getCanonicalPath().equals(skipPath)) return;
         if (src.isDirectory()) {
             if (!dst.exists()) dst.mkdirs();
             File[] kids = src.listFiles();
             if (kids != null) for (File c : kids) {
-                // пропускаем целевую подпапку, если она внутри источника (защита от бесконечной рекурсии)
                 if (c.getCanonicalPath().equals(skipPath)) continue;
                 copyRecursive(c, new File(dst, c.getName()), skipPath);
             }
@@ -442,7 +473,27 @@ public class AppsPlugin extends Plugin {
             byte[] buf = new byte[65536]; int r;
             while ((r = in.read(buf)) > 0) out.write(buf, 0, r);
             in.close(); out.close();
+            copyCounter[0]++;
+            // событие прогресса в JS + уведомление Android
+            JSObject ev = new JSObject(); ev.put("done", copyCounter[0]); ev.put("total", copyCounter[1]); ev.put("name", src.getName());
+            notifyListeners("opProgress", ev);
+            if (copyCounter[1] > 0) postProgressNotif("Копирование", src.getName(), copyCounter[0], copyCounter[1]);
         }
+    }
+
+    private void postProgressNotif(String title, String text, int prog, int max) {
+        try {
+            NotificationManager nm = (NotificationManager) getContext().getSystemService(Context.NOTIFICATION_SERVICE);
+            if (android.os.Build.VERSION.SDK_INT >= 26) {
+                NotificationChannel ch = new NotificationChannel("yev_progress", "Операции с файлами", NotificationManager.IMPORTANCE_LOW);
+                nm.createNotificationChannel(ch);
+            }
+            Notification.Builder b = android.os.Build.VERSION.SDK_INT >= 26 ? new Notification.Builder(getContext(), "yev_progress") : new Notification.Builder(getContext());
+            b.setContentTitle(title).setContentText(text).setSmallIcon(android.R.drawable.stat_sys_download)
+             .setProgress(max, prog, false).setOngoing(prog < max);
+            nm.notify(777, b.build());
+            if (prog >= max) nm.cancel(777);
+        } catch (Exception ignored) {}
     }
 
     @PluginMethod
