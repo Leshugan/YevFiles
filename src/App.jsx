@@ -132,11 +132,11 @@ const ThumbIcon = ({ uri, cached, request, release, fallback }) => {
     const el = ref.current; if (!el) return;
     const io = new IntersectionObserver((ents) => {
       ents.forEach((en) => { if (en.isIntersecting) request(uri); else release(uri); });
-    }, { rootMargin: "200px 0px" }); // буфер ~3 строки ниже/выше экрана
+    }, { rootMargin: "800px 0px" }); // грузим заранее, ~11 строк за пределами экрана
     io.observe(el);
     return () => { io.disconnect(); release(uri); };
   }, [uri, cached]);
-  if (cached) return <img src={cached} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 13 }} />;
+  if (cached) return <img src={cached} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 13, animation: "fS .18s ease" }} />;
   return <span ref={ref} style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "100%", height: "100%" }}>{fallback}</span>;
 };
 const EXT = {
@@ -322,7 +322,7 @@ export default function App() {
   const thumbQueue = useRef([]);
   const thumbRunning = useRef(0);
   const thumbWanted = useRef(new Set());
-  const THUMB_CONCURRENCY = 2;
+  const THUMB_CONCURRENCY = 3;
   const pumpThumbs = useCallback(() => {
     while (thumbRunning.current < THUMB_CONCURRENCY && thumbQueue.current.length) {
       const uri = thumbQueue.current.shift();
@@ -1154,13 +1154,13 @@ function Btn({ onClick, icon, text, label, accent, red, flexNone, disabled }) {
 
 const S = {
   app: { display: "flex", flexDirection: "column", height: "100vh", background: BG, color: TXT, fontFamily: "system-ui,-apple-system,Roboto,sans-serif", overflow: "hidden" },
-  tabsbar: { display: "flex", alignItems: "center", background: BAR, flexShrink: 0, height: 50, margin: "8px 8px 4px", borderRadius: 24, boxShadow: "0 1px 0 rgba(255,255,255,.06) inset, 0 2px 6px rgba(0,0,0,.35), 0 12px 32px rgba(0,0,0,.55)" },
+  tabsbar: { display: "flex", alignItems: "center", background: BAR, flexShrink: 0, height: 50, margin: "8px 8px 10px", borderRadius: 24, boxShadow: "0 1px 0 rgba(255,255,255,.06) inset, 0 4px 10px rgba(0,0,0,.4), 0 14px 36px rgba(0,0,0,.55)" },
   tabs: { display: "flex", overflowX: "auto", flex: 1, alignItems: "center", justifyContent: "center", gap: 6, padding: "0 4px", height: "100%" },
   tab: { display: "flex", alignItems: "center", gap: 6, padding: "0 12px", height: 34, borderRadius: 17, fontSize: 13.5, color: SUB, whiteSpace: "nowrap", background: "#241A11", flexShrink: 0, border: "1px solid transparent" },
   tabActive: { color: ACC, background: "rgba(239,108,0,.14)", border: "1px solid " + ACC, fontWeight: 600, boxShadow: "0 0 0 1px rgba(239,108,0,.15), 0 2px 8px rgba(239,108,0,.15)" },
   tabX: { fontSize: 17, color: SUB, padding: "0 2px" },
   hbtn: { border: "none", background: "transparent", color: TXT, width: 40, height: 48, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" },
-  crumb: { padding: "8px 16px", fontSize: 13, background: BG, flexShrink: 0, borderBottom: "1px solid #241A11", overflow: "hidden", whiteSpace: "nowrap" },
+  crumb: { padding: "2px 16px 8px", fontSize: 13, background: BG, flexShrink: 0, overflow: "hidden", whiteSpace: "nowrap" },
   list: { flex: 1, overflowY: "auto", overflowX: "hidden", display: "flex", flexDirection: "column" },
   slideWrap: { display: "flex", flexDirection: "column" },
   note: { color: SUB, textAlign: "center", padding: "60px 24px", lineHeight: 1.6 },
