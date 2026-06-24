@@ -351,6 +351,36 @@ public class AppsPlugin extends Plugin {
     }
 
     @PluginMethod
+    public void apkInfo(PluginCall call) {
+        String uriStr = call.getString("uri");
+        if (uriStr == null) { call.reject("no uri"); return; }
+        try {
+            File f = toFile(uriStr);
+            String p = f.getAbsolutePath();
+            PackageManager pm = getContext().getPackageManager();
+            android.content.pm.PackageInfo pi = pm.getPackageArchiveInfo(p, 0);
+            JSObject ret = new JSObject();
+            if (pi != null) {
+                pi.applicationInfo.sourceDir = p;
+                pi.applicationInfo.publicSourceDir = p;
+                ret.put("package", pi.packageName);
+                ret.put("versionName", pi.versionName);
+                ret.put("versionCode", android.os.Build.VERSION.SDK_INT >= 28 ? pi.getLongVersionCode() : pi.versionCode);
+                ret.put("targetSdk", pi.applicationInfo.targetSdkVersion);
+                if (android.os.Build.VERSION.SDK_INT >= 24) ret.put("minSdk", pi.applicationInfo.minSdkVersion);
+                try { ret.put("label", pm.getApplicationLabel(pi.applicationInfo).toString()); } catch (Exception ignored) {}
+                // установлена ли уже + версия установленной
+                try {
+                    android.content.pm.PackageInfo inst = pm.getPackageInfo(pi.packageName, 0);
+                    ret.put("installedVersionName", inst.versionName);
+                    ret.put("installed", true);
+                } catch (Exception e) { ret.put("installed", false); }
+            }
+            call.resolve(ret);
+        } catch (Exception e) { call.reject(e.getMessage()); }
+    }
+
+    @PluginMethod
     public void apkIcon(PluginCall call) {
         String uriStr = call.getString("uri");
         if (uriStr == null) { call.reject("no uri"); return; }
