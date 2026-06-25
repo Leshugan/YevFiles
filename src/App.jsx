@@ -413,7 +413,7 @@ export default function App() {
   backRef.current = () => {
     if (settings) { setSettings(false); return; }
     if (arcView && arcSel.size > 0) { setArcSel(new Set()); return; }
-    if (arcView) { setArcView(null); return; }
+    if (arcView) { closeArc(); return; }
     if (pasteMenu) { setPasteMenu(false); return; }
     if (openMenu) { setOpenMenu(null); return; }
     if (props) { setProps(null); return; }
@@ -472,8 +472,14 @@ export default function App() {
     catch (err) { showToast("Не удалось открыть: " + (err?.message || "")); }
   };
   const arcAnchor = useRef(null);
-  const openArchive = async (e) => {
+  const arcOrigin = useRef({ x: 50, y: 40 });
+  const [arcClosing, setArcClosing] = useState(false);
+  const closeArc = () => { if (arcClosing) return; setArcClosing(true); };
+  const onArcAnimEnd = () => { if (arcClosing) { setArcClosing(false); setArcView(null); setArcSel(new Set()); } };
+  const openArchive = async (e, ev) => {
+    if (ev) { arcOrigin.current = { x: (ev.clientX / window.innerWidth) * 100, y: (ev.clientY / window.innerHeight) * 100 }; }
     setOpenMenu(null);
+    setArcClosing(false);
     setArcView({ name: e.name, entries: null });
     try {
       const r = await Filesystem.readFile({ path: e.uri });
@@ -673,7 +679,7 @@ export default function App() {
           {tabsMenu && (
             <>
               <div style={S.overlay} onClick={() => setTabsMenu(false)} />
-              <div style={{ ...S.menu, position: "fixed", top: 46, left: 4, zIndex: 1200 }}>
+              <div style={{ ...S.menu, position: "fixed", top: 46, left: 4, zIndex: 1200, transformOrigin: "top left" }}>
                 <div style={S.menuItem} onClick={saveAllTabs}><span style={{ color: ACC, display: "flex" }}><Svg d={I.pin} size={20} /></span>Сохранить вкладки</div>
                 <div style={{ height: 1, background: LINE }} />
                 <div style={S.menuItem} onClick={startupHere}><span style={{ color: GOLD, display: "flex" }}><Svg d={I.home} size={20} /></span>Запуск при открытии</div>
@@ -701,7 +707,7 @@ export default function App() {
           {headMenu && (
             <>
               <div style={S.overlay} onClick={() => setHeadMenu(false)} />
-              <div style={{ ...S.menu, top: 46, right: 4 }}>
+              <div style={{ ...S.menu, top: 46, right: 4, transformOrigin: "top right" }}>
                 <div style={S.menuItem} onClick={() => { setHeadMenu(false); addTab(); }}>
                   <span style={{ color: ACC, display: "flex" }}><Svg d={I.plus} size={20} /></span>Новая вкладка
                 </div>
@@ -823,7 +829,7 @@ export default function App() {
       {selMode ? (
         <nav style={{ ...S.bottom, justifyContent: "flex-start" }}>
           <div style={S.selCount}>
-            <span style={{ fontSize: 16, fontWeight: 700, color: "#fff", lineHeight: 1 }}>{sel.size}</span>
+            <span key={sel.size} style={{ fontSize: 16, fontWeight: 700, color: "#fff", lineHeight: 1, display: "inline-block", animation: "pulse .3s cubic-bezier(.2,.9,.3,1.3)" }}>{sel.size}</span>
           </div>
           <div style={{ display: "flex", overflowX: "auto", flex: 1, justifyContent: "flex-end" }}>
             <Btn onClick={exitSel} icon={I.x} label="Отмена" flexNone />
@@ -851,7 +857,7 @@ export default function App() {
       {createOpen && (
         <>
           <div style={{ position: "fixed", inset: 0, zIndex: 1190 }} onClick={() => setCreateOpen(false)} />
-          <div style={{ ...S.menu, position: "fixed", right: 8, bottom: "calc(62px + env(safe-area-inset-bottom))", zIndex: 1200, minWidth: 150 }}>
+          <div style={{ ...S.menu, position: "fixed", right: 8, bottom: "calc(62px + env(safe-area-inset-bottom))", zIndex: 1200, minWidth: 150, transformOrigin: "bottom right" }}>
             <div style={S.createItem} onClick={() => { setCreateOpen(false); doCreateNomedia(); }}>.nomedia</div>
             <div style={{ height: 1, background: LINE }} />
             <div style={S.createItem} onClick={() => { setCreateOpen(false); setSheet({ kind: "folder", val: "" }); }}>Папка</div>
@@ -865,7 +871,7 @@ export default function App() {
       {selMenu && (
         <>
           <div style={{ position: "fixed", inset: 0, zIndex: 1190 }} onClick={() => setSelMenu(false)} />
-          <div style={{ ...S.menu, position: "fixed", right: 8, bottom: "calc(56px + env(safe-area-inset-bottom))", zIndex: 1200 }}>
+          <div style={{ ...S.menu, position: "fixed", right: 8, bottom: "calc(56px + env(safe-area-inset-bottom))", zIndex: 1200, transformOrigin: "bottom right" }}>
             {one && one.type === "directory" && (
               <>
                 <div style={S.menuItem} onClick={() => { const t = [...tabs, { id: Date.now(), path: keyOf(one.name) }]; persist(t); setSelMenu(false); exitSel(); setActive(t.length - 1); }}>
@@ -969,9 +975,15 @@ export default function App() {
 
       {/* ПРОСМОТР АРХИВА — как папка */}
       {arcView && (
-        <div style={S.arcScreen}>
+        <div
+          onAnimationEnd={onArcAnimEnd}
+          style={{
+            ...S.arcScreen,
+            transformOrigin: `${arcOrigin.current.x}% ${arcOrigin.current.y}%`,
+            animation: `${arcClosing ? "arcShrink" : "arcGrow"} .26s cubic-bezier(.2,.8,.25,1) ${arcClosing ? "forwards" : ""}`,
+          }}>
           <div style={{ ...S.crumb, borderBottom: "none" }}>
-            <span onClick={() => setArcView(null)} style={{ display: "inline-flex", alignItems: "center", gap: 6, color: ACC }}><Svg d={I.back} size={18} /> {arcView.name}</span>
+            <span onClick={closeArc} style={{ display: "inline-flex", alignItems: "center", gap: 6, color: ACC }}><Svg d={I.back} size={18} /> {arcView.name}</span>
           </div>
           {arcView.busy && <div style={{ position: "absolute", top: 50, left: 0, right: 0, zIndex: 5, padding: "8px 16px", color: GOLD, fontSize: 13, textAlign: "center", pointerEvents: "none", textShadow: "0 1px 4px rgba(0,0,0,.6)" }}>{arcView.busy}</div>}
           {arcView.entries == null ? (
@@ -1068,7 +1080,7 @@ export default function App() {
                 })}
               </div>
               {!openMenu.editHide && /\.(zip|apk|jar)$/i.test(openMenu.file.name) && (
-                <div onClick={() => openArchive(openMenu.file)} style={{ ...S.appRow, color: GOLD }}>
+                <div onClick={(ev) => openArchive(openMenu.file, ev)} style={{ ...S.appRow, color: GOLD }}>
                   <span style={{ width: 38, display: "flex", justifyContent: "center" }}><Svg d={I.folder} size={28} /></span>
                   <span style={{ flex: 1, fontSize: 15 }}>Открыть</span>
                 </div>
@@ -1159,9 +1171,9 @@ export default function App() {
         return (
         <div style={S.backdrop}>
           <div style={{ ...S.sheet, paddingBottom: 24 }} onClick={(e) => e.stopPropagation()}>
-            <div style={S.sheetTitle}>{label} {Math.min(progress.current + (sub ? 1 : 0), progress.total)}/{progress.total}</div>
+            <div style={S.sheetTitle}>{label} {Math.min(progress.current + (sub ? 1 : 0), progress.total)}/{progress.total}{pct >= 100 && <span style={{ display: "inline-block", marginLeft: 8, color: ACC, verticalAlign: "middle", animation: "pulse .4s cubic-bezier(.2,.9,.3,1.4)" }}><Svg d={I.check} size={18} /></span>}</div>
             <div style={{ height: 8, background: ROW2, borderRadius: 4, overflow: "hidden", margin: "6px 0 12px" }}>
-              <div style={{ height: "100%", width: pct + "%", background: ACC, transition: "width .2s" }} />
+              <div style={{ height: "100%", width: pct + "%", background: ACC, transition: "width .2s", boxShadow: pct >= 100 ? "0 0 12px " + ACC : "none" }} />
             </div>
             <div style={{ fontSize: 13, color: SUB, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginBottom: 16 }}>{sub && sub.name ? sub.name : progress.name}{sub && sub.total ? "  (" + sub.done + "/" + sub.total + ")" : ""}</div>
             <div style={{ display: "flex", gap: 10 }}>
@@ -1197,6 +1209,11 @@ export default function App() {
         @keyframes dropGrow{from{opacity:0;transform:scale(.88)}to{opacity:1;transform:scale(1)}}
         @keyframes sUp{from{transform:translateY(60px);opacity:0}to{transform:translateY(0);opacity:1}}
         @keyframes fS{from{opacity:0}to{opacity:1}}
+        @keyframes arcGrow{from{opacity:.4;transform:scale(.35)}to{opacity:1;transform:scale(1)}}
+        @keyframes arcShrink{from{opacity:1;transform:scale(1)}to{opacity:0;transform:scale(.35)}}
+        @keyframes cbPop{0%{transform:scale(0);opacity:0}60%{transform:scale(1.25)}100%{transform:scale(1);opacity:1}}
+        @keyframes pulse{0%{transform:scale(1)}40%{transform:scale(1.35)}100%{transform:scale(1)}}
+        @keyframes toastUp{0%{transform:translateX(-50%) translateY(40px);opacity:0}65%{transform:translateX(-50%) translateY(-6px);opacity:1}100%{transform:translateX(-50%) translateY(0)}}
         *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none}
         input{-webkit-user-select:text;user-select:text}
         body{margin:0}::-webkit-scrollbar{width:0}
@@ -1252,7 +1269,7 @@ const S = {
   iconWrap: { width: 44, height: 44, borderRadius: 13, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
   iconImg: { width: "100%", height: "100%", objectFit: "cover", borderRadius: 13 },
   folderThumb: { position: "absolute", right: 1, bottom: 1, width: 26, height: 26, borderRadius: 7, objectFit: "cover", border: "2px solid " + BG },
-  cbk: { width: 22, height: 22, borderRadius: 6, background: ACC, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center" },
+  cbk: { width: 22, height: 22, borderRadius: 6, background: ACC, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", animation: "cbPop .26s cubic-bezier(.2,.9,.3,1.3)" },
   rowMid: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 },
   rowDate: { fontSize: 12, color: SUB },
   rowSize: { fontSize: 11.5, color: "rgba(176,164,152,.5)", flexShrink: 0, marginLeft: 6 },
@@ -1301,5 +1318,5 @@ const S = {
   appRow: { display: "flex", alignItems: "center", gap: 14, padding: "10px 2px", borderBottom: "1px solid " + LINE },
   cbox: { width: 22, height: 22, borderRadius: 6, border: "2px solid " + SUB, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, color: "#fff", flexShrink: 0 },
   cboxOn: { background: ACC, borderColor: ACC },
-  toast: { position: "fixed", left: "50%", bottom: 90, transform: "translateX(-50%)", background: ROW2, color: TXT, padding: "10px 18px", borderRadius: 20, fontSize: 13, border: "1px solid " + LINE, boxShadow: "0 1px 0 rgba(255,255,255,.06) inset, 0 2px 6px rgba(0,0,0,.35), 0 12px 32px rgba(0,0,0,.55)", zIndex: 1500, animation: "fS .2s ease", maxWidth: "80%", textAlign: "center" },
+  toast: { position: "fixed", left: "50%", bottom: 90, transform: "translateX(-50%)", background: ROW2, color: TXT, padding: "10px 18px", borderRadius: 20, fontSize: 13, border: "1px solid " + LINE, boxShadow: "0 1px 0 rgba(255,255,255,.06) inset, 0 2px 6px rgba(0,0,0,.35), 0 12px 32px rgba(0,0,0,.55)", zIndex: 1500, animation: "toastUp .34s cubic-bezier(.2,.9,.3,1)", maxWidth: "80%", textAlign: "center" },
 };
