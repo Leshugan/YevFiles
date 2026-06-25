@@ -441,8 +441,9 @@ export default function App() {
 
   const openExternal = async (e) => {
     const mime = mimeOf(e.name);
-    // apk — особый: всегда меню выбора (Установить / Открыть с помощью / как архив), без авто-привязки
-    if (/\.apk$/i.test(e.name)) { await showOpenMenu(e, mime); return; }
+    const ext = (e.name.split(".").pop() || "").toLowerCase();
+    // apk и архивы — всегда меню выбора (там есть «Открыть как архив»), без авто-привязки
+    if (EXT.archive.includes(ext)) { await showOpenMenu(e, mime); return; }
     const cat = defaultOpenAs(e.name);
     const defs = loadMap(DEFKEY);
     const d = defs[cat] || defs[mime];
