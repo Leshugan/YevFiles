@@ -73,8 +73,11 @@ const I = {
   cam: <><path d="M3 8a2 2 0 0 1 2-2h2l1.5-2h7L19 6h0a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><circle cx="12" cy="12.5" r="3.5" /></>,
   android: <><path d="M7 9a5 5 0 0 1 10 0v1H7z" /><path d="M8.5 6.5L7 4M15.5 6.5L17 4" /><rect x="7" y="11" width="10" height="8" rx="2" /></>,
   doc2: <><path d="M6 2h9l5 5v15H6z" /><path d="M14 2v6h6" /><path d="M9 13h6M9 16h6" /></>,
-  gamepad: <><rect x="2.5" y="6" width="19" height="12" rx="3.5" /><rect x="9" y="9.5" width="6" height="5" rx="1" /><path d="M5.5 10.5v3M4 12h3" /><circle cx="17" cy="10.5" r=".6" fill="currentColor" /><circle cx="18.5" cy="12" r=".6" fill="currentColor" /><circle cx="15.5" cy="12" r=".6" fill="currentColor" /><circle cx="17" cy="13.5" r=".6" fill="currentColor" /></>,
-  win: <><rect x="3" y="4" width="18" height="16" rx="1" /><path d="M3 9h18M11 9v11" /></>,
+  gamepad: <><rect x="1.5" y="5.5" width="21" height="13" rx="3.5" /><rect x="9" y="8" width="6" height="6" rx="1" /><path d="M4.8 8.2v2.2M3.7 9.3h2.2" /><circle cx="18" cy="8" r=".7" fill="currentColor" /><circle cx="19.4" cy="9.3" r=".7" fill="currentColor" /><circle cx="16.6" cy="9.3" r=".7" fill="currentColor" /><circle cx="18" cy="10.6" r=".7" fill="currentColor" /><circle cx="6" cy="14.5" r="1.2" /><circle cx="18" cy="14.5" r="1.2" /></>,
+  emuPad: <><rect x="3" y="8" width="18" height="9" rx="4.5" /><path d="M7 10.5v4M5 12.5h4" /><circle cx="16" cy="11" r=".8" fill="currentColor" /><circle cx="18.2" cy="13" r=".8" fill="currentColor" /><circle cx="13.8" cy="13" r=".8" fill="currentColor" /><circle cx="16" cy="15" r=".8" fill="currentColor" /></>,
+  switchCon: <><path stroke="#5AA9E6" d="M9 5.5H6.5A2.5 2.5 0 0 0 4 8v8a2.5 2.5 0 0 0 2.5 2.5H9z" /><circle cx="6.4" cy="8.6" r="1" stroke="#5AA9E6" /><path stroke="#5AA9E6" d="M5.6 14.2h1.6" /><rect x="9" y="5.5" width="6" height="13" rx="0.6" stroke="#CFC6BA" /><path stroke="#E60012" d="M15 5.5h2.5A2.5 2.5 0 0 1 20 8v8a2.5 2.5 0 0 1-2.5 2.5H15z" /><circle cx="17.6" cy="14.4" r="1" stroke="#E60012" /><circle cx="17.6" cy="7.9" r=".55" fill="#E60012" stroke="#E60012" /><circle cx="18.8" cy="9.1" r=".55" fill="#E60012" stroke="#E60012" /><circle cx="16.4" cy="9.1" r=".55" fill="#E60012" stroke="#E60012" /><circle cx="17.6" cy="10.3" r=".55" fill="#E60012" stroke="#E60012" /></>,
+  media: <><rect x="3" y="4" width="18" height="16" rx="3" /><path d="M10 9l5 3-5 3z" fill="currentColor" /></>,
+  win: <><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M12 3v18M3 12h18" /></>,
   fontA: <><path d="M5 19l5-13 5 13M7 14h6" /><path d="M17 19V9M17 9c2 0 3 1 3 2s-1 2-3 2" /></>,
   launcher: <><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></>,
   book: <><path d="M4 4h11a3 3 0 0 1 3 3v13H7a3 3 0 0 0-3 3z" /><path d="M4 4v16" /></>,
@@ -156,9 +159,10 @@ const SYS_FOLDERS = {
   android: { d: I.android, c: "#A4C639" }, data: { d: I.android, c: "#A4C639" }, obb: { d: I.android, c: "#A4C639" },
   apk: { d: I.apk, c: "#A4C639" },
   bannerhub: { d: I.img, c: "#E36FB0" }, fonts: { d: I.fontA, c: "#C9A227" }, books: { d: I.book, c: "#C98A4B" },
-  games: { d: I.gamepad, c: "#A4C639" }, gamehub: { d: I.gamepad, c: "#A4C639" }, emu: { d: I.gamepad, c: "#A4C639" }, arcade: { d: I.gamepad, c: "#A4C639" }, mame: { d: I.gamepad, c: "#A4C639" },
+  games: { d: I.gamepad, c: "#A4C639" }, gamehub: { d: I.gamepad, c: "#A4C639" }, emu: { d: I.emuPad, c: "#A4C639" }, arcade: { d: I.emuPad, c: "#A4C639" }, mame: { d: I.emuPad, c: "#A4C639" },
   retroarch: { d: I.gamepad, c: "#7C5CFF" }, winlator: { d: I.win, c: "#5AA9E6" }, windows: { d: I.win, c: "#5AA9E6" },
-  switch: { d: I.gamepad, c: "#E60012" }, "nintendo switch": { d: I.gamepad, c: "#E60012" }, nes: { d: I.gamepad, c: "#E05252" }, dandy: { d: I.gamepad, c: "#E05252" },
+  switch: { d: I.switchCon, c: "#5AA9E6" }, "nintendo switch": { d: I.switchCon, c: "#5AA9E6" }, nes: { d: I.gamepad, c: "#E05252" }, dandy: { d: I.gamepad, c: "#E05252" },
+  media: { d: I.media, c: "#E0709A" },
   sega: { d: I.gamepad, c: "#3A7BD5" }, ps1: { d: I.gamepad, c: "#5AA9E6" }, ps2: { d: I.gamepad, c: "#5AA9E6" }, ps3: { d: I.gamepad, c: "#5AA9E6" }, psp: { d: I.gamepad, c: "#5AA9E6" }, vita3k: { d: I.gamepad, c: "#5AA9E6" },
   mt2: { d: I.tool, c: "#E3B14F" }, "mt manager": { d: I.tool, c: "#E3B14F" }, apkeditor: { d: I.tool, c: "#6FD3A8" },
   "smart launcher": { d: I.launcher, c: "#5AA9E6" }, smartlauncher: { d: I.launcher, c: "#5AA9E6" }, "mx player": { d: I.video, c: "#3A7BD5" }, mxplayer: { d: I.video, c: "#3A7BD5" },
@@ -318,19 +322,31 @@ export default function App() {
   const visLen = useRef(0);
   const scrollPos = useRef({});
   const pathKeyRef = useRef("");
+  const restoring = useRef(false);
+  const navRef = useRef(null);
   pathKeyRef.current = active + "|" + path;
   useLayoutEffect(() => {
     const el = listRef.current, sp = spacerRef.current; if (!el || !sp) return;
-    const ch = el.clientHeight, rowH = 72, n = visLen.current;
-    const pt = Math.max(0, ch - Math.min(4, n) * rowH);
+    const rowH = 72, n = visLen.current;
+    // высота, перекрытая плавающей панелью снизу — контент уходит под неё
+    let navH = 72;
+    if (navRef.current) { const nr = navRef.current.getBoundingClientRect(), lr = el.getBoundingClientRect(); navH = Math.max(0, lr.bottom - nr.top); }
+    el.style.paddingBottom = navH + "px";
+    const ch = el.clientHeight; // включает paddingBottom
+    const usable = ch - navH;   // видимая зона над панелью
+    const pt = Math.max(0, usable - Math.min(4, n) * rowH);
     sp.style.height = pt + "px";
     const key = active + "|" + path;
     const saved = scrollPos.current[key];
-    if (saved != null) { el.scrollTop = saved; return; }
-    const contentH = el.scrollHeight - pt;
-    el.scrollTop = contentH >= ch ? pt : el.scrollHeight - ch;
-  }, [path, active, entries]);
-  const onListScroll = (e) => { scrollPos.current[pathKeyRef.current] = e.currentTarget.scrollTop; };
+    restoring.current = true;
+    if (saved != null) el.scrollTop = saved;
+    else {
+      const rowsRegion = el.scrollHeight - pt - navH; // высота строк
+      el.scrollTop = rowsRegion >= usable ? pt : Math.max(0, el.scrollHeight - ch);
+    }
+    requestAnimationFrame(() => { requestAnimationFrame(() => { restoring.current = false; }); });
+  }, [path, active, entries, selMode, query, clip]);
+  const onListScroll = (e) => { if (restoring.current) return; scrollPos.current[pathKeyRef.current] = e.currentTarget.scrollTop; };
   // Фоновая подгрузка превью: только видимые на экране строки, ограниченная нагрузка
   const thumbQueue = useRef([]);
   const thumbRunning = useRef(0);
@@ -801,7 +817,9 @@ export default function App() {
         </div>
       )}
 
-      {/* НИЖНЯЯ ПАНЕЛЬ */}
+      {/* НИЖНЯЯ ПАНЕЛЬ (плавает над списком — контент уходит под неё) */}
+      <div ref={navRef} style={{ position: "absolute", left: 0, right: 0, bottom: 0, zIndex: 60, pointerEvents: "none" }}>
+       <div style={{ pointerEvents: "auto" }}>
       {selMode ? (
         <nav style={{ ...S.bottom, justifyContent: "flex-start" }}>
           <div style={S.selCount}>
@@ -826,6 +844,8 @@ export default function App() {
           <Zone><Btn onClick={() => setCreateOpen((v) => !v)} icon={I.plus} label="Создать" /></Zone>
         </nav>
       )}
+       </div>
+      </div>
 
       {/* МЕНЮ «СОЗДАТЬ» (поверх тулбара) */}
       {createOpen && (
@@ -1215,7 +1235,7 @@ function Btn({ onClick, icon, text, label, accent, red, flexNone, disabled }) {
 }
 
 const S = {
-  app: { display: "flex", flexDirection: "column", height: "100vh", background: BG, color: TXT, fontFamily: "system-ui,-apple-system,Roboto,sans-serif", overflow: "hidden" },
+  app: { position: "relative", display: "flex", flexDirection: "column", height: "100vh", background: BG, color: TXT, fontFamily: "system-ui,-apple-system,Roboto,sans-serif", overflow: "hidden" },
   tabsbar: { display: "flex", alignItems: "center", background: BAR, flexShrink: 0, height: 50, margin: "8px 8px 6px", borderRadius: 24, boxShadow: "0 1px 0 rgba(255,255,255,.05) inset, 0 10px 30px rgba(0,0,0,.45)" },
   tabs: { display: "flex", overflowX: "auto", flex: 1, alignItems: "center", justifyContent: "center", gap: 6, padding: "0 4px", height: "100%" },
   tab: { display: "flex", alignItems: "center", gap: 6, padding: "0 12px", height: 34, borderRadius: 17, fontSize: 13.5, color: SUB, whiteSpace: "nowrap", background: "#241A11", flexShrink: 0, border: "1px solid transparent" },
