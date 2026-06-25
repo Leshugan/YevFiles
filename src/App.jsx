@@ -413,7 +413,7 @@ export default function App() {
   backRef.current = () => {
     if (settings) { setSettings(false); return; }
     if (arcView && arcSel.size > 0) { setArcSel(new Set()); return; }
-    if (arcView) { closeArc(); return; }
+    if (arcView) { setArcView(null); return; }
     if (pasteMenu) { setPasteMenu(false); return; }
     if (openMenu) { setOpenMenu(null); return; }
     if (props) { setProps(null); return; }
@@ -466,20 +466,16 @@ export default function App() {
       arr.has(id) ? arr.delete(id) : arr.add(id);
       hm[om.mime] = [...arr]; saveMap(HIDEKEY, hm); setOpenMenu({ ...om }); return;
     }
-    if (om.useDefault) { const defs = loadMap(DEFKEY); defs[om.mime] = app.packageName + "|" + app.activityName; saveMap(DEFKEY, defs); }
+    const defs = loadMap(DEFKEY);
+    if (om.useDefault) { defs[om.mime] = app.packageName + "|" + app.activityName; saveMap(DEFKEY, defs); }
+    else if (defs[om.mime]) { delete defs[om.mime]; saveMap(DEFKEY, defs); } // разовый выбор — сбросить прежнюю привязку
     setOpenMenu(null);
     try { await Apps.open({ uri: om.file.uri, mime: mimeOf(om.file.name), packageName: app.packageName, activityName: app.activityName }); }
     catch (err) { showToast("Не удалось открыть: " + (err?.message || "")); }
   };
   const arcAnchor = useRef(null);
-  const arcOrigin = useRef({ x: 50, y: 40 });
-  const [arcClosing, setArcClosing] = useState(false);
-  const closeArc = () => { if (arcClosing) return; setArcClosing(true); };
-  const onArcAnimEnd = () => { if (arcClosing) { setArcClosing(false); setArcView(null); setArcSel(new Set()); } };
-  const openArchive = async (e, ev) => {
-    if (ev) { arcOrigin.current = { x: (ev.clientX / window.innerWidth) * 100, y: (ev.clientY / window.innerHeight) * 100 }; }
+  const openArchive = async (e) => {
     setOpenMenu(null);
-    setArcClosing(false);
     setArcView({ name: e.name, entries: null });
     try {
       const r = await Filesystem.readFile({ path: e.uri });
@@ -975,15 +971,9 @@ export default function App() {
 
       {/* ПРОСМОТР АРХИВА — как папка */}
       {arcView && (
-        <div
-          onAnimationEnd={onArcAnimEnd}
-          style={{
-            ...S.arcScreen,
-            transformOrigin: `${arcOrigin.current.x}% ${arcOrigin.current.y}%`,
-            animation: `${arcClosing ? "arcShrink" : "arcGrow"} .26s cubic-bezier(.2,.8,.25,1) ${arcClosing ? "forwards" : ""}`,
-          }}>
+        <div style={S.arcScreen}>
           <div style={{ ...S.crumb, borderBottom: "none" }}>
-            <span onClick={closeArc} style={{ display: "inline-flex", alignItems: "center", gap: 6, color: ACC }}><Svg d={I.back} size={18} /> {arcView.name}</span>
+            <span onClick={() => setArcView(null)} style={{ display: "inline-flex", alignItems: "center", gap: 6, color: ACC }}><Svg d={I.back} size={18} /> {arcView.name}</span>
           </div>
           {arcView.busy && <div style={{ position: "absolute", top: 50, left: 0, right: 0, zIndex: 5, padding: "8px 16px", color: GOLD, fontSize: 13, textAlign: "center", pointerEvents: "none", textShadow: "0 1px 4px rgba(0,0,0,.6)" }}>{arcView.busy}</div>}
           {arcView.entries == null ? (
@@ -1080,7 +1070,7 @@ export default function App() {
                 })}
               </div>
               {!openMenu.editHide && /\.(zip|apk|jar)$/i.test(openMenu.file.name) && (
-                <div onClick={(ev) => openArchive(openMenu.file, ev)} style={{ ...S.appRow, color: GOLD }}>
+                <div onClick={() => openArchive(openMenu.file)} style={{ ...S.appRow, color: GOLD }}>
                   <span style={{ width: 38, display: "flex", justifyContent: "center" }}><Svg d={I.folder} size={28} /></span>
                   <span style={{ flex: 1, fontSize: 15 }}>Открыть</span>
                 </div>
@@ -1209,8 +1199,6 @@ export default function App() {
         @keyframes dropGrow{from{opacity:0;transform:scale(.88)}to{opacity:1;transform:scale(1)}}
         @keyframes sUp{from{transform:translateY(60px);opacity:0}to{transform:translateY(0);opacity:1}}
         @keyframes fS{from{opacity:0}to{opacity:1}}
-        @keyframes arcGrow{from{opacity:.4;transform:scale(.35)}to{opacity:1;transform:scale(1)}}
-        @keyframes arcShrink{from{opacity:1;transform:scale(1)}to{opacity:0;transform:scale(.35)}}
         @keyframes cbPop{0%{transform:scale(0);opacity:0}60%{transform:scale(1.25)}100%{transform:scale(1);opacity:1}}
         @keyframes pulse{0%{transform:scale(1)}40%{transform:scale(1.35)}100%{transform:scale(1)}}
         @keyframes toastUp{0%{transform:translateX(-50%) translateY(40px);opacity:0}65%{transform:translateX(-50%) translateY(-6px);opacity:1}100%{transform:translateX(-50%) translateY(0)}}
