@@ -7,7 +7,6 @@ import android.content.BroadcastReceiver;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageInstaller;
-import androidx.core.content.FileProvider;
 import android.content.pm.ResolveInfo;
 import android.os.FileObserver;
 import android.app.Notification;
@@ -533,18 +532,6 @@ public class AppsPlugin extends Plugin {
         try {
             File f = toFile(uriStr);
             if (!f.exists()) { call.reject("Файл не найден: " + f.getAbsolutePath()); return; }
-            // Системный установщик через ACTION_VIEW + FileProvider — после установки покажет "Открыть"
-            try {
-                Uri apkUri = FileProvider.getUriForFile(getContext(), getContext().getPackageName() + ".appsfp", f);
-                Intent i = new Intent(Intent.ACTION_VIEW);
-                i.setDataAndType(apkUri, "application/vnd.android.package-archive");
-                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                getContext().startActivity(i);
-                call.resolve();
-                return;
-            } catch (Exception viewEx) {
-                // путь не покрыт FileProvider — запасной способ через PackageInstaller-сессию
-            }
             registerInstallReceiver();
             PackageInstaller pi = getContext().getPackageManager().getPackageInstaller();
             PackageInstaller.SessionParams params = new PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL);
