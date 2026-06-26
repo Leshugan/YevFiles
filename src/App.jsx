@@ -476,6 +476,11 @@ export default function App() {
   };
   const arcAnchor = useRef(null);
   const openArchive = async (e) => {
+    const MAXARC = 100 * 1024 * 1024; // ~100 МБ — выше WebView не тянет распаковку в памяти
+    if (e.size && e.size > MAXARC) {
+      showToast("Архив большой (" + Math.round(e.size / 1048576) + " МБ) — откройте в архиваторе");
+      return; // меню остаётся открытым: можно выбрать приложение-архиватор
+    }
     setOpenMenu(null);
     setArcView({ name: e.name, entries: null });
     try {
@@ -1081,7 +1086,7 @@ export default function App() {
                 <div onClick={() => { setOpenMenu(null); Apps.installApk({ uri: openMenu.file.uri }).catch((er) => showToast("Ошибка: " + (er?.message || ""))); }}
                   style={{ ...S.appRow, color: "#6FD3A8" }}>
                   <span style={{ width: 38, display: "flex", justifyContent: "center" }}><Svg d={I.plus} size={28} /></span>
-                  <span style={{ flex: 1, fontSize: 15 }}>{openMenu.apkInfo && openMenu.apkInfo.installed ? "Обновить" : "Установить"}</span>
+                  <span style={{ flex: 1, fontSize: 15 }}>Установить / Обновить</span>
                 </div>
               )}
               {!openMenu.editHide && (
