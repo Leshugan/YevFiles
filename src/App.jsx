@@ -555,9 +555,10 @@ export default function App() {
     for (let i = 0; i < items.length; i++) {
       if (cancelRef.current) break;
       const e = items[i];
-      setProgress((p) => ({ current: i + 1, total: items.length, name: e.name, mode: "del", bg: p && p.bg }));
-      Apps.notifyProgress({ title: "Удаление", text: e.name, progress: i + 1, max: items.length }).catch(() => {});
+      setProgress((p) => ({ ...(p || {}), current: i, total: items.length, name: e.name, mode: "del" }));
+      Apps.notifyProgress({ title: "Удаление", text: e.name, progress: i, max: items.length }).catch(() => {});
       try { await delTree(e); ok++; } catch { fail++; }
+      setProgress((p) => ({ ...(p || {}), current: i + 1, total: items.length, mode: "del" }));
     }
     setProgress(null); Apps.cancelNotify().catch(() => {});
     exitSel(); await refresh();
@@ -1080,7 +1081,7 @@ export default function App() {
                 <div onClick={() => { setOpenMenu(null); Apps.installApk({ uri: openMenu.file.uri }).catch((er) => showToast("Ошибка: " + (er?.message || ""))); }}
                   style={{ ...S.appRow, color: "#6FD3A8" }}>
                   <span style={{ width: 38, display: "flex", justifyContent: "center" }}><Svg d={I.plus} size={28} /></span>
-                  <span style={{ flex: 1, fontSize: 15 }}>{openMenu.apkInfo && openMenu.apkInfo.installed ? "Обновить / переустановить" : "Установить"}</span>
+                  <span style={{ flex: 1, fontSize: 15 }}>{openMenu.apkInfo && openMenu.apkInfo.installed ? "Обновить" : "Установить"}</span>
                 </div>
               )}
               {!openMenu.editHide && (
