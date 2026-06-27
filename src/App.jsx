@@ -1288,7 +1288,7 @@ const S = {
   tabActive: { color: ACC, background: "var(--accbg)", border: "1px solid " + ACC, fontWeight: 600, boxShadow: "0 0 0 1px var(--accbg), 0 2px 8px var(--accbg)" },
   tabX: { fontSize: 17, color: SUB, padding: "0 2px" },
   hbtn: { border: "none", background: "transparent", color: TXT, width: 40, height: 48, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" },
-  crumb: { padding: "4px 16px 10px", fontSize: 13, background: "transparent", flexShrink: 0, overflow: "hidden", whiteSpace: "nowrap" },
+  crumb: { position: "relative", zIndex: 6, padding: "4px 16px 10px", fontSize: 13, background: "transparent", flexShrink: 0, overflow: "visible", whiteSpace: "nowrap" },
   list: { flex: 1, overflowY: "auto", overflowX: "hidden", display: "flex", flexDirection: "column" },
   slideWrap: { display: "flex", flexDirection: "column" },
   note: { color: SUB, textAlign: "center", padding: "60px 24px", lineHeight: 1.6 },
