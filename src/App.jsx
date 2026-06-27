@@ -282,7 +282,7 @@ export default function App() {
   const openViewer = (entry) => {
     const items = entries.filter((e) => e.type !== "directory" && isImg(e.name));
     const idx = items.findIndex((e) => e.name === entry.name);
-    setViewer({ items, idx: idx < 0 ? 0 : idx }); setViewerBar(false); setDragX(0); setViewerDel(false);
+    setViewer({ items, idx: idx < 0 ? 0 : idx }); setViewerBar(true); setDragX(0); setViewerDel(false);
   };
   const viewerGo = (d) => { setViewer((v) => { if (!v) return v; const ni = v.idx + d; if (ni < 0 || ni >= v.items.length) return v; return { ...v, idx: ni }; }); };
   const viewerCur = viewer && viewer.items[viewer.idx];
@@ -584,7 +584,7 @@ export default function App() {
     if (e.type === "directory") { setSlide(1); setTimeout(() => setSlide(0), 300); setTabPath(join(path, e.name)); return; }
     arcAnchor.current = ev && ev.currentTarget ? ev.currentTarget.getBoundingClientRect().top : null;
     const ext = (e.name.split(".").pop() || "").toLowerCase();
-    if (isImg(e.name)) { openViewer(e); return; }
+    if (isImg(e.name)) { showOpenMenu(e, mimeOf(e.name)); return; }
     if (EXT.archive.includes(ext)) { showOpenMenu(e, mimeOf(e.name)); return; }
     openExternal(e);
   };
@@ -813,13 +813,13 @@ export default function App() {
 
       {/* ПУТЬ */}
       <div style={S.crumb}>
-        <span style={{ flex: 1, display: "flex", alignItems: "center", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        <span style={{ flex: 1, display: "flex", alignItems: "center", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", paddingRight: themeBtn ? 44 : 0 }}>
           {path ? <span onClick={goUp} style={{ display: "inline-flex", alignItems: "center", gap: 6, color: ACC }}><Svg d={I.back} size={18} /> {path}</span>
             : <span style={{ color: SUB }}>/storage</span>}
         </span>
         {themeBtn && (
           <button onClick={toggleTheme} aria-label="Тема"
-            style={{ flexShrink: 0, width: 34, height: 34, borderRadius: 17, border: "none", background: BAR, color: ACC, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 1px 0 rgba(255,255,255,.05) inset, 0 3px 10px rgba(0,0,0,.20)" }}>
+            style={{ position: "absolute", right: 16, top: "50%", transform: "translateY(-50%)", width: 34, height: 34, borderRadius: 17, border: "none", background: BAR, color: ACC, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 1px 0 rgba(255,255,255,.05) inset, 0 3px 10px rgba(0,0,0,.20)" }}>
             <Svg d={theme === "light" ? I.sun : I.moon} size={18} />
           </button>
         )}
@@ -1057,38 +1057,26 @@ export default function App() {
               const v = vTouch.current; vTouch.current = null; if (!v) { setDragX(0); return; }
               const t = e.changedTouches[0]; const dx = t.clientX - v.x; const dy = t.clientY - v.y; const dt = Date.now() - v.t;
               if (Math.abs(dx) < 12 && Math.abs(dy) < 12 && dt < 300) { setViewerBar((b) => !b); setDragX(0); return; }
-              const W = window.innerWidth;
-              if (dx < -W * 0.22 && viewer.idx < viewer.items.length - 1) viewerGo(1);
-              else if (dx > W * 0.22 && viewer.idx > 0) viewerGo(-1);
+              const TH = Math.min(45, window.innerWidth * 0.10);
+              const flick = dt < 260 && Math.abs(dx) > 28;
+              if ((dx < -TH || (flick && dx < 0)) && viewer.idx < viewer.items.length - 1) viewerGo(1);
+              else if ((dx > TH || (flick && dx > 0)) && viewer.idx > 0) viewerGo(-1);
               setDragX(0);
             }}>
             <img key={viewerCur.uri} src={cfs(viewerCur.uri)} alt={viewerCur.name}
               style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", transform: "translateX(" + dragX + "px)", transition: dragging ? "none" : "transform .2s ease", userSelect: "none", pointerEvents: "none" }} />
           </div>
 
-          {/* верхняя плашка */}
-          <div style={{ position: "absolute", top: 0, left: 0, right: 0, paddingTop: "env(safe-area-inset-top)", background: "linear-gradient(to bottom, rgba(0,0,0,.7), transparent)", transform: viewerBar ? "translateY(0)" : "translateY(-110%)", transition: "transform .2s ease", pointerEvents: viewerBar ? "auto" : "none" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px" }}>
-              <span onClick={() => setViewer(null)} style={{ color: "#fff", display: "flex", padding: 4 }}><Svg d={I.x} size={24} /></span>
-              <span style={{ flex: 1, color: "#fff", fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{viewerCur.name}</span>
-              <span style={{ color: "rgba(255,255,255,.7)", fontSize: 13 }}>{viewer.idx + 1}/{viewer.items.length}</span>
-            </div>
-          </div>
-
-          {/* нижняя панель */}
-          <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, paddingBottom: "env(safe-area-inset-bottom)", background: "linear-gradient(to top, rgba(0,0,0,.78), transparent)", transform: viewerBar ? "translateY(0)" : "translateY(110%)", transition: "transform .2s ease", pointerEvents: viewerBar ? "auto" : "none" }}>
-            <div style={{ display: "flex", justifyContent: "space-around", alignItems: "flex-end", padding: "16px 8px 14px" }}>
-              {[
-                [I.openext, "Открыть", () => showOpenMenu(viewerCur, mimeOf(viewerCur.name))],
-                [I.rename, "Изменить", () => Apps.editImage({ uri: viewerCur.uri, mime: mimeOf(viewerCur.name) }).catch((e) => showToast("Нет редактора"))],
-                [I.share, "Поделиться", () => Apps.share({ uri: viewerCur.uri, mime: mimeOf(viewerCur.name) }).catch(() => {})],
-                [I.info, "Свойства", () => setProps(viewerCur)],
-                [I.trash, "Удалить", () => setViewerDel(true), true],
-              ].map(([ic, lbl, fn, red], i) => (
-                <span key={i} onClick={fn} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 5, color: red ? "#FF6B6B" : "#fff", minWidth: 56, padding: "4px 2px" }}>
-                  <Svg d={ic} size={23} /><span style={{ fontSize: 11 }}>{lbl}</span>
-                </span>
-              ))}
+          {/* тулбар сверху: справа-налево — закрыть, имя, удалить, свойства, поделиться */}
+          <div style={{ position: "absolute", top: 0, left: 0, right: 0, paddingTop: "env(safe-area-inset-top)", background: "linear-gradient(to bottom, rgba(0,0,0,.75), transparent)", transform: viewerBar ? "translateY(0)" : "translateY(-110%)", transition: "transform .2s ease", pointerEvents: viewerBar ? "auto" : "none" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "10px 8px 14px" }}>
+              <span onClick={() => Apps.share({ uri: viewerCur.uri, mime: mimeOf(viewerCur.name) }).catch(() => {})} style={{ color: "#fff", display: "flex", padding: 8 }}><Svg d={I.share} size={22} /></span>
+              <span onClick={() => setProps(viewerCur)} style={{ color: "#fff", display: "flex", padding: 8 }}><Svg d={I.info} size={22} /></span>
+              <span onClick={() => setViewerDel(true)} style={{ color: "#FF6B6B", display: "flex", padding: 8 }}><Svg d={I.trash} size={22} /></span>
+              <span style={{ flex: 1, minWidth: 0, color: "#fff", fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textAlign: "center", padding: "0 4px" }}>
+                {viewerCur.name}<span style={{ color: "rgba(255,255,255,.6)", marginLeft: 6 }}>{viewer.idx + 1}/{viewer.items.length}</span>
+              </span>
+              <span onClick={() => setViewer(null)} style={{ color: "#fff", display: "flex", padding: 8 }}><Svg d={I.x} size={24} /></span>
             </div>
           </div>
 
@@ -1127,8 +1115,8 @@ export default function App() {
       {confirmDel && (
         <>
           <div style={{ position: "fixed", inset: 0, zIndex: 1290 }} onClick={() => setConfirmDel(null)} />
-          <div style={{ position: "fixed", zIndex: 1300, left: Math.max(8, Math.min(confirmDel.left - 150, window.innerWidth - 160)), top: confirmDel.top - 56,
-            display: "flex", gap: 8, background: BAR, border: "1px solid " + LINE, borderRadius: 14, padding: 8, boxShadow: "0 1px 0 rgba(255,255,255,.07) inset, 0 4px 12px rgba(0,0,0,.4), 0 18px 48px rgba(0,0,0,.62)", animation: "dropGrow .15s ease" }}>
+          <div style={{ position: "fixed", zIndex: 1300, left: "50%", transform: "translateX(-50%)", top: confirmDel.top - 56,
+            display: "flex", gap: 8, background: BAR, border: "1px solid " + LINE, borderRadius: 14, padding: 8, boxShadow: "0 1px 0 rgba(255,255,255,.07) inset, 0 4px 12px rgba(0,0,0,.4), 0 18px 48px rgba(0,0,0,.62)", animation: "popCenter .15s ease" }}>
             <button onClick={doDelete} style={{ background: RED, border: "none", borderRadius: 8, color: "#fff", fontSize: 14, fontWeight: 700, padding: "8px 18px" }}>Да</button>
             <button onClick={() => setConfirmDel(null)} style={{ background: ROW2, border: "1px solid " + LINE, borderRadius: 8, color: SUB, fontSize: 14, padding: "8px 18px" }}>Нет</button>
           </div>
@@ -1237,6 +1225,12 @@ export default function App() {
                   );
                 })}
               </div>
+              {!openMenu.editHide && isImg(openMenu.file.name) && (
+                <div onClick={() => { const f = openMenu.file; setOpenMenu(null); openViewer(f); }} style={{ ...S.appRow, color: GOLD }}>
+                  <span style={{ width: 38, display: "flex", justifyContent: "center" }}><Svg d={I.img} size={26} /></span>
+                  <span style={{ flex: 1, fontSize: 15 }}>Открыть</span>
+                </div>
+              )}
               {!openMenu.editHide && EXT.archive.includes((openMenu.file.name.split(".").pop() || "").toLowerCase()) && !/\.apk$/i.test(openMenu.file.name) && (
                 <>
                   <div onClick={() => openArchive(openMenu.file)} style={{ ...S.appRow, color: GOLD }}>
