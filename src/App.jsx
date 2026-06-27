@@ -98,9 +98,11 @@ const I = {
   rename: <><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /></>,
   paste: <><rect x="6" y="4" width="12" height="16" rx="2" /><path d="M9 4h6v3H9z" /></>,
   info: <><circle cx="12" cy="12" r="9" /><path d="M12 11v5M12 8h.01" /></>,
+  share: <><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4" /></>,
+  openext: <><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /><path d="M15 3h6v6" /><path d="M10 14L21 3" /></>,
   dots: <><circle cx="12" cy="5" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="12" cy="19" r="1.6" /></>,
   sun: <><circle cx="12" cy="12" r="4.5" /><path d="M12 2v2M12 20v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M2 12h2M20 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4" /></>,
-  moon: <><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" /></>,
+  moon: <><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" /></>,
   sort: <><path d="M7 4v16M7 20l-3-3M7 4l3 3" /><path d="M17 20V4M17 4l3 3M17 20l-3-3" /></>,
   gear: <><circle cx="12" cy="12" r="3" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2" /></>,
   eye: <><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" /><circle cx="12" cy="12" r="3" /></>,
@@ -271,6 +273,25 @@ export default function App() {
   const [tabsMenu, setTabsMenu] = useState(false);
   const [selMenu, setSelMenu] = useState(false);
   const [props, setProps] = useState(null);
+  const [viewer, setViewer] = useState(null);       // { items:[entry], idx }
+  const [viewerBar, setViewerBar] = useState(false); // видна ли панель
+  const [dragX, setDragX] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const [viewerDel, setViewerDel] = useState(false);
+  const vTouch = useRef(null);
+  const openViewer = (entry) => {
+    const items = entries.filter((e) => e.type !== "directory" && isImg(e.name));
+    const idx = items.findIndex((e) => e.name === entry.name);
+    setViewer({ items, idx: idx < 0 ? 0 : idx }); setViewerBar(false); setDragX(0); setViewerDel(false);
+  };
+  const viewerGo = (d) => { setViewer((v) => { if (!v) return v; const ni = v.idx + d; if (ni < 0 || ni >= v.items.length) return v; return { ...v, idx: ni }; }); };
+  const viewerCur = viewer && viewer.items[viewer.idx];
+  const viewerDelete = async () => {
+    if (!viewerCur) return; setViewerDel(false);
+    try { await delTree(viewerCur); } catch {}
+    setViewer((v) => { if (!v) return v; const items = v.items.filter((_, i) => i !== v.idx); if (items.length === 0) return null; return { items, idx: Math.min(v.idx, items.length - 1) }; });
+    await refresh(); showToast("Удалено");
+  };
   const [propCount, setPropCount] = useState(null);
   const [openMenu, setOpenMenu] = useState(null);
   const [arcView, setArcView] = useState(null);
@@ -455,6 +476,8 @@ export default function App() {
     if (pasteMenu) { setPasteMenu(false); return; }
     if (openMenu) { setOpenMenu(null); return; }
     if (props) { setProps(null); return; }
+    if (viewerDel) { setViewerDel(false); return; }
+    if (viewer) { setViewer(null); return; }
     if (sheet) { setSheet(null); return; }
     if (tabsMenu) { setTabsMenu(false); return; }
     if (selMenu) { setSelMenu(false); return; }
@@ -561,6 +584,7 @@ export default function App() {
     if (e.type === "directory") { setSlide(1); setTimeout(() => setSlide(0), 300); setTabPath(join(path, e.name)); return; }
     arcAnchor.current = ev && ev.currentTarget ? ev.currentTarget.getBoundingClientRect().top : null;
     const ext = (e.name.split(".").pop() || "").toLowerCase();
+    if (isImg(e.name)) { openViewer(e); return; }
     if (EXT.archive.includes(ext)) { showOpenMenu(e, mimeOf(e.name)); return; }
     openExternal(e);
   };
@@ -1022,6 +1046,68 @@ export default function App() {
       )}
 
       {/* СВОЙСТВА */}
+      {/* ПРОСМОТРЩИК ИЗОБРАЖЕНИЙ */}
+      {viewer && viewerCur && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 1300, background: "#000", display: "flex", flexDirection: "column", touchAction: "none", overflow: "hidden" }}>
+          <div style={{ flex: 1, position: "relative", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" }}
+            onTouchStart={(e) => { const t = e.touches[0]; vTouch.current = { x: t.clientX, y: t.clientY, t: Date.now() }; setDragging(true); }}
+            onTouchMove={(e) => { if (!vTouch.current) return; const t = e.touches[0]; const dx = t.clientX - vTouch.current.x; const dy = t.clientY - vTouch.current.y; if (Math.abs(dx) > Math.abs(dy)) setDragX(dx); }}
+            onTouchEnd={(e) => {
+              setDragging(false);
+              const v = vTouch.current; vTouch.current = null; if (!v) { setDragX(0); return; }
+              const t = e.changedTouches[0]; const dx = t.clientX - v.x; const dy = t.clientY - v.y; const dt = Date.now() - v.t;
+              if (Math.abs(dx) < 12 && Math.abs(dy) < 12 && dt < 300) { setViewerBar((b) => !b); setDragX(0); return; }
+              const W = window.innerWidth;
+              if (dx < -W * 0.22 && viewer.idx < viewer.items.length - 1) viewerGo(1);
+              else if (dx > W * 0.22 && viewer.idx > 0) viewerGo(-1);
+              setDragX(0);
+            }}>
+            <img key={viewerCur.uri} src={cfs(viewerCur.uri)} alt={viewerCur.name}
+              style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", transform: "translateX(" + dragX + "px)", transition: dragging ? "none" : "transform .2s ease", userSelect: "none", pointerEvents: "none" }} />
+          </div>
+
+          {/* верхняя плашка */}
+          <div style={{ position: "absolute", top: 0, left: 0, right: 0, paddingTop: "env(safe-area-inset-top)", background: "linear-gradient(to bottom, rgba(0,0,0,.7), transparent)", transform: viewerBar ? "translateY(0)" : "translateY(-110%)", transition: "transform .2s ease", pointerEvents: viewerBar ? "auto" : "none" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px" }}>
+              <span onClick={() => setViewer(null)} style={{ color: "#fff", display: "flex", padding: 4 }}><Svg d={I.x} size={24} /></span>
+              <span style={{ flex: 1, color: "#fff", fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{viewerCur.name}</span>
+              <span style={{ color: "rgba(255,255,255,.7)", fontSize: 13 }}>{viewer.idx + 1}/{viewer.items.length}</span>
+            </div>
+          </div>
+
+          {/* нижняя панель */}
+          <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, paddingBottom: "env(safe-area-inset-bottom)", background: "linear-gradient(to top, rgba(0,0,0,.78), transparent)", transform: viewerBar ? "translateY(0)" : "translateY(110%)", transition: "transform .2s ease", pointerEvents: viewerBar ? "auto" : "none" }}>
+            <div style={{ display: "flex", justifyContent: "space-around", alignItems: "flex-end", padding: "16px 8px 14px" }}>
+              {[
+                [I.openext, "Открыть", () => showOpenMenu(viewerCur, mimeOf(viewerCur.name))],
+                [I.rename, "Изменить", () => Apps.editImage({ uri: viewerCur.uri, mime: mimeOf(viewerCur.name) }).catch((e) => showToast("Нет редактора"))],
+                [I.share, "Поделиться", () => Apps.share({ uri: viewerCur.uri, mime: mimeOf(viewerCur.name) }).catch(() => {})],
+                [I.info, "Свойства", () => setProps(viewerCur)],
+                [I.trash, "Удалить", () => setViewerDel(true), true],
+              ].map(([ic, lbl, fn, red], i) => (
+                <span key={i} onClick={fn} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 5, color: red ? "#FF6B6B" : "#fff", minWidth: 56, padding: "4px 2px" }}>
+                  <Svg d={ic} size={23} /><span style={{ fontSize: 11 }}>{lbl}</span>
+                </span>
+              ))}
+            </div>
+          </div>
+
+          {/* подтверждение удаления в просмотрщике */}
+          {viewerDel && (
+            <div style={{ position: "fixed", inset: 0, zIndex: 1360, background: "rgba(0,0,0,.6)", display: "flex", alignItems: "center", justifyContent: "center" }} onClick={() => setViewerDel(false)}>
+              <div onClick={(e) => e.stopPropagation()} style={{ background: BAR, borderRadius: 16, padding: 18, width: "78%", maxWidth: 320, boxShadow: "0 18px 48px rgba(0,0,0,.6)" }}>
+                <div style={{ color: TXT, fontSize: 15, marginBottom: 4 }}>Удалить файл?</div>
+                <div style={{ color: SUB, fontSize: 13, marginBottom: 16, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{viewerCur.name}</div>
+                <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+                  <button onClick={() => setViewerDel(false)} style={{ background: ROW2, border: "1px solid " + LINE, borderRadius: 10, color: SUB, fontSize: 14, padding: "9px 20px" }}>Нет</button>
+                  <button onClick={viewerDelete} style={{ background: RED, border: "none", borderRadius: 10, color: "#fff", fontSize: 14, fontWeight: 700, padding: "9px 20px" }}>Да</button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {props && (
         <div style={S.backdrop} onClick={() => setProps(null)}>
           <div style={S.sheet} onClick={(e) => e.stopPropagation()}>
@@ -1041,7 +1127,7 @@ export default function App() {
       {confirmDel && (
         <>
           <div style={{ position: "fixed", inset: 0, zIndex: 1290 }} onClick={() => setConfirmDel(null)} />
-          <div style={{ position: "fixed", zIndex: 1300, left: Math.max(8, Math.min(confirmDel.left - 6, window.innerWidth - 150)), top: confirmDel.top - 56,
+          <div style={{ position: "fixed", zIndex: 1300, left: Math.max(8, Math.min(confirmDel.left - 150, window.innerWidth - 160)), top: confirmDel.top - 56,
             display: "flex", gap: 8, background: BAR, border: "1px solid " + LINE, borderRadius: 14, padding: 8, boxShadow: "0 1px 0 rgba(255,255,255,.07) inset, 0 4px 12px rgba(0,0,0,.4), 0 18px 48px rgba(0,0,0,.62)", animation: "dropGrow .15s ease" }}>
             <button onClick={doDelete} style={{ background: RED, border: "none", borderRadius: 8, color: "#fff", fontSize: 14, fontWeight: 700, padding: "8px 18px" }}>Да</button>
             <button onClick={() => setConfirmDel(null)} style={{ background: ROW2, border: "1px solid " + LINE, borderRadius: 8, color: SUB, fontSize: 14, padding: "8px 18px" }}>Нет</button>
