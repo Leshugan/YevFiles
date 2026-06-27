@@ -813,13 +813,13 @@ export default function App() {
 
       {/* ПУТЬ */}
       <div style={S.crumb}>
-        <span style={{ flex: 1, display: "flex", alignItems: "center", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", paddingRight: themeBtn ? 44 : 0 }}>
+        <span style={{ flex: 1, display: "flex", alignItems: "center", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {path ? <span onClick={goUp} style={{ display: "inline-flex", alignItems: "center", gap: 6, color: ACC }}><Svg d={I.back} size={18} /> {path}</span>
             : <span style={{ color: SUB }}>/storage</span>}
         </span>
         {themeBtn && (
           <button onClick={toggleTheme} aria-label="Тема"
-            style={{ position: "absolute", right: 16, top: "50%", transform: "translateY(-50%)", width: 34, height: 34, borderRadius: 17, border: "1px solid var(--line)", background: BAR, color: ACC, display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>
+            style={{ flexShrink: 0, alignSelf: "center", width: 34, height: 34, borderRadius: 17, border: "1px solid var(--line)", background: BAR, color: ACC, display: "flex", alignItems: "center", justifyContent: "center", padding: 0, margin: 0, lineHeight: 0 }}>
             <Svg d={theme === "light" ? I.sun : I.moon} size={18} />
           </button>
         )}
@@ -1067,16 +1067,28 @@ export default function App() {
               style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", transform: "translateX(" + dragX + "px)", transition: dragging ? "none" : "transform .2s ease", userSelect: "none", pointerEvents: "none" }} />
           </div>
 
-          {/* тулбар снизу: справа-налево — закрыть, имя, удалить, свойства, поделиться */}
+          {/* заголовок сверху: имя + счётчик + крестик справа */}
+          <div style={{ position: "absolute", top: 0, left: 0, right: 0, paddingTop: "env(safe-area-inset-top)", background: "linear-gradient(to bottom, rgba(0,0,0,.75), transparent)", transform: viewerBar ? "translateY(0)" : "translateY(-110%)", transition: "transform .2s ease", pointerEvents: viewerBar ? "auto" : "none" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px 16px" }}>
+              <span style={{ flex: 1, minWidth: 0, color: "#fff", fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{viewerCur.name}</span>
+              <span style={{ color: "rgba(255,255,255,.7)", fontSize: 13, flexShrink: 0 }}>{viewer.idx + 1}/{viewer.items.length}</span>
+              <span onClick={() => setViewer(null)} style={{ color: "#fff", display: "flex", padding: 4, flexShrink: 0 }}><Svg d={I.x} size={24} /></span>
+            </div>
+          </div>
+
+          {/* тулбар снизу: справа-налево — удалить, свойства, поделиться, редактировать */}
           <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, paddingBottom: "env(safe-area-inset-bottom)", background: "linear-gradient(to top, rgba(0,0,0,.8), transparent)", transform: viewerBar ? "translateY(0)" : "translateY(110%)", transition: "transform .2s ease", pointerEvents: viewerBar ? "auto" : "none" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "16px 8px 14px" }}>
-              <span onClick={() => Apps.share({ uri: viewerCur.uri, mime: mimeOf(viewerCur.name) }).catch(() => {})} style={{ color: "#fff", display: "flex", padding: 8 }}><Svg d={I.share} size={22} /></span>
-              <span onClick={() => setProps(viewerCur)} style={{ color: "#fff", display: "flex", padding: 8 }}><Svg d={I.info} size={22} /></span>
-              <span onClick={() => setViewerDel(true)} style={{ color: "#FF6B6B", display: "flex", padding: 8 }}><Svg d={I.trash} size={22} /></span>
-              <span style={{ flex: 1, minWidth: 0, color: "#fff", fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textAlign: "center", padding: "0 4px" }}>
-                {viewerCur.name}<span style={{ color: "rgba(255,255,255,.6)", marginLeft: 6 }}>{viewer.idx + 1}/{viewer.items.length}</span>
-              </span>
-              <span onClick={() => setViewer(null)} style={{ color: "#fff", display: "flex", padding: 8 }}><Svg d={I.x} size={24} /></span>
+            <div style={{ display: "flex", justifyContent: "space-around", alignItems: "flex-end", padding: "16px 8px 14px" }}>
+              {[
+                [I.rename, "Изменить", () => Apps.editImage({ uri: viewerCur.uri, mime: mimeOf(viewerCur.name) }).catch(() => showToast("Нет редактора")), false],
+                [I.share, "Поделиться", () => Apps.share({ uri: viewerCur.uri, mime: mimeOf(viewerCur.name) }).catch(() => {}), false],
+                [I.info, "Свойства", () => setProps(viewerCur), false],
+                [I.trash, "Удалить", () => setViewerDel(true), true],
+              ].map(([ic, lbl, fn, red], i) => (
+                <span key={i} onClick={fn} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 5, color: red ? "#FF6B6B" : "#fff", minWidth: 60, padding: "4px 2px" }}>
+                  <Svg d={ic} size={23} /><span style={{ fontSize: 11 }}>{lbl}</span>
+                </span>
+              ))}
             </div>
           </div>
 
@@ -1115,11 +1127,9 @@ export default function App() {
       {confirmDel && (
         <>
           <div style={{ position: "fixed", inset: 0, zIndex: 1290 }} onClick={() => setConfirmDel(null)} />
-          <div style={{ position: "fixed", zIndex: 1300, left: 0, right: 0, top: confirmDel.top - 56, display: "flex", justifyContent: "center", pointerEvents: "none" }}>
-            <div style={{ pointerEvents: "auto", display: "flex", gap: 8, background: BAR, border: "1px solid " + LINE, borderRadius: 14, padding: 8, boxShadow: "0 1px 0 rgba(255,255,255,.07) inset, 0 4px 12px rgba(0,0,0,.4), 0 18px 48px rgba(0,0,0,.62)", animation: "dropGrow .15s ease" }}>
-              <button onClick={doDelete} style={{ background: RED, border: "none", borderRadius: 8, color: "#fff", fontSize: 14, fontWeight: 700, padding: "8px 18px" }}>Да</button>
-              <button onClick={() => setConfirmDel(null)} style={{ background: ROW2, border: "1px solid " + LINE, borderRadius: 8, color: SUB, fontSize: 14, padding: "8px 18px" }}>Нет</button>
-            </div>
+          <div style={{ position: "fixed", zIndex: 1300, left: "50%", transform: "translateX(-50%)", top: confirmDel.top - 56, display: "flex", gap: 8, background: BAR, border: "1px solid " + LINE, borderRadius: 14, padding: 8, boxShadow: "0 1px 0 rgba(255,255,255,.07) inset, 0 4px 12px rgba(0,0,0,.4), 0 18px 48px rgba(0,0,0,.62)", animation: "popCenter .15s ease" }}>
+            <button onClick={doDelete} style={{ background: RED, border: "none", borderRadius: 8, color: "#fff", fontSize: 14, fontWeight: 700, padding: "8px 18px" }}>Да</button>
+            <button onClick={() => setConfirmDel(null)} style={{ background: ROW2, border: "1px solid " + LINE, borderRadius: 8, color: SUB, fontSize: 14, padding: "8px 18px" }}>Нет</button>
           </div>
         </>
       )}
