@@ -59,9 +59,11 @@ public class AppsPlugin extends Plugin {
     public void query(PluginCall call) {
         String mime = call.getString("mime", "*/*");
         String uriStr = call.getString("uri");
+        String action = call.getString("action", "view");
+        String act = "edit".equals(action) ? Intent.ACTION_EDIT : Intent.ACTION_VIEW;
         PackageManager pm = getContext().getPackageManager();
 
-        Intent intent = new Intent(Intent.ACTION_VIEW);
+        Intent intent = new Intent(act);
         boolean dataSet = false;
         if (uriStr != null) {
             try {
@@ -74,11 +76,11 @@ public class AppsPlugin extends Plugin {
 
         List<ResolveInfo> list = pm.queryIntentActivities(intent, PackageManager.MATCH_ALL);
         if (list.isEmpty()) {
-            Intent alt = new Intent(Intent.ACTION_VIEW);
+            Intent alt = new Intent(act);
             alt.setType(mime);
             list = pm.queryIntentActivities(alt, PackageManager.MATCH_ALL);
         }
-        if (list.isEmpty()) {
+        if (list.isEmpty() && !"edit".equals(action)) {
             Intent edit = new Intent(Intent.ACTION_EDIT);
             edit.setType(mime);
             list = pm.queryIntentActivities(edit, PackageManager.MATCH_ALL);
@@ -105,6 +107,7 @@ public class AppsPlugin extends Plugin {
         String mime = call.getString("mime", "*/*");
         String pkg = call.getString("packageName");
         String act = call.getString("activityName");
+        String action = call.getString("action", "view");
         if (uriStr == null) { call.reject("no uri"); return; }
         try {
             File f = toFile(uriStr);
@@ -112,9 +115,10 @@ public class AppsPlugin extends Plugin {
             if (f.isDirectory()) { call.reject("Это папка: " + f.getAbsolutePath()); return; }
             try { StrictMode.setVmPolicy(new StrictMode.VmPolicy.Builder().build()); } catch (Exception ignored) {}
             Uri data = Uri.fromFile(f);
-            Intent i = new Intent(Intent.ACTION_VIEW);
+            Intent i = new Intent("edit".equals(action) ? Intent.ACTION_EDIT : Intent.ACTION_VIEW);
             i.setDataAndType(data, mime);
             i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            if ("edit".equals(action)) i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
             if (pkg != null && act != null) i.setClassName(pkg, act);
             else if (pkg != null) i.setPackage(pkg);
             getContext().startActivity(i);
