@@ -732,6 +732,45 @@ public class AppsPlugin extends Plugin {
     }
 
     @PluginMethod
+    public void share(PluginCall call) {
+        String uriStr = call.getString("uri");
+        String mime = call.getString("mime", "*/*");
+        if (uriStr == null) { call.reject("no uri"); return; }
+        try {
+            File f = toFile(uriStr);
+            if (!f.exists()) { call.reject("Файл не найден"); return; }
+            try { StrictMode.setVmPolicy(new StrictMode.VmPolicy.Builder().build()); } catch (Exception ignored) {}
+            Intent i = new Intent(Intent.ACTION_SEND);
+            i.setType(mime);
+            i.putExtra(Intent.EXTRA_STREAM, Uri.fromFile(f));
+            i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            Intent ch = Intent.createChooser(i, "Поделиться");
+            ch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(ch);
+            call.resolve();
+        } catch (Exception e) { call.reject(e.getMessage()); }
+    }
+
+    @PluginMethod
+    public void editImage(PluginCall call) {
+        String uriStr = call.getString("uri");
+        String mime = call.getString("mime", "image/*");
+        if (uriStr == null) { call.reject("no uri"); return; }
+        try {
+            File f = toFile(uriStr);
+            if (!f.exists()) { call.reject("Файл не найден"); return; }
+            try { StrictMode.setVmPolicy(new StrictMode.VmPolicy.Builder().build()); } catch (Exception ignored) {}
+            Intent i = new Intent(Intent.ACTION_EDIT);
+            i.setDataAndType(Uri.fromFile(f), mime);
+            i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+            Intent ch = Intent.createChooser(i, "Изменить через");
+            ch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(ch);
+            call.resolve();
+        } catch (Exception e) { call.reject(e.getMessage()); }
+    }
+
+    @PluginMethod
     public void setBars(PluginCall call) {
         final String color = call.getString("color", "#000000");
         final boolean light = call.getBoolean("light", false);
