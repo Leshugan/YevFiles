@@ -13,6 +13,7 @@ const THEMES = {
   light: { "--bg": "#EEF1F4", "--bar": "#FFFFFF", "--row2": "#E4E8EC", "--acc": "#2F80ED", "--accbg": "rgba(47,128,237,.14)", "--gold": "#2F80ED", "--red": "#D14343", "--txt": "#1E2329", "--sub": "#6B7280", "--line": "#D3D8DE", "--chip": "rgba(0,0,0,.05)", "--hair": "rgba(0,0,0,.08)", "--tgloff": "#C2C8D0" },
 };
 const DIR = Directory.ExternalStorage;
+const APP_VERSION = "fm-2026.06.27-a";
 const TKEY = "fm_tabs_v1", SKEY = "fm_startup_v1", METAKEY = "fm_meta_v1", SORTKEY = "fm_sort_v1";
 const DEFKEY = "fm_defaults_v1", HIDEKEY = "fm_hideapps_v1", ICONKEY = "fm_foldericons_v1";
 const loadMap = (k) => { try { return JSON.parse(ls.get(k)) || {}; } catch { return {}; } };
@@ -516,6 +517,7 @@ export default function App() {
   const arcAnchor = useRef(null);
   const absPath = async (rel) => { const u = await Filesystem.getUri({ path: rel, directory: DIR }); let p = u.uri; if (p.startsWith("file://")) p = p.slice(7); try { p = decodeURIComponent(p); } catch {} return p; };
   const extractAllTo = async (uri, destRel, names) => {
+    showToast("DBG extractAllTo вызван → " + destRel);
     const destDir = await absPath(destRel);
     let sub = null;
     try { sub = await Apps.addListener("opProgress", (ev) => setProgress({ current: ev.done, total: ev.total, name: ev.name, mode: "ext" })); } catch {}
@@ -531,6 +533,7 @@ export default function App() {
   const doExtractHere = async () => { const pe = pendingExtract; setPendingExtract(null); if (pe) await extractAllTo(pe.uri, path, pe.names); };
   const arcBase = (n) => n.replace(/\.[^.]+$/, "");
   const openArchive = async (e) => {
+    showToast("DBG openArchive вызван: " + e.name);
     setOpenMenu(null);
     setArcView({ name: e.name, uri: e.uri, entries: null });
     try {
@@ -558,7 +561,8 @@ export default function App() {
     if (e.type === "directory") { setSlide(1); setTimeout(() => setSlide(0), 300); setTabPath(join(path, e.name)); return; }
     arcAnchor.current = ev && ev.currentTarget ? ev.currentTarget.getBoundingClientRect().top : null;
     const ext = (e.name.split(".").pop() || "").toLowerCase();
-    if (EXT.archive.includes(ext)) { showOpenMenu(e, mimeOf(e.name)); return; } // архив/apk — ВСЕГДА меню выбора, без авто-действий
+    if (EXT.archive.includes(ext)) { showToast("DBG open→МЕНЮ: " + e.name); showOpenMenu(e, mimeOf(e.name)); return; }
+    showToast("DBG open→external: " + e.name);
     openExternal(e);
   };
 
@@ -785,14 +789,14 @@ export default function App() {
       </div>
 
       {/* ПУТЬ */}
-      <div style={{ ...S.crumb, display: "flex", alignItems: "center" }}>
-        <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+      <div style={{ ...S.crumb, display: "flex", alignItems: "center", minHeight: 40 }}>
+        <span style={{ flex: 1, display: "flex", alignItems: "center", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {path ? <span onClick={goUp} style={{ display: "inline-flex", alignItems: "center", gap: 6, color: ACC }}><Svg d={I.back} size={18} /> {path}</span>
             : <span style={{ color: SUB }}>/storage</span>}
         </span>
         {themeBtn && (
           <button onClick={toggleTheme} aria-label="Тема"
-            style={{ flexShrink: 0, width: 36, height: 36, borderRadius: 18, border: "none", background: BAR, color: ACC, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 1px 0 rgba(255,255,255,.05) inset, 0 3px 10px rgba(0,0,0,.20)" }}>
+            style={{ flexShrink: 0, alignSelf: "center", width: 34, height: 34, borderRadius: 17, border: "none", background: BAR, color: ACC, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 1px 0 rgba(255,255,255,.05) inset, 0 3px 10px rgba(0,0,0,.20)" }}>
             <Svg d={theme === "light" ? I.sun : I.moon} size={18} />
           </button>
         )}
@@ -1208,6 +1212,7 @@ export default function App() {
                     <span style={{ color: SUB, display: "flex", transform: "rotate(180deg)" }}><Svg d={I.back} size={18} /></span>
                   </div>
                 ))}
+                <div style={{ color: SUB, fontSize: 11, textAlign: "center", marginTop: 18 }}>Версия {APP_VERSION}</div>
               </>
             )}
             {settingsPage === "theme" && (
