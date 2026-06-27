@@ -18,6 +18,9 @@ import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.drawable.Drawable;
 import android.net.Uri;
+import android.view.Window;
+import android.view.View;
+import android.graphics.Color;
 import android.os.Build;
 import android.os.StrictMode;
 import android.os.Environment;
@@ -726,6 +729,34 @@ public class AppsPlugin extends Plugin {
             call.resolve();
         } catch (Exception e) { call.reject(e.getMessage()); }
         finally { if (zf != null) try { zf.close(); } catch (Exception ignored) {} }
+    }
+
+    @PluginMethod
+    public void setBars(PluginCall call) {
+        final String color = call.getString("color", "#000000");
+        final boolean light = call.getBoolean("light", false);
+        try {
+            getActivity().runOnUiThread(() -> {
+                try {
+                    Window w = getActivity().getWindow();
+                    int c = Color.parseColor(color);
+                    w.setStatusBarColor(c);
+                    w.setNavigationBarColor(c);
+                    View dv = w.getDecorView();
+                    int flags = dv.getSystemUiVisibility();
+                    if (Build.VERSION.SDK_INT >= 23) {
+                        if (light) flags |= View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
+                        else flags &= ~View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
+                    }
+                    if (Build.VERSION.SDK_INT >= 26) {
+                        if (light) flags |= View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+                        else flags &= ~View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+                    }
+                    dv.setSystemUiVisibility(flags);
+                } catch (Exception ignored) {}
+            });
+        } catch (Exception ignored) {}
+        call.resolve();
     }
 
     @PluginMethod
