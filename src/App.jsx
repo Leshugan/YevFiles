@@ -580,7 +580,7 @@ export default function App() {
       else await Apps.open({ uri: u.uri, mime: mimeOf(fname) });
     } catch (err) { setArcView((m) => (m ? { ...m, busy: null } : m)); showToast("Не удалось открыть: " + (err?.message || "")); }
   };
-  const resetDefault = () => { const defs = loadMap(DEFKEY); delete defs[openMenu.mime]; saveMap(DEFKEY, defs); showToast("Привязка сброшена"); };
+  const resetDefault = () => { const defs = loadMap(DEFKEY); const f = openMenu.file; delete defs[openMenu.mime]; delete defs[mimeOf(f.name)]; delete defs[defaultOpenAs(f.name)]; saveMap(DEFKEY, defs); showToast("Привязка сброшена"); };
   const open = (e, ev) => {
     if (selMode) { toggle(e.name); return; }
     if (e.type === "directory") { setSlide(1); setTimeout(() => setSlide(0), 300); setTabPath(join(path, e.name)); return; }
@@ -885,16 +885,15 @@ export default function App() {
               return (
                 <div key={e.name} style={{ ...S.row, ...(isDir ? S.rowDir : {}), ...(isSel ? S.rowSel : {}), opacity: hid ? 0.5 : 1 }}
                   onPointerDown={(ev) => rDown(ev, e)} onPointerMove={rMove} onPointerUp={(ev) => rUp(e, ev)} onPointerCancel={() => clearTimeout(lpTimer.current)}>
-                  <span style={{ ...S.iconWrap, color: ic.c, background: isSel ? "transparent" : "var(--chip)", overflow: "hidden", position: "relative" }}
+                  <span style={{ ...S.iconWrap, color: ic.c, background: "var(--chip)", overflow: "hidden", position: "relative" }}
                     onPointerDown={(ev) => ev.stopPropagation()} onPointerUp={(ev) => { ev.stopPropagation(); clearTimeout(lpTimer.current); toggle(e.name); }}>
-                    {selMode ? (isSel ? <span style={S.cbk}><Svg d={I.check} size={14} /></span> : <span style={S.cbkOff} />)
-                      : (isDir && iconDB[keyOf(e.name)]) ? <img src={iconDB[keyOf(e.name)]} alt="" style={S.iconImg} />
+                    {(isDir && iconDB[keyOf(e.name)]) ? <img src={iconDB[keyOf(e.name)]} alt="" style={S.iconImg} />
                       : (!isDir && (isImg(e.name) || isPdf(e.name) || /\.apk$/i.test(e.name))) ?
                           <ThumbIcon uri={e.uri} cached={thumbs[e.uri]} request={requestThumb} release={releaseThumb}
                             fallback={/\.apk$/i.test(e.name) ? <Svg d={ic.d} size={24} /> : isPdf(e.name) ? <Svg d={ic.d} size={24} /> : <Svg d={ic.d} size={24} />} />
                       : (!isDir && EXT.archive.includes((e.name.split(".").pop() || "").toLowerCase())) ? <ArcBadge name={e.name} />
                       : <Svg d={ic.d} size={24} />}
-                    {isDir && !isSel && !iconDB[keyOf(e.name)] && e.thumb ? <img src={cfs(e.thumb)} alt="" loading="lazy" style={S.folderThumb} /> : null}
+                    {isDir && !iconDB[keyOf(e.name)] && e.thumb ? <img src={cfs(e.thumb)} alt="" loading="lazy" style={S.folderThumb} /> : null}
                   </span>
                   <span style={S.rowMid}>
                     <span style={{ ...S.name, fontWeight: isDir ? 600 : 400, display: "flex", alignItems: "center", gap: 7 }}>
@@ -1496,7 +1495,7 @@ const S = {
   tabActive: { color: ACC, background: "var(--accbg)", border: "1px solid " + ACC, fontWeight: 600, boxShadow: "0 0 0 1px var(--accbg), 0 2px 8px var(--accbg)" },
   tabX: { fontSize: 17, color: SUB, padding: "0 2px" },
   hbtn: { border: "none", background: "transparent", color: TXT, width: 40, height: 48, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" },
-  crumb: { position: "relative", zIndex: 6, display: "flex", alignItems: "center", padding: "6px 16px", fontSize: 12.5, background: "transparent", flexShrink: 0, overflow: "visible", whiteSpace: "nowrap" },
+  crumb: { position: "relative", zIndex: 6, height: 30, display: "flex", alignItems: "center", padding: "0 16px", fontSize: 12.5, background: "transparent", flexShrink: 0, overflow: "visible", whiteSpace: "nowrap" },
   list: { flex: 1, overflowY: "auto", overflowX: "hidden", display: "flex", flexDirection: "column" },
   slideWrap: { display: "flex", flexDirection: "column" },
   note: { color: SUB, textAlign: "center", padding: "60px 24px", lineHeight: 1.6 },
@@ -1518,7 +1517,7 @@ const S = {
   arcScreen: { position: "fixed", top: 62, left: 0, right: 0, bottom: "calc(70px + env(safe-area-inset-bottom))", zIndex: 1250, background: BG, display: "flex", flexDirection: "column" },
   settingsScreen: { position: "fixed", inset: 0, zIndex: 1600, background: BG, display: "flex", flexDirection: "column", paddingTop: "env(safe-area-inset-top)" },
   cnt: { background: "var(--accbg)", color: GOLD, fontSize: 12, fontWeight: 700, padding: "2px 9px", borderRadius: 10, flexShrink: 0 },
-  rowSel: { background: "var(--accbg)" },
+  rowSel: { background: "var(--accbg)", boxShadow: "inset 3px 0 0 " + ACC },
   name: { flex: 1, fontSize: 15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
   checkOn: { width: 26, height: 26, borderRadius: 13, background: ACC, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15 },
   searchBar: { display: "flex", alignItems: "center", background: ROW2, padding: 8, gap: 8, flexShrink: 0 },
@@ -1526,7 +1525,7 @@ const S = {
   searchClose: { border: "none", background: "transparent", color: SUB, fontSize: 24, width: 40 },
   bottom: { display: "flex", alignItems: "center", background: BAR, flexShrink: 0, borderRadius: 26, margin: "4px 8px calc(8px + env(safe-area-inset-bottom))", boxShadow: "0 1px 0 rgba(255,255,255,.06) inset, 0 2px 6px rgba(0,0,0,.35), 0 12px 32px rgba(0,0,0,.55)" },
   btn: { border: "none", background: "transparent", padding: "6px 6px 7px", display: "flex", flexDirection: "column", alignItems: "center", gap: 2 },
-  selCount: { minWidth: 22, height: 22, padding: "0 7px", marginLeft: 14, marginRight: 8, borderRadius: 11, background: ACC, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0, lineHeight: 0 },
+  selCount: { width: 26, height: 26, marginLeft: 12, marginRight: 12, borderRadius: 13, background: ACC, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0, lineHeight: 0 },
   btnLabel: { fontSize: 10, color: SUB, whiteSpace: "nowrap" },
   overlay: { position: "fixed", inset: 0, zIndex: 8 },
   menu: { position: "absolute", zIndex: 9, background: BAR, borderRadius: 12, overflow: "hidden", border: "1px solid " + LINE, boxShadow: "0 1px 0 rgba(255,255,255,.07) inset, 0 4px 12px rgba(0,0,0,.4), 0 18px 48px rgba(0,0,0,.62)", minWidth: 200, animation: "dropGrow .2s cubic-bezier(.2,.9,.3,1.2)" },
