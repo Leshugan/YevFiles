@@ -76,7 +76,7 @@ const I = {
   cam: <><path d="M3 8a2 2 0 0 1 2-2h2l1.5-2h7L19 6h0a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><circle cx="12" cy="12.5" r="3.5" /></>,
   android: <><path d="M7 9a5 5 0 0 1 10 0v1H7z" /><path d="M8.5 6.5L7 4M15.5 6.5L17 4" /><rect x="7" y="11" width="10" height="8" rx="2" /></>,
   doc2: <><path d="M6 2h9l5 5v15H6z" /><path d="M14 2v6h6" /><path d="M9 13h6M9 16h6" /></>,
-  gamepad: <><rect x="1.5" y="5.5" width="21" height="13" rx="3.5" /><rect x="9" y="8" width="6" height="6" rx="1" /><path d="M4.8 8.2v2.2M3.7 9.3h2.2" /><circle cx="18" cy="8" r=".7" fill="currentColor" /><circle cx="19.4" cy="9.3" r=".7" fill="currentColor" /><circle cx="16.6" cy="9.3" r=".7" fill="currentColor" /><circle cx="18" cy="10.6" r=".7" fill="currentColor" /><circle cx="6" cy="14.5" r="1.2" /><circle cx="18" cy="14.5" r="1.2" /></>,
+  gamepad: <><path d="M7.5 7h9a4.5 4.5 0 0 1 4.4 3.6l1 5A2.6 2.6 0 0 1 18.4 18l-2-2.2a2 2 0 0 0-1.5-.7H9.1a2 2 0 0 0-1.5.7L5.6 18A2.6 2.6 0 0 1 2.1 15.6l1-5A4.5 4.5 0 0 1 7.5 7z" /><path d="M6.2 10.4v2.4M5 11.6h2.4" /><circle cx="15.4" cy="10.8" r=".8" fill="currentColor" /><circle cx="17.6" cy="12.6" r=".8" fill="currentColor" /></>,
   emuPad: <><rect x="3" y="8" width="18" height="9" rx="4.5" /><path d="M7 10.5v4M5 12.5h4" /><circle cx="16" cy="11" r=".8" fill="currentColor" /><circle cx="18.2" cy="13" r=".8" fill="currentColor" /><circle cx="13.8" cy="13" r=".8" fill="currentColor" /><circle cx="16" cy="15" r=".8" fill="currentColor" /></>,
   switchCon: <><path stroke="#5AA9E6" d="M9 5.5H6.5A2.5 2.5 0 0 0 4 8v8a2.5 2.5 0 0 0 2.5 2.5H9z" /><circle cx="6.4" cy="8.6" r="1" stroke="#5AA9E6" /><path stroke="#5AA9E6" d="M5.6 14.2h1.6" /><rect x="9" y="5.5" width="6" height="13" rx="0.6" stroke="#CFC6BA" /><path stroke="#E60012" d="M15 5.5h2.5A2.5 2.5 0 0 1 20 8v8a2.5 2.5 0 0 1-2.5 2.5H15z" /><circle cx="17.6" cy="14.4" r="1" stroke="#E60012" /><circle cx="17.6" cy="7.9" r=".55" fill="#E60012" stroke="#E60012" /><circle cx="18.8" cy="9.1" r=".55" fill="#E60012" stroke="#E60012" /><circle cx="16.4" cy="9.1" r=".55" fill="#E60012" stroke="#E60012" /><circle cx="17.6" cy="10.3" r=".55" fill="#E60012" stroke="#E60012" /></>,
   media: <><rect x="3" y="4" width="18" height="16" rx="3" /><path d="M10 9l5 3-5 3z" fill="currentColor" /></>,
@@ -235,6 +235,7 @@ export default function App() {
   const [propCount, setPropCount] = useState(null);
   const [openMenu, setOpenMenu] = useState(null);
   const [arcView, setArcView] = useState(null);
+  const [pendingExtract, setPendingExtract] = useState(null); // { uri, names|null, label }
   const [arcSel, setArcSel] = useState(new Set());
   const arcLp = useRef(false), arcLpT = useRef(null), arcPX = useRef(0), arcPY = useRef(0);
   const arcListRef = useRef(null), arcSpacerRef = useRef(null);
@@ -268,23 +269,7 @@ export default function App() {
     catch (e) { showToast("Ошибка сохранения: " + (e?.message || "")); }
   };
   const dismissShared = async () => { try { await Apps.clearShared(); } catch {} setShared([]); };
-  const extractSelected = async () => {
-    const names = [...arcSel]; setArcSel(new Set());
-    const destDir = await absPath(path);
-    let ok = 0;
-    for (let i = 0; i < names.length; i++) {
-      const nm = names[i];
-      setArcView((m) => (m ? { ...m, busy: "Извлечение… " + (i + 1) + "/" + names.length } : m));
-      try {
-        const fname = nm.split("/").pop();
-        await Apps.zipExtract({ uri: arcView.uri, entry: nm, dest: destDir + "/" + fname });
-        ok++;
-      } catch (e) { showToast(nm + ": " + (e?.message || "")); }
-    }
-    setArcView((m) => (m ? { ...m, busy: null } : m));
-    showToast("Извлечено: " + ok + " в " + (baseName(path) || "Storage"));
-    refresh();
-  };
+  const extractSelected = () => { if (!arcSel.size) return; startExtract(arcView.uri, [...arcSel], arcView.name); };
   const [allFiles, setAllFiles] = useState(true); // {file, mime, apps, useDefault, editHide}
 
   const cur = tabs[active], path = cur?.path || "";
@@ -305,13 +290,13 @@ export default function App() {
       try { const r = await Apps.list({ uri: u.uri }); files = r.files; }
       catch (er) { showToast("Системное чтение недоступно: " + (er?.message || "ошибка плагина")); const r = await Filesystem.readdir({ path, directory: DIR }); files = r.files; }
       setEntries(files || []);
-      if ((files || []).some((f) => f.name === ".iconfolder" && f.type === "directory")) scanIconFolder(path);
+      if ((files || []).some((f) => f.name === ".icon" && f.type === "directory")) scanIconFolder(path);
     } catch (e) { setError(e.message || "Нет доступа к хранилищу"); setEntries([]); }
     setLoading(false);
   }, [path]);
   const scanIconFolder = async (folderPath) => {
     try {
-      const fu = await Filesystem.getUri({ path: join(folderPath, ".iconfolder"), directory: DIR });
+      const fu = await Filesystem.getUri({ path: join(folderPath, ".icon"), directory: DIR });
       const r = await Apps.list({ uri: fu.uri });
       const pic = (r.files || []).find((f) => f.type !== "directory" && /\.(png|ico|jpg|jpeg|webp)$/i.test(f.name));
       if (!pic) return;
@@ -319,12 +304,14 @@ export default function App() {
       const ext = (pic.name.split(".").pop() || "png").toLowerCase();
       const mime = ext === "ico" ? "image/x-icon" : ext === "jpg" || ext === "jpeg" ? "image/jpeg" : "image/" + ext;
       const db = loadMap(ICONKEY); db[folderPath] = "data:" + mime + ";base64," + data.data; saveIconDB(db);
-      try { await Apps.delete({ uri: fu.uri }); } catch { try { await Filesystem.rmdir({ path: join(folderPath, ".iconfolder"), directory: DIR, recursive: true }); } catch {} }
+      try { await Apps.delete({ uri: fu.uri }); } catch { try { await Filesystem.rmdir({ path: join(folderPath, ".icon"), directory: DIR, recursive: true }); } catch {} }
       showToast("Иконка папки сохранена: " + (baseName(folderPath) || "Storage"));
       refresh();
     } catch (e) { showToast("Иконка: " + (e?.message || "ошибка")); }
   };
 
+  useEffect(() => { const t = THEMES[theme] || THEMES.dark; Apps.setBars({ color: t["--bg"], light: theme === "light" }).catch(() => {}); }, [theme]);
+  useEffect(() => { Filesystem.rmdir({ path: "Download/.yevtmp", directory: DIR, recursive: true }).catch(() => {}); }, []);
   useEffect(() => { Filesystem.requestPermissions().catch(() => {}); checkAccess(); }, []);
   const checkAccess = async () => { try { const r = await Apps.hasAllFiles(); setAllFiles(!!r.granted); } catch { setAllFiles(true); } };
   const listRef = useRef(null);
@@ -447,7 +434,11 @@ export default function App() {
   }, []);
 
   const toggle = (name) => { const n = new Set(sel); n.has(name) ? n.delete(name) : n.add(name); setSel(n); setSelMode(n.size > 0); };
-  const selectAll = () => { if (!visible.length) { showToast("Папка пуста"); return; } setSelMode(true); setSel(new Set(visible.map((e) => e.name))); };
+  const selectAll = () => {
+    if (arcView && arcView.entries) { setArcSel(new Set(arcView.entries.map((e) => e.name))); return; }
+    if (!visible.length) { showToast("Папка пуста"); return; }
+    setSelMode(true); setSel(new Set(visible.map((e) => e.name)));
+  };
 
   const openExternal = async (e) => {
     const mime = mimeOf(e.name);
@@ -486,6 +477,21 @@ export default function App() {
   };
   const arcAnchor = useRef(null);
   const absPath = async (rel) => { const u = await Filesystem.getUri({ path: rel, directory: DIR }); let p = u.uri; if (p.startsWith("file://")) p = p.slice(7); try { p = decodeURIComponent(p); } catch {} return p; };
+  const extractAllTo = async (uri, destRel, names) => {
+    const destDir = await absPath(destRel);
+    let sub = null;
+    try { sub = await Apps.addListener("opProgress", (ev) => setProgress({ current: ev.done, total: ev.total, name: ev.name, mode: "ext" })); } catch {}
+    setProgress({ current: 0, total: (names ? names.length : 1), name: "", mode: "ext" });
+    try {
+      await Apps.zipExtractAll({ uri, dest: destDir, entries: names || undefined });
+      showToast("Извлечено в " + (baseName(destRel) || "Storage"));
+    } catch (e) { showToast("Ошибка: " + (e?.message || "")); }
+    if (sub) try { sub.remove(); } catch {}
+    setProgress(null); await refresh();
+  };
+  const startExtract = (uri, names, label) => { setOpenMenu(null); setArcView(null); setArcSel(new Set()); setPendingExtract({ uri, names: names || null, label: label || "архив" }); };
+  const doExtractHere = async () => { const pe = pendingExtract; setPendingExtract(null); if (pe) await extractAllTo(pe.uri, path, pe.names); };
+  const arcBase = (n) => n.replace(/\.[^.]+$/, "");
   const openArchive = async (e) => {
     setOpenMenu(null);
     setArcView({ name: e.name, uri: e.uri, entries: null });
@@ -767,6 +773,18 @@ export default function App() {
             <button style={S.saveBtnOpen} onClick={openSharedHere}><Svg d={I.folder} size={16} /> Открыть</button>
             <button style={S.saveBtnSave} onClick={saveSharedHere}><Svg d={I.check} size={16} /> Сохранить</button>
             <button style={S.saveBtnCancel} onClick={dismissShared}>Отмена</button>
+          </div>
+        </>
+      )}
+      {pendingExtract && (
+        <>
+          <div style={S.savePop}>
+            <Svg d={I.dl} size={20} />
+            <span style={{ flex: 1, fontSize: 13.5, lineHeight: 1.35 }}>Из «{pendingExtract.label}»{pendingExtract.names ? " (" + pendingExtract.names.length + ")" : ""} — перейдите в папку и нажмите «Извлечь сюда»</span>
+          </div>
+          <div style={S.saveBar}>
+            <button style={S.saveBtnSave} onClick={doExtractHere}><Svg d={I.dl} size={16} /> Извлечь сюда</button>
+            <button style={S.saveBtnCancel} onClick={() => setPendingExtract(null)}>Отмена</button>
           </div>
         </>
       )}
@@ -1087,7 +1105,28 @@ export default function App() {
                   );
                 })}
               </div>
-              {!openMenu.editHide && /\.(zip|apk|jar)$/i.test(openMenu.file.name) && (
+              {!openMenu.editHide && EXT.archive.includes((openMenu.file.name.split(".").pop() || "").toLowerCase()) && !/\.apk$/i.test(openMenu.file.name) && (
+                <>
+                  <div style={{ color: ACC, fontSize: 12, fontWeight: 700, margin: "6px 2px 2px" }}>Архивы</div>
+                  <div onClick={() => openArchive(openMenu.file)} style={{ ...S.appRow, color: GOLD }}>
+                    <span style={{ width: 38, display: "flex", justifyContent: "center" }}><Svg d={I.folder} size={26} /></span>
+                    <span style={{ flex: 1, fontSize: 15 }}>Открыть</span>
+                  </div>
+                  <div onClick={() => startExtract(openMenu.file.uri, null, openMenu.file.name)} style={{ ...S.appRow, color: TXT }}>
+                    <span style={{ width: 38, display: "flex", justifyContent: "center" }}><Svg d={I.dl} size={22} /></span>
+                    <span style={{ flex: 1, fontSize: 15 }}>Распаковать в…</span>
+                  </div>
+                  <div onClick={() => { const f = openMenu.file; setOpenMenu(null); extractAllTo(f.uri, join(path, arcBase(f.name)), null); }} style={{ ...S.appRow, color: TXT }}>
+                    <span style={{ width: 38, display: "flex", justifyContent: "center" }}><Svg d={I.folder} size={22} /></span>
+                    <span style={{ flex: 1, fontSize: 15 }}>Распаковать в папку «{arcBase(openMenu.file.name)}»</span>
+                  </div>
+                  <div onClick={() => { const f = openMenu.file; setOpenMenu(null); extractAllTo(f.uri, path, null); }} style={{ ...S.appRow, color: TXT }}>
+                    <span style={{ width: 38, display: "flex", justifyContent: "center" }}><Svg d={I.dl} size={22} /></span>
+                    <span style={{ flex: 1, fontSize: 15 }}>Распаковать здесь</span>
+                  </div>
+                </>
+              )}
+              {!openMenu.editHide && /\.(zip|jar)$/i.test(openMenu.file.name) && false && (
                 <div onClick={() => openArchive(openMenu.file)} style={{ ...S.appRow, color: GOLD }}>
                   <span style={{ width: 38, display: "flex", justifyContent: "center" }}><Svg d={I.folder} size={28} /></span>
                   <span style={{ flex: 1, fontSize: 15 }}>Открыть</span>
@@ -1144,7 +1183,7 @@ export default function App() {
             </div>
             <div style={{ color: ACC, fontSize: 13, fontWeight: 700, margin: "18px 2px 8px" }}>Иконки папок</div>
             <div style={{ color: SUB, fontSize: 12, lineHeight: 1.5, marginBottom: 12 }}>
-              Чтобы задать иконку папке — создайте в ней папку <span style={{ color: GOLD }}>.iconfolder</span> и положите туда PNG/ICO. Иконка сохранится сюда, а файл удалится.
+              Чтобы задать иконку папке — создайте в ней папку <span style={{ color: GOLD }}>.icon</span> и положите туда PNG/ICO. Иконка сохранится сюда, а файл удалится.
             </div>
             {Object.keys(iconDB).length === 0 && <div style={{ color: SUB, padding: 16, textAlign: "center" }}>Пока нет изменённых иконок</div>}
             {Object.keys(iconDB).map((k) => (
@@ -1279,7 +1318,7 @@ const S = {
   tabActive: { color: ACC, background: "var(--accbg)", border: "1px solid " + ACC, fontWeight: 600, boxShadow: "0 0 0 1px var(--accbg), 0 2px 8px var(--accbg)" },
   tabX: { fontSize: 17, color: SUB, padding: "0 2px" },
   hbtn: { border: "none", background: "transparent", color: TXT, width: 40, height: 48, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" },
-  crumb: { position: "relative", zIndex: 6, padding: "4px 16px 10px", fontSize: 13, background: "transparent", flexShrink: 0, overflow: "visible", whiteSpace: "nowrap" },
+  crumb: { position: "relative", zIndex: 6, padding: "2px 16px 5px", fontSize: 13, background: "transparent", flexShrink: 0, overflow: "visible", whiteSpace: "nowrap" },
   list: { flex: 1, overflowY: "auto", overflowX: "hidden", display: "flex", flexDirection: "column" },
   slideWrap: { display: "flex", flexDirection: "column" },
   note: { color: SUB, textAlign: "center", padding: "60px 24px", lineHeight: 1.6 },
