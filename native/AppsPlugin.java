@@ -37,7 +37,12 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.InputStream;
+import java.io.OutputStream;
+import java.util.Enumeration;
+import java.util.zip.ZipFile;
+import java.util.zip.ZipEntry;
 import java.io.OutputStream;
 import java.util.List;
 
@@ -632,6 +637,95 @@ public class AppsPlugin extends Plugin {
             observer.startWatching();
             call.resolve();
         } catch (Exception e) { call.reject(e.getMessage()); }
+    }
+
+    @PluginMethod
+    public void zipList(PluginCall call) {
+        String uriStr = call.getString("uri");
+        if (uriStr == null) { call.reject("no uri"); return; }
+        try {
+            File f = toFile(uriStr);
+            ZipFile zf = new ZipFile(f);
+            JSArray arr = new JSArray();
+            Enumeration<? extends ZipEntry> en = zf.entries();
+            while (en.hasMoreElements()) {
+                ZipEntry e = en.nextElement();
+                JSObject o = new JSObject();
+                o.put("name", e.getName());
+                o.put("size", e.getSize());
+                o.put("dir", e.isDirectory());
+                arr.put(o);
+            }
+            zf.close();
+            JSObject ret = new JSObject();
+            ret.put("entries", arr);
+            call.resolve(ret);
+        } catch (Exception e) { call.reject(e.getMessage()); }
+    }
+
+    @PluginMethod
+    public void zipExtract(PluginCall call) {
+        String uriStr = call.getString("uri");
+        String entry = call.getString("entry");
+        String dest = call.getString("dest");
+        if (uriStr == null || entry == null || dest == null) { call.reject("bad args"); return; }
+        ZipFile zf = null;
+        try {
+            zf = new ZipFile(toFile(uriStr));
+            ZipEntry ze = zf.getEntry(entry);
+            if (ze == null) { call.reject("entry not found"); return; }
+            File out = new File(dest);
+            if (out.getParentFile() != null) out.getParentFile().mkdirs();
+            InputStream in = zf.getInputStream(ze);
+            OutputStream fos = new FileOutputStream(out);
+            byte[] buf = new byte[65536];
+            int n;
+            while ((n = in.read(buf)) > 0) fos.write(buf, 0, n);
+            fos.close(); in.close();
+            JSObject ret = new JSObject();
+            ret.put("path", out.getAbsolutePath());
+            call.resolve(ret);
+        } catch (Exception e) { call.reject(e.getMessage()); }
+        finally { if (zf != null) try { zf.close(); } catch (Exception ignored) {} }
+    }
+
+    @PluginMethod
+    public void zipExtractAll(PluginCall call) {
+        String uriStr = call.getString("uri");
+        String destDir = call.getString("dest");
+        if (uriStr == null || destDir == null) { call.reject("bad args"); return; }
+        JSArray names = call.getArray("entries");
+        ZipFile zf = null;
+        try {
+            zf = new ZipFile(toFile(uriStr));
+            java.util.List<String> list = new java.util.ArrayList<>();
+            if (names != null) {
+                for (int i = 0; i < names.length(); i++) list.add(names.getString(i));
+            } else {
+                Enumeration<? extends ZipEntry> en = zf.entries();
+                while (en.hasMoreElements()) { ZipEntry e = en.nextElement(); if (!e.isDirectory()) list.add(e.getName()); }
+            }
+            int total = list.size(), done = 0;
+            byte[] buf = new byte[65536];
+            for (String nm : list) {
+                ZipEntry ze = zf.getEntry(nm);
+                if (ze == null) continue;
+                File out = new File(destDir, nm);
+                if (ze.isDirectory()) { out.mkdirs(); continue; }
+                if (out.getParentFile() != null) out.getParentFile().mkdirs();
+                InputStream in = zf.getInputStream(ze);
+                OutputStream fos = new FileOutputStream(out);
+                int n;
+                while ((n = in.read(buf)) > 0) fos.write(buf, 0, n);
+                fos.close(); in.close();
+                done++;
+                JSObject ev = new JSObject();
+                ev.put("done", done); ev.put("total", total); ev.put("name", nm);
+                notifyListeners("opProgress", ev);
+            }
+            call.resolve();
+        } catch (Exception e) { call.reject(e.getMessage()); }
+        finally { if (zf != null) try { zf.close(); } catch (Exception ignored) {} }
     }
 
     @PluginMethod
