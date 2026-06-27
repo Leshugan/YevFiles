@@ -831,6 +831,7 @@ export default function App() {
             visLen.current = visible.length;
             return visible.map((e, i) => (
               <React.Fragment key={e.name}>
+                {i === firstFile && firstFile > 0 && <div style={S.folderSep} />}
                 {renderRow(e)}
               </React.Fragment>
             ));
@@ -1303,7 +1304,8 @@ const S = {
   rowMid: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 },
   rowDate: { fontSize: 12, color: SUB },
   rowSize: { fontSize: 11.5, color: "rgba(176,164,152,.5)", flexShrink: 0, marginLeft: 6 },
-  rowDir: { background: "var(--chip)", borderRadius: 14 },
+  rowDir: { background: "var(--chip)", borderRadius: 14, boxShadow: "0 1px 0 rgba(255,255,255,.04) inset, 0 1px 4px rgba(0,0,0,.18)" },
+  folderSep: { height: 1, background: "var(--line)", margin: "8px 0 8px 72px" },
   arcSelBar: { position: "absolute", left: "50%", transform: "translateX(-50%)", bottom: 10, display: "flex", alignItems: "center", gap: 8, padding: "6px 8px 6px 14px", background: BAR, borderRadius: 22, boxShadow: "0 1px 0 rgba(255,255,255,.07) inset, 0 4px 12px rgba(0,0,0,.4), 0 18px 48px rgba(0,0,0,.62)", animation: "dropGrow .2s cubic-bezier(.2,.9,.3,1.1)" },
   arcSelCancel: { background: "transparent", border: "none", borderRadius: 14, color: SUB, fontSize: 13, padding: "7px 12px" },
   arcSelGo: { display: "inline-flex", alignItems: "center", gap: 5, background: ACC, border: "none", borderRadius: 14, color: "#fff", fontWeight: 700, fontSize: 13, padding: "7px 14px" },
