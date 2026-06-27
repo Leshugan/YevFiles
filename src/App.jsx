@@ -852,7 +852,7 @@ export default function App() {
       {selMode ? (
         <nav style={{ ...S.bottom, justifyContent: "flex-start" }}>
           <div style={S.selCount}>
-            <span key={sel.size} style={{ fontSize: 16, fontWeight: 700, color: "#fff", lineHeight: 1, display: "inline-block", animation: "pulse .3s cubic-bezier(.2,.9,.3,1.3)" }}>{sel.size}</span>
+            <span key={sel.size} style={{ fontSize: 13, fontWeight: 700, color: "#fff", lineHeight: 1, display: "inline-block", animation: "pulse .3s cubic-bezier(.2,.9,.3,1.3)" }}>{sel.size}</span>
           </div>
           <div style={{ display: "flex", overflowX: "auto", flex: 1, justifyContent: "flex-end" }}>
             <Btn onClick={exitSel} icon={I.x} label="Отмена" flexNone />
@@ -1317,7 +1317,7 @@ const S = {
   searchClose: { border: "none", background: "transparent", color: SUB, fontSize: 24, width: 40 },
   bottom: { display: "flex", alignItems: "center", background: BAR, flexShrink: 0, borderRadius: 26, margin: "4px 8px calc(8px + env(safe-area-inset-bottom))", boxShadow: "0 1px 0 rgba(255,255,255,.06) inset, 0 2px 6px rgba(0,0,0,.35), 0 12px 32px rgba(0,0,0,.55)" },
   btn: { border: "none", background: "transparent", padding: "6px 6px 7px", display: "flex", flexDirection: "column", alignItems: "center", gap: 2 },
-  selCount: { minWidth: 30, height: 30, padding: "0 8px", marginRight: 10, borderRadius: 15, background: ACC, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  selCount: { minWidth: 22, height: 22, padding: "0 6px", marginLeft: 14, marginRight: 8, borderRadius: 11, background: ACC, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
   btnLabel: { fontSize: 10, color: SUB, whiteSpace: "nowrap" },
   overlay: { position: "fixed", inset: 0, zIndex: 8 },
   menu: { position: "absolute", zIndex: 9, background: BAR, borderRadius: 12, overflow: "hidden", border: "1px solid " + LINE, boxShadow: "0 1px 0 rgba(255,255,255,.07) inset, 0 4px 12px rgba(0,0,0,.4), 0 18px 48px rgba(0,0,0,.62)", minWidth: 200, animation: "dropGrow .2s cubic-bezier(.2,.9,.3,1.2)" },
