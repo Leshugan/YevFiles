@@ -10,8 +10,8 @@ const Apps = registerPlugin("Apps");
 const BG = "var(--bg)", BAR = "var(--bar)", ROW2 = "var(--row2)", ACC = "var(--acc)";
 const GOLD = "var(--gold)", RED = "var(--red)", TXT = "var(--txt)", SUB = "var(--sub)", LINE = "var(--line)";
 const THEMES = {
-  dark:  { "--bg": "#1C140C", "--bar": "#2A2017", "--row2": "#2E251C", "--acc": "#EF6C00", "--gold": "#F5A623", "--red": "#E05252", "--txt": "#F2EAE0", "--sub": "#B0A498", "--line": "#4A3A2A" },
-  light: { "--bg": "#F1F3F5", "--bar": "#FFFFFF", "--row2": "#E8EBEE", "--acc": "#EF6C00", "--gold": "#C77F12", "--red": "#D14343", "--txt": "#1E2329", "--sub": "#6B7280", "--line": "#D3D8DE" },
+  dark:  { "--bg": "#1C140C", "--bar": "#2A2017", "--row2": "#2E251C", "--acc": "#EF6C00", "--gold": "#F5A623", "--red": "#E05252", "--txt": "#F2EAE0", "--sub": "#B0A498", "--line": "#4A3A2A", "--chip": "rgba(255,255,255,.06)", "--hair": "rgba(255,255,255,.08)" },
+  light: { "--bg": "#EEF1F4", "--bar": "#FFFFFF", "--row2": "#E4E8EC", "--acc": "#EF6C00", "--gold": "#C77F12", "--red": "#D14343", "--txt": "#1E2329", "--sub": "#6B7280", "--line": "#D3D8DE", "--chip": "rgba(0,0,0,.05)", "--hair": "rgba(0,0,0,.08)" },
 };
 const DIR = Directory.ExternalStorage;
 const TKEY = "fm_tabs_v1", SKEY = "fm_startup_v1", METAKEY = "fm_meta_v1", SORTKEY = "fm_sort_v1";
@@ -214,7 +214,7 @@ export default function App() {
   const [meta, setMeta] = useState(loadMeta);
   const [showHidden, setShowHidden] = useState(false);
   const [sortMode, setSortMode] = useState(() => ls.get(SORTKEY) || "az");
-  const [sysTop, setSysTop] = useState(() => ls.get("fm_systop_v1") === "1");
+  const [sysTop, setSysTop] = useState(() => { const v = ls.get("fm_systop_v1"); return v == null ? true : v === "1"; });
   const [theme, setTheme] = useState(() => ls.get("fm_theme_v1") || "dark");
   const [headMenu, setHeadMenu] = useState(false);
   const [settings, setSettings] = useState(false);
@@ -788,7 +788,7 @@ export default function App() {
               return (
                 <div key={e.name} style={{ ...S.row, ...(isDir ? S.rowDir : {}), ...(isSel ? S.rowSel : {}), opacity: hid ? 0.5 : 1 }}
                   onPointerDown={(ev) => rDown(ev, e)} onPointerMove={rMove} onPointerUp={(ev) => rUp(e, ev)} onPointerCancel={() => clearTimeout(lpTimer.current)}>
-                  <span style={{ ...S.iconWrap, color: ic.c, background: isSel ? "transparent" : "rgba(255,255,255,.05)", overflow: "hidden", position: "relative" }}
+                  <span style={{ ...S.iconWrap, color: ic.c, background: isSel ? "transparent" : "var(--chip)", overflow: "hidden", position: "relative" }}
                     onPointerDown={(ev) => ev.stopPropagation()} onPointerUp={(ev) => { ev.stopPropagation(); clearTimeout(lpTimer.current); toggle(e.name); }}>
                     {isSel ? <span style={S.cbk}><Svg d={I.check} size={14} /></span>
                       : (isDir && iconDB[keyOf(e.name)]) ? <img src={iconDB[keyOf(e.name)]} alt="" style={S.iconImg} />
@@ -1007,7 +1007,7 @@ export default function App() {
                     onPointerMove={(ev) => { if (Math.abs(ev.clientX - arcPX.current) > 10 || Math.abs(ev.clientY - arcPY.current) > 10) clearTimeout(arcLpT.current); }}
                     onPointerCancel={() => clearTimeout(arcLpT.current)}
                     style={{ ...S.row, ...(asel ? { background: "rgba(239,108,0,.07)" } : {}) }}>
-                    <span style={{ ...S.iconWrap, color: ic.c, background: asel ? "transparent" : "rgba(255,255,255,.05)" }}
+                    <span style={{ ...S.iconWrap, color: ic.c, background: asel ? "transparent" : "var(--chip)" }}
                       onClick={(ev) => { ev.stopPropagation(); tog(); }}>
                       {asel ? <span style={S.cbk}><Svg d={I.check} size={14} /></span>
                         : /\.apk$/i.test(it.name) ? <Svg d={ic.d} size={24} />
@@ -1265,7 +1265,7 @@ const S = {
   app: { position: "relative", display: "flex", flexDirection: "column", height: "100vh", background: BG, color: TXT, fontFamily: "system-ui,-apple-system,Roboto,sans-serif", overflow: "hidden" },
   tabsbar: { display: "flex", alignItems: "center", background: BAR, flexShrink: 0, height: 50, margin: "8px 8px 6px", borderRadius: 24, boxShadow: "0 1px 0 rgba(255,255,255,.05) inset, 0 10px 30px rgba(0,0,0,.45)" },
   tabs: { display: "flex", overflowX: "auto", flex: 1, alignItems: "center", justifyContent: "center", gap: 6, padding: "0 4px", height: "100%" },
-  tab: { display: "flex", alignItems: "center", gap: 6, padding: "0 12px", height: 34, borderRadius: 17, fontSize: 13.5, color: SUB, whiteSpace: "nowrap", background: "#241A11", flexShrink: 0, border: "1px solid transparent" },
+  tab: { display: "flex", alignItems: "center", gap: 6, padding: "0 12px", height: 34, borderRadius: 17, fontSize: 13.5, color: SUB, whiteSpace: "nowrap", background: "var(--chip)", flexShrink: 0, border: "1px solid transparent" },
   tabActive: { color: ACC, background: "rgba(239,108,0,.14)", border: "1px solid " + ACC, fontWeight: 600, boxShadow: "0 0 0 1px rgba(239,108,0,.15), 0 2px 8px rgba(239,108,0,.15)" },
   tabX: { fontSize: 17, color: SUB, padding: "0 2px" },
   hbtn: { border: "none", background: "transparent", color: TXT, width: 40, height: 48, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" },
@@ -1274,8 +1274,8 @@ const S = {
   slideWrap: { display: "flex", flexDirection: "column" },
   note: { color: SUB, textAlign: "center", padding: "60px 24px", lineHeight: 1.6 },
   row: { display: "flex", alignItems: "center", gap: 14, padding: "10px 14px", touchAction: "pan-y", position: "relative" },
-  rowLine: { position: "absolute", left: 72, right: 0, bottom: 0, height: 1, background: "rgba(255,255,255,.08)" },
-  sep: { height: 1, background: "rgba(255,255,255,.10)", margin: "4px 0" },
+  rowLine: { position: "absolute", left: 72, right: 0, bottom: 0, height: 1, background: "var(--hair)" },
+  sep: { height: 1, background: "var(--hair)", margin: "4px 0" },
   iconWrap: { width: 44, height: 44, borderRadius: 13, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
   iconImg: { width: "100%", height: "100%", objectFit: "cover", borderRadius: 13 },
   folderThumb: { position: "absolute", right: 1, bottom: 1, width: 26, height: 26, borderRadius: 7, objectFit: "cover", border: "2px solid " + BG },
@@ -1288,8 +1288,8 @@ const S = {
   arcSelCancel: { background: "transparent", border: "none", borderRadius: 14, color: SUB, fontSize: 13, padding: "7px 12px" },
   arcSelGo: { display: "inline-flex", alignItems: "center", gap: 5, background: ACC, border: "none", borderRadius: 14, color: "#fff", fontWeight: 700, fontSize: 13, padding: "7px 14px" },
   arcScreen: { position: "fixed", top: 62, left: 0, right: 0, bottom: "calc(70px + env(safe-area-inset-bottom))", zIndex: 1250, background: BG, display: "flex", flexDirection: "column" },
-  cnt: { background: "#43331F", color: GOLD, fontSize: 12, fontWeight: 700, padding: "2px 9px", borderRadius: 10, flexShrink: 0 },
-  rowSel: { background: "#332417" },
+  cnt: { background: "rgba(239,108,0,.16)", color: GOLD, fontSize: 12, fontWeight: 700, padding: "2px 9px", borderRadius: 10, flexShrink: 0 },
+  rowSel: { background: "rgba(239,108,0,.16)" },
   name: { flex: 1, fontSize: 15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
   checkOn: { width: 26, height: 26, borderRadius: 13, background: ACC, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15 },
   searchBar: { display: "flex", alignItems: "center", background: ROW2, padding: 8, gap: 8, flexShrink: 0 },
@@ -1319,7 +1319,7 @@ const S = {
   saveBtnOpen: { flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, height: 42, background: "transparent", border: "1px solid " + LINE, borderRadius: 16, color: TXT, fontWeight: 600, fontSize: 14 },
   saveBtnSave: { flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, height: 42, background: "rgba(239,108,0,.16)", border: "1px solid " + ACC, borderRadius: 16, color: ACC, fontWeight: 600, fontSize: 14 },
   saveBtnCancel: { flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, height: 42, background: "transparent", border: "1px solid " + LINE, borderRadius: 16, color: SUB, fontWeight: 600, fontSize: 14 },
-  accessBar: { display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: "#3A2A14", borderBottom: "1px solid " + LINE },
+  accessBar: { display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: "rgba(239,108,0,.12)", borderBottom: "1px solid " + LINE },
   accessBtn: { flexShrink: 0, background: ACC, border: "none", borderRadius: 8, color: "#fff", fontSize: 13, fontWeight: 700, padding: "8px 14px" },
   sortRow: { padding: "13px 4px", fontSize: 15, color: TXT, borderBottom: "1px solid " + LINE, display: "flex", alignItems: "center" },
   iconBtn: { border: "1px solid " + LINE, background: ROW2, borderRadius: 10, width: 38, height: 38, display: "flex", alignItems: "center", justifyContent: "center" },
