@@ -754,8 +754,8 @@ export default function App() {
         </span>
         {themeBtn && (
           <button onClick={toggleTheme} aria-label="Тема"
-            style={{ flexShrink: 0, width: 34, height: 34, borderRadius: 17, border: "1px solid " + LINE, background: "var(--chip)", color: theme === "dark" ? GOLD : ACC, display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <Svg d={theme === "dark" ? I.sun : I.moon} size={18} />
+            style={{ flexShrink: 0, width: 34, height: 34, borderRadius: 17, border: "1px solid " + LINE, background: "var(--accbg)", color: ACC, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <Svg d={theme === "light" ? I.sun : I.moon} size={18} />
           </button>
         )}
       </div>
@@ -1317,7 +1317,7 @@ const S = {
   searchClose: { border: "none", background: "transparent", color: SUB, fontSize: 24, width: 40 },
   bottom: { display: "flex", alignItems: "center", background: BAR, flexShrink: 0, borderRadius: 26, margin: "4px 8px calc(8px + env(safe-area-inset-bottom))", boxShadow: "0 1px 0 rgba(255,255,255,.06) inset, 0 2px 6px rgba(0,0,0,.35), 0 12px 32px rgba(0,0,0,.55)" },
   btn: { border: "none", background: "transparent", padding: "6px 6px 7px", display: "flex", flexDirection: "column", alignItems: "center", gap: 2 },
-  selCount: { minWidth: 26, padding: "0 6px", marginRight: 10, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  selCount: { minWidth: 30, height: 30, padding: "0 8px", marginRight: 10, borderRadius: 15, background: ACC, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
   btnLabel: { fontSize: 10, color: SUB, whiteSpace: "nowrap" },
   overlay: { position: "fixed", inset: 0, zIndex: 8 },
   menu: { position: "absolute", zIndex: 9, background: BAR, borderRadius: 12, overflow: "hidden", border: "1px solid " + LINE, boxShadow: "0 1px 0 rgba(255,255,255,.07) inset, 0 4px 12px rgba(0,0,0,.4), 0 18px 48px rgba(0,0,0,.62)", minWidth: 200, animation: "dropGrow .2s cubic-bezier(.2,.9,.3,1.2)" },
