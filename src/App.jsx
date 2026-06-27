@@ -788,14 +788,14 @@ export default function App() {
       </div>
 
       {/* ПУТЬ */}
-      <div style={{ ...S.crumb, display: "flex", alignItems: "center", minHeight: 40 }}>
+      <div style={S.crumb}>
         <span style={{ flex: 1, display: "flex", alignItems: "center", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {path ? <span onClick={goUp} style={{ display: "inline-flex", alignItems: "center", gap: 6, color: ACC }}><Svg d={I.back} size={18} /> {path}</span>
             : <span style={{ color: SUB }}>/storage</span>}
         </span>
         {themeBtn && (
           <button onClick={toggleTheme} aria-label="Тема"
-            style={{ flexShrink: 0, alignSelf: "center", width: 34, height: 34, borderRadius: 17, border: "none", background: BAR, color: ACC, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 1px 0 rgba(255,255,255,.05) inset, 0 3px 10px rgba(0,0,0,.20)" }}>
+            style={{ flexShrink: 0, width: 34, height: 34, borderRadius: 17, border: "none", background: BAR, color: ACC, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 1px 0 rgba(255,255,255,.05) inset, 0 3px 10px rgba(0,0,0,.20)" }}>
             <Svg d={theme === "light" ? I.sun : I.moon} size={18} />
           </button>
         )}
@@ -1395,7 +1395,7 @@ const S = {
   tabActive: { color: ACC, background: "var(--accbg)", border: "1px solid " + ACC, fontWeight: 600, boxShadow: "0 0 0 1px var(--accbg), 0 2px 8px var(--accbg)" },
   tabX: { fontSize: 17, color: SUB, padding: "0 2px" },
   hbtn: { border: "none", background: "transparent", color: TXT, width: 40, height: 48, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" },
-  crumb: { position: "relative", zIndex: 6, padding: "2px 16px", fontSize: 12.5, background: "transparent", flexShrink: 0, overflow: "visible", whiteSpace: "nowrap" },
+  crumb: { position: "relative", zIndex: 6, height: 42, display: "flex", alignItems: "center", padding: "0 16px", fontSize: 12.5, background: "transparent", flexShrink: 0, overflow: "visible", whiteSpace: "nowrap" },
   list: { flex: 1, overflowY: "auto", overflowX: "hidden", display: "flex", flexDirection: "column" },
   slideWrap: { display: "flex", flexDirection: "column" },
   note: { color: SUB, textAlign: "center", padding: "60px 24px", lineHeight: 1.6 },
