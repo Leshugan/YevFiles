@@ -10,8 +10,8 @@ const Apps = registerPlugin("Apps");
 const BG = "var(--bg)", BAR = "var(--bar)", ROW2 = "var(--row2)", ACC = "var(--acc)";
 const GOLD = "var(--gold)", RED = "var(--red)", TXT = "var(--txt)", SUB = "var(--sub)", LINE = "var(--line)";
 const THEMES = {
-  dark:  { "--bg": "#1C140C", "--bar": "#2A2017", "--row2": "#2E251C", "--acc": "#EF6C00", "--gold": "#F5A623", "--red": "#E05252", "--txt": "#F2EAE0", "--sub": "#B0A498", "--line": "#4A3A2A", "--chip": "rgba(255,255,255,.06)", "--hair": "rgba(255,255,255,.08)" },
-  light: { "--bg": "#EEF1F4", "--bar": "#FFFFFF", "--row2": "#E4E8EC", "--acc": "#EF6C00", "--gold": "#C77F12", "--red": "#D14343", "--txt": "#1E2329", "--sub": "#6B7280", "--line": "#D3D8DE", "--chip": "rgba(0,0,0,.05)", "--hair": "rgba(0,0,0,.08)" },
+  dark:  { "--bg": "#1C140C", "--bar": "#2A2017", "--row2": "#2E251C", "--acc": "#EF6C00", "--accbg": "var(--accbg)", "--gold": "#F5A623", "--red": "#E05252", "--txt": "#F2EAE0", "--sub": "#B0A498", "--line": "#4A3A2A", "--chip": "rgba(255,255,255,.06)", "--hair": "rgba(255,255,255,.08)" },
+  light: { "--bg": "#EEF1F4", "--bar": "#FFFFFF", "--row2": "#E4E8EC", "--acc": "#2F80ED", "--accbg": "rgba(47,128,237,.14)", "--gold": "#2F80ED", "--red": "#D14343", "--txt": "#1E2329", "--sub": "#6B7280", "--line": "#D3D8DE", "--chip": "rgba(0,0,0,.05)", "--hair": "rgba(0,0,0,.08)" },
 };
 const DIR = Directory.ExternalStorage;
 const TKEY = "fm_tabs_v1", SKEY = "fm_startup_v1", METAKEY = "fm_meta_v1", SORTKEY = "fm_sort_v1";
@@ -171,6 +171,8 @@ const SYS_FOLDERS = {
   mt2: { d: I.tool, c: "#E3B14F" }, "mt manager": { d: I.tool, c: "#E3B14F" }, apkeditor: { d: I.tool, c: "#6FD3A8" },
   "smart launcher": { d: I.launcher, c: "#5AA9E6" }, smartlauncher: { d: I.launcher, c: "#5AA9E6" }, "mx player": { d: I.video, c: "#3A7BD5" }, mxplayer: { d: I.video, c: "#3A7BD5" },
 };
+// Настоящие системные папки — ТОЛЬКО для сортировки «сверху» (НЕ приложения)
+const REAL_SYS = new Set(["android","alarms","audiobooks","dcim","documents","download","downloads","movies","music","notifications","pictures","podcasts","recordings","ringtones","screenshots","screenrecord","screenrecords","bluetooth","fonts","camera","data","media","obb","coloros","oppo","oneplus","heytap","realme","samsung","smartswitch","miui","xiaomi","huawei","vivo"]);
 const ARCH_COLORS = { zip: "#E3B14F", rar: "#9B59B6", "7z": "#5AA9E6", tar: "#6FD3A8", gz: "#6FD3A8", xz: "#6FD3A8", bz2: "#6FD3A8", jar: "#E0574F" };
 const fileIcon = (name) => {
   const ext = (name.split(".").pop() || "").toLowerCase();
@@ -214,7 +216,7 @@ export default function App() {
   const [meta, setMeta] = useState(loadMeta);
   const [showHidden, setShowHidden] = useState(false);
   const [sortMode, setSortMode] = useState(() => ls.get(SORTKEY) || "az");
-  const [sysTop, setSysTop] = useState(() => { const v = ls.get("fm_systop_v1"); return v == null ? true : v === "1"; });
+  const [sysTop, setSysTop] = useState(() => { const v = ls.get("fm_systop_v2"); return v == null ? true : v === "1"; });
   const [theme, setTheme] = useState(() => ls.get("fm_theme_v1") || "dark");
   const [headMenu, setHeadMenu] = useState(false);
   const [settings, setSettings] = useState(false);
@@ -653,7 +655,7 @@ export default function App() {
   };
   let visible = entries.filter((e) => showHidden || !isHidden(e));
   if (query) visible = visible.filter((e) => e.name.toLowerCase().includes(query.toLowerCase()));
-  const isSysFolder = (e) => e.type === "directory" && !!SYS_FOLDERS[e.name.toLowerCase()];
+  const isSysFolder = (e) => e.type === "directory" && REAL_SYS.has(e.name.toLowerCase());
   const rank = (e) => (meta.pinTop.has(keyOf(e.name)) ? -1 : meta.pinBot.has(keyOf(e.name)) ? 1 : 0);
   visible = [...visible].sort((a, b) => {
     // 1) закреплённые сверху/снизу
@@ -1006,7 +1008,7 @@ export default function App() {
                     onPointerUp={() => clearTimeout(arcLpT.current)}
                     onPointerMove={(ev) => { if (Math.abs(ev.clientX - arcPX.current) > 10 || Math.abs(ev.clientY - arcPY.current) > 10) clearTimeout(arcLpT.current); }}
                     onPointerCancel={() => clearTimeout(arcLpT.current)}
-                    style={{ ...S.row, ...(asel ? { background: "rgba(239,108,0,.07)" } : {}) }}>
+                    style={{ ...S.row, ...(asel ? { background: "var(--accbg)" } : {}) }}>
                     <span style={{ ...S.iconWrap, color: ic.c, background: asel ? "transparent" : "var(--chip)" }}
                       onClick={(ev) => { ev.stopPropagation(); tog(); }}>
                       {asel ? <span style={S.cbk}><Svg d={I.check} size={14} /></span>
@@ -1122,12 +1124,12 @@ export default function App() {
               {[["dark", "Тёмная"], ["light", "Светлая"]].map(([t, lbl]) => (
                 <button key={t} onClick={() => { setTheme(t); ls.set("fm_theme_v1", t); }}
                   style={{ flex: 1, height: 44, borderRadius: 14, fontSize: 14, fontWeight: 600,
-                    background: theme === t ? "rgba(239,108,0,.16)" : "transparent",
+                    background: theme === t ? "var(--accbg)" : "transparent",
                     border: "1px solid " + (theme === t ? ACC : LINE), color: theme === t ? ACC : TXT }}>{lbl}</button>
               ))}
             </div>
             <div style={{ color: ACC, fontSize: 13, fontWeight: 700, margin: "18px 2px 8px" }}>Сортировка</div>
-            <div style={S.menuItem} onClick={() => { const v = !sysTop; setSysTop(v); ls.set("fm_systop_v1", v ? "1" : "0"); }}>
+            <div style={S.menuItem} onClick={() => { const v = !sysTop; setSysTop(v); ls.set("fm_systop_v2", v ? "1" : "0"); }}>
               <span style={{ color: sysTop ? ACC : SUB, display: "flex" }}><Svg d={I.folder} size={20} /></span>
               Системные папки всегда сверху
               <span style={{ marginLeft: "auto", ...S.tgl, ...(sysTop ? S.tglOn : {}) }}><span style={{ ...S.knob, ...(sysTop ? S.knobOn : {}) }} /></span>
@@ -1266,7 +1268,7 @@ const S = {
   tabsbar: { display: "flex", alignItems: "center", background: BAR, flexShrink: 0, height: 50, margin: "8px 8px 6px", borderRadius: 24, boxShadow: "0 1px 0 rgba(255,255,255,.05) inset, 0 10px 30px rgba(0,0,0,.45)" },
   tabs: { display: "flex", overflowX: "auto", flex: 1, alignItems: "center", justifyContent: "center", gap: 6, padding: "0 4px", height: "100%" },
   tab: { display: "flex", alignItems: "center", gap: 6, padding: "0 12px", height: 34, borderRadius: 17, fontSize: 13.5, color: SUB, whiteSpace: "nowrap", background: "var(--chip)", flexShrink: 0, border: "1px solid transparent" },
-  tabActive: { color: ACC, background: "rgba(239,108,0,.14)", border: "1px solid " + ACC, fontWeight: 600, boxShadow: "0 0 0 1px rgba(239,108,0,.15), 0 2px 8px rgba(239,108,0,.15)" },
+  tabActive: { color: ACC, background: "var(--accbg)", border: "1px solid " + ACC, fontWeight: 600, boxShadow: "0 0 0 1px var(--accbg), 0 2px 8px var(--accbg)" },
   tabX: { fontSize: 17, color: SUB, padding: "0 2px" },
   hbtn: { border: "none", background: "transparent", color: TXT, width: 40, height: 48, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" },
   crumb: { padding: "4px 16px 10px", fontSize: 13, background: "transparent", flexShrink: 0, overflow: "hidden", whiteSpace: "nowrap" },
@@ -1283,13 +1285,13 @@ const S = {
   rowMid: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 },
   rowDate: { fontSize: 12, color: SUB },
   rowSize: { fontSize: 11.5, color: "rgba(176,164,152,.5)", flexShrink: 0, marginLeft: 6 },
-  rowDir: { background: "rgba(239,108,0,.04)" },
+  rowDir: { background: "var(--accbg)" },
   arcSelBar: { position: "absolute", left: "50%", transform: "translateX(-50%)", bottom: 10, display: "flex", alignItems: "center", gap: 8, padding: "6px 8px 6px 14px", background: BAR, borderRadius: 22, boxShadow: "0 1px 0 rgba(255,255,255,.07) inset, 0 4px 12px rgba(0,0,0,.4), 0 18px 48px rgba(0,0,0,.62)", animation: "dropGrow .2s cubic-bezier(.2,.9,.3,1.1)" },
   arcSelCancel: { background: "transparent", border: "none", borderRadius: 14, color: SUB, fontSize: 13, padding: "7px 12px" },
   arcSelGo: { display: "inline-flex", alignItems: "center", gap: 5, background: ACC, border: "none", borderRadius: 14, color: "#fff", fontWeight: 700, fontSize: 13, padding: "7px 14px" },
   arcScreen: { position: "fixed", top: 62, left: 0, right: 0, bottom: "calc(70px + env(safe-area-inset-bottom))", zIndex: 1250, background: BG, display: "flex", flexDirection: "column" },
-  cnt: { background: "rgba(239,108,0,.16)", color: GOLD, fontSize: 12, fontWeight: 700, padding: "2px 9px", borderRadius: 10, flexShrink: 0 },
-  rowSel: { background: "rgba(239,108,0,.16)" },
+  cnt: { background: "var(--accbg)", color: GOLD, fontSize: 12, fontWeight: 700, padding: "2px 9px", borderRadius: 10, flexShrink: 0 },
+  rowSel: { background: "var(--accbg)" },
   name: { flex: 1, fontSize: 15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
   checkOn: { width: 26, height: 26, borderRadius: 13, background: ACC, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15 },
   searchBar: { display: "flex", alignItems: "center", background: ROW2, padding: 8, gap: 8, flexShrink: 0 },
@@ -1314,12 +1316,12 @@ const S = {
   sheetField: { width: "100%", background: ROW2, border: "1px solid " + LINE, borderRadius: 12, padding: "12px 14px", color: TXT, fontSize: 15, marginBottom: 16, outline: "none" },
   sheetGhost: { flex: 1, background: ROW2, border: "1px solid " + LINE, borderRadius: 12, padding: 13, color: SUB, fontSize: 14, cursor: "pointer" },
   sheetOk: { flex: 1, background: ACC, border: "none", borderRadius: 12, padding: 13, color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer" },
-  savePop: { position: "fixed", top: "calc(68px + env(safe-area-inset-top))", left: 10, right: 10, zIndex: 1260, display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", background: BAR, color: TXT, borderRadius: 18, boxShadow: "0 0 0 1px rgba(239,108,0,.5), 0 1px 0 rgba(255,255,255,.07) inset, 0 8px 24px rgba(0,0,0,.5), 0 16px 44px rgba(239,108,0,.18)", animation: "dropGrow .22s cubic-bezier(.2,.9,.3,1.1)" },
+  savePop: { position: "fixed", top: "calc(68px + env(safe-area-inset-top))", left: 10, right: 10, zIndex: 1260, display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", background: BAR, color: TXT, borderRadius: 18, boxShadow: "0 0 0 1px var(--accbg), 0 1px 0 rgba(255,255,255,.07) inset, 0 8px 24px rgba(0,0,0,.5), 0 16px 44px var(--accbg)", animation: "dropGrow .22s cubic-bezier(.2,.9,.3,1.1)" },
   saveBar: { position: "fixed", left: 8, right: 8, bottom: "calc(8px + env(safe-area-inset-bottom))", zIndex: 1260, display: "flex", alignItems: "center", gap: 8, height: 56, padding: "0 10px", background: BAR, borderRadius: 26, boxShadow: "0 1px 0 rgba(255,255,255,.07) inset, 0 4px 12px rgba(0,0,0,.4), 0 18px 48px rgba(0,0,0,.62)", animation: "sUp .28s cubic-bezier(.2,.9,.3,1)" },
   saveBtnOpen: { flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, height: 42, background: "transparent", border: "1px solid " + LINE, borderRadius: 16, color: TXT, fontWeight: 600, fontSize: 14 },
-  saveBtnSave: { flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, height: 42, background: "rgba(239,108,0,.16)", border: "1px solid " + ACC, borderRadius: 16, color: ACC, fontWeight: 600, fontSize: 14 },
+  saveBtnSave: { flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, height: 42, background: "var(--accbg)", border: "1px solid " + ACC, borderRadius: 16, color: ACC, fontWeight: 600, fontSize: 14 },
   saveBtnCancel: { flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, height: 42, background: "transparent", border: "1px solid " + LINE, borderRadius: 16, color: SUB, fontWeight: 600, fontSize: 14 },
-  accessBar: { display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: "rgba(239,108,0,.12)", borderBottom: "1px solid " + LINE },
+  accessBar: { display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: "var(--accbg)", borderBottom: "1px solid " + LINE },
   accessBtn: { flexShrink: 0, background: ACC, border: "none", borderRadius: 8, color: "#fff", fontSize: 13, fontWeight: 700, padding: "8px 14px" },
   sortRow: { padding: "13px 4px", fontSize: 15, color: TXT, borderBottom: "1px solid " + LINE, display: "flex", alignItems: "center" },
   iconBtn: { border: "1px solid " + LINE, background: ROW2, borderRadius: 10, width: 38, height: 38, display: "flex", alignItems: "center", justifyContent: "center" },
