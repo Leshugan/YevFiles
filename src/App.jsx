@@ -819,7 +819,7 @@ export default function App() {
         </span>
         {themeBtn && (
           <button onClick={toggleTheme} aria-label="Тема"
-            style={{ flexShrink: 0, alignSelf: "center", width: 34, height: 34, borderRadius: 17, border: "1px solid var(--line)", background: BAR, color: ACC, display: "flex", alignItems: "center", justifyContent: "center", padding: 0, margin: 0, lineHeight: 0 }}>
+            style={{ flexShrink: 0, alignSelf: "center", position: "relative", top: 2, width: 34, height: 34, borderRadius: 17, border: "1px solid var(--line)", background: BAR, color: ACC, display: "flex", alignItems: "center", justifyContent: "center", padding: 0, margin: 0, lineHeight: 0 }}>
             <Svg d={theme === "light" ? I.sun : I.moon} size={18} />
           </button>
         )}
@@ -936,7 +936,7 @@ export default function App() {
             <Btn onClick={() => setProps(one)} icon={I.info} label="Свойства" flexNone disabled={sel.size !== 1} />
             <Btn onClick={() => grab("cut")} icon={I.cut} label="Вырезать" flexNone />
             <Btn onClick={() => grab("copy")} icon={I.copy} label="Копир." flexNone />
-            <Btn onClick={(ev) => { const r = ev.currentTarget.getBoundingClientRect(); setConfirmDel({ left: r.left, top: r.top }); }} icon={I.trash} label="Удалить" red flexNone />
+            <Btn onClick={(ev) => { const t = ev.currentTarget; const r = t.getBoundingClientRect(); const p = t.previousElementSibling; const cr = p ? p.getBoundingClientRect() : r; setConfirmDel({ cx: cr.left + cr.width / 2, top: r.top }); }} icon={I.trash} label="Удалить" red flexNone />
             <Btn onClick={() => { const e = one; const sp = splitExt(e.name, e.type === "directory"); setSheet({ kind: "rename", old: e.name, base: sp.base, ext: sp.ext, editExt: false }); }} icon={I.rename} label="Имя" flexNone disabled={sel.size !== 1} />
             <Btn onClick={() => setSelMenu((v) => !v)} icon={I.dots} label="Ещё" flexNone />
           </div>
@@ -1072,13 +1072,12 @@ export default function App() {
             <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px 16px" }}>
               <span style={{ flex: 1, minWidth: 0, color: "#fff", fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{viewerCur.name}</span>
               <span style={{ color: "rgba(255,255,255,.7)", fontSize: 13, flexShrink: 0 }}>{viewer.idx + 1}/{viewer.items.length}</span>
-              <span onClick={() => setViewer(null)} style={{ color: "#fff", display: "flex", padding: 4, flexShrink: 0 }}><Svg d={I.x} size={24} /></span>
             </div>
           </div>
 
           {/* тулбар снизу: справа-налево — удалить, свойства, поделиться, редактировать */}
           <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, paddingBottom: "env(safe-area-inset-bottom)", background: "linear-gradient(to top, rgba(0,0,0,.8), transparent)", transform: viewerBar ? "translateY(0)" : "translateY(110%)", transition: "transform .2s ease", pointerEvents: viewerBar ? "auto" : "none" }}>
-            <div style={{ display: "flex", justifyContent: "space-around", alignItems: "flex-end", padding: "16px 8px 14px" }}>
+            <div style={{ display: "flex", justifyContent: "space-around", alignItems: "flex-end", padding: "16px 76px 14px 8px" }}>
               {[
                 [I.rename, "Изменить", () => Apps.editImage({ uri: viewerCur.uri, mime: mimeOf(viewerCur.name) }).catch(() => showToast("Нет редактора")), false],
                 [I.share, "Поделиться", () => Apps.share({ uri: viewerCur.uri, mime: mimeOf(viewerCur.name) }).catch(() => {}), false],
@@ -1090,6 +1089,11 @@ export default function App() {
                 </span>
               ))}
             </div>
+          </div>
+
+          {/* крестик закрытия — правый нижний угол */}
+          <div style={{ position: "absolute", right: 14, bottom: 0, paddingBottom: "calc(env(safe-area-inset-bottom) + 16px)", transform: viewerBar ? "translateY(0)" : "translateY(110%)", transition: "transform .2s ease", pointerEvents: viewerBar ? "auto" : "none", zIndex: 2 }}>
+            <span onClick={() => setViewer(null)} style={{ display: "flex", width: 44, height: 44, borderRadius: 22, background: "rgba(0,0,0,.5)", border: "1px solid rgba(255,255,255,.25)", color: "#fff", alignItems: "center", justifyContent: "center" }}><Svg d={I.x} size={24} /></span>
           </div>
 
           {/* подтверждение удаления в просмотрщике */}
@@ -1127,7 +1131,7 @@ export default function App() {
       {confirmDel && (
         <>
           <div style={{ position: "fixed", inset: 0, zIndex: 1290 }} onClick={() => setConfirmDel(null)} />
-          <div style={{ position: "fixed", zIndex: 1300, left: "50%", transform: "translateX(-50%)", top: confirmDel.top - 56, display: "flex", gap: 8, background: BAR, border: "1px solid " + LINE, borderRadius: 14, padding: 8, boxShadow: "0 1px 0 rgba(255,255,255,.07) inset, 0 4px 12px rgba(0,0,0,.4), 0 18px 48px rgba(0,0,0,.62)", animation: "popCenter .15s ease" }}>
+          <div style={{ position: "fixed", zIndex: 1300, left: Math.max(80, Math.min(confirmDel.cx, window.innerWidth - 80)), transform: "translateX(-50%)", top: confirmDel.top - 56, display: "flex", gap: 8, background: BAR, border: "1px solid " + LINE, borderRadius: 14, padding: 8, boxShadow: "0 1px 0 rgba(255,255,255,.07) inset, 0 4px 12px rgba(0,0,0,.4), 0 18px 48px rgba(0,0,0,.62)", animation: "popCenter .15s ease" }}>
             <button onClick={doDelete} style={{ background: RED, border: "none", borderRadius: 8, color: "#fff", fontSize: 14, fontWeight: 700, padding: "8px 18px" }}>Да</button>
             <button onClick={() => setConfirmDel(null)} style={{ background: ROW2, border: "1px solid " + LINE, borderRadius: 8, color: SUB, fontSize: 14, padding: "8px 18px" }}>Нет</button>
           </div>
@@ -1486,7 +1490,7 @@ const S = {
   tabActive: { color: ACC, background: "var(--accbg)", border: "1px solid " + ACC, fontWeight: 600, boxShadow: "0 0 0 1px var(--accbg), 0 2px 8px var(--accbg)" },
   tabX: { fontSize: 17, color: SUB, padding: "0 2px" },
   hbtn: { border: "none", background: "transparent", color: TXT, width: 40, height: 48, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" },
-  crumb: { position: "relative", zIndex: 6, height: 42, display: "flex", alignItems: "center", padding: "0 16px", fontSize: 12.5, background: "transparent", flexShrink: 0, overflow: "visible", whiteSpace: "nowrap" },
+  crumb: { position: "relative", zIndex: 6, display: "flex", alignItems: "center", padding: "6px 16px", fontSize: 12.5, background: "transparent", flexShrink: 0, overflow: "visible", whiteSpace: "nowrap" },
   list: { flex: 1, overflowY: "auto", overflowX: "hidden", display: "flex", flexDirection: "column" },
   slideWrap: { display: "flex", flexDirection: "column" },
   note: { color: SUB, textAlign: "center", padding: "60px 24px", lineHeight: 1.6 },
