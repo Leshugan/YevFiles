@@ -99,6 +99,8 @@ const I = {
   paste: <><rect x="6" y="4" width="12" height="16" rx="2" /><path d="M9 4h6v3H9z" /></>,
   info: <><circle cx="12" cy="12" r="9" /><path d="M12 11v5M12 8h.01" /></>,
   dots: <><circle cx="12" cy="5" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="12" cy="19" r="1.6" /></>,
+  sun: <><circle cx="12" cy="12" r="4.5" /><path d="M12 2v2M12 20v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M2 12h2M20 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4" /></>,
+  moon: <><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" /></>,
   sort: <><path d="M7 4v16M7 20l-3-3M7 4l3 3" /><path d="M17 20V4M17 4l3 3M17 20l-3-3" /></>,
   gear: <><circle cx="12" cy="12" r="3" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2" /></>,
   eye: <><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" /><circle cx="12" cy="12" r="3" /></>,
@@ -218,6 +220,8 @@ export default function App() {
   const [sortMode, setSortMode] = useState(() => ls.get(SORTKEY) || "az");
   const [sysTop, setSysTop] = useState(() => ls.get("fm_systop_v2") === "1");
   const [theme, setTheme] = useState(() => ls.get("fm_theme_v1") || "dark");
+  const [themeBtn, setThemeBtn] = useState(() => ls.get("fm_themebtn_v1") !== "0");
+  const toggleTheme = () => { const t = theme === "dark" ? "light" : "dark"; setTheme(t); ls.set("fm_theme_v1", t); };
   const [headMenu, setHeadMenu] = useState(false);
   const [settings, setSettings] = useState(false);
   const [iconDB, setIconDB] = useState(() => loadMap(ICONKEY));
@@ -743,9 +747,17 @@ export default function App() {
       </div>
 
       {/* ПУТЬ */}
-      <div style={S.crumb}>
-        {path ? <span onClick={goUp} style={{ display: "inline-flex", alignItems: "center", gap: 6, color: ACC }}><Svg d={I.back} size={18} /> {path}</span>
-          : <span style={{ color: SUB }}>/storage</span>}
+      <div style={{ ...S.crumb, display: "flex", alignItems: "center" }}>
+        <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {path ? <span onClick={goUp} style={{ display: "inline-flex", alignItems: "center", gap: 6, color: ACC }}><Svg d={I.back} size={18} /> {path}</span>
+            : <span style={{ color: SUB }}>/storage</span>}
+        </span>
+        {themeBtn && (
+          <button onClick={toggleTheme} aria-label="Тема"
+            style={{ flexShrink: 0, width: 34, height: 34, borderRadius: 17, border: "1px solid " + LINE, background: "var(--chip)", color: theme === "dark" ? GOLD : ACC, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <Svg d={theme === "dark" ? I.sun : I.moon} size={18} />
+          </button>
+        )}
       </div>
 
       {!allFiles && (
@@ -1128,6 +1140,11 @@ export default function App() {
                     border: "1px solid " + (theme === t ? ACC : LINE), color: theme === t ? ACC : TXT }}>{lbl}</button>
               ))}
             </div>
+            <div style={S.menuItem} onClick={() => { const v = !themeBtn; setThemeBtn(v); ls.set("fm_themebtn_v1", v ? "1" : "0"); }}>
+              <span style={{ color: themeBtn ? ACC : SUB, display: "flex" }}><Svg d={theme === "dark" ? I.sun : I.moon} size={20} /></span>
+              Кнопка темы в шапке
+              <span style={{ marginLeft: "auto", ...S.tgl, ...(themeBtn ? S.tglOn : {}) }}><span style={{ ...S.knob, ...(themeBtn ? S.knobOn : {}) }} /></span>
+            </div>
             <div style={{ color: ACC, fontSize: 13, fontWeight: 700, margin: "18px 2px 8px" }}>Сортировка</div>
             <div style={S.menuItem} onClick={() => { const v = !sysTop; setSysTop(v); ls.set("fm_systop_v2", v ? "1" : "0"); }}>
               <span style={{ color: sysTop ? ACC : SUB, display: "flex" }}><Svg d={I.folder} size={20} /></span>
@@ -1282,7 +1299,7 @@ const S = {
   iconImg: { width: "100%", height: "100%", objectFit: "cover", borderRadius: 13 },
   folderThumb: { position: "absolute", right: 1, bottom: 1, width: 26, height: 26, borderRadius: 7, objectFit: "cover", border: "2px solid " + BG },
   cbk: { width: 22, height: 22, borderRadius: 6, background: ACC, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", animation: "cbPop .26s cubic-bezier(.2,.9,.3,1.3)" },
-  cbkOff: { width: 22, height: 22, borderRadius: 6, border: "2px solid " + SUB, background: "transparent" },
+  cbkOff: { width: 22, height: 22, borderRadius: 6, border: "2px solid " + ACC, background: "transparent" },
   rowMid: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 },
   rowDate: { fontSize: 12, color: SUB },
   rowSize: { fontSize: 11.5, color: "rgba(176,164,152,.5)", flexShrink: 0, marginLeft: 6 },
