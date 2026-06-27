@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from
 import { Filesystem, Directory, Encoding } from "@capacitor/filesystem";
 import { App as CapApp } from "@capacitor/app";
 import { registerPlugin, Capacitor } from "@capacitor/core";
-import JSZip from "jszip";
 const Apps = registerPlugin("Apps");
 
 /* ===== YevFiles — leshugan.fm =====  стиль Notenger (шоколад) */
@@ -271,14 +270,14 @@ export default function App() {
   const dismissShared = async () => { try { await Apps.clearShared(); } catch {} setShared([]); };
   const extractSelected = async () => {
     const names = [...arcSel]; setArcSel(new Set());
-    setArcView((m) => (m ? { ...m, busy: "Извлекаю…" } : m));
+    const destDir = await absPath(path);
     let ok = 0;
-    for (const nm of names) {
+    for (let i = 0; i < names.length; i++) {
+      const nm = names[i];
+      setArcView((m) => (m ? { ...m, busy: "Извлечение… " + (i + 1) + "/" + names.length } : m));
       try {
-        const entry = arcView.entries.find((x) => x.name === nm); if (!entry) continue;
-        const b64 = await arcView.zip.file(nm).async("base64");
         const fname = nm.split("/").pop();
-        await Filesystem.writeFile({ path: join(path, fname), data: b64, directory: DIR, recursive: true });
+        await Apps.zipExtract({ uri: arcView.uri, entry: nm, dest: destDir + "/" + fname });
         ok++;
       } catch (e) { showToast(nm + ": " + (e?.message || "")); }
     }
@@ -486,31 +485,23 @@ export default function App() {
     catch (err) { showToast("Не удалось открыть: " + (err?.message || "")); }
   };
   const arcAnchor = useRef(null);
+  const absPath = async (rel) => { const u = await Filesystem.getUri({ path: rel, directory: DIR }); let p = u.uri; if (p.startsWith("file://")) p = p.slice(7); try { p = decodeURIComponent(p); } catch {} return p; };
   const openArchive = async (e) => {
-    const MAXARC = 100 * 1024 * 1024; // ~100 МБ — выше WebView не тянет распаковку в памяти
-    if (e.size && e.size > MAXARC) {
-      showToast("Архив большой (" + Math.round(e.size / 1048576) + " МБ) — откройте в архиваторе");
-      return; // меню остаётся открытым: можно выбрать приложение-архиватор
-    }
     setOpenMenu(null);
-    setArcView({ name: e.name, entries: null });
+    setArcView({ name: e.name, uri: e.uri, entries: null });
     try {
-      const r = await Filesystem.readFile({ path: e.uri });
-      const zip = await JSZip.loadAsync(r.data, { base64: true });
-      const entries = [];
-      zip.forEach((rel, f) => { if (!f.dir) entries.push({ name: rel, size: (f._data && f._data.uncompressedSize) || 0 }); });
-      entries.sort((a, b) => a.name.localeCompare(b.name));
-      setArcView({ name: e.name, entries, zip });
+      const r = await Apps.zipList({ uri: e.uri });
+      const entries = (r.entries || []).filter((x) => !x.dir).map((x) => ({ name: x.name, size: x.size || 0 })).sort((a, b) => a.name.localeCompare(b.name));
+      setArcView({ name: e.name, uri: e.uri, entries });
     } catch (err) { setArcView(null); showToast("Не удалось открыть архив: " + (err?.message || "")); }
   };
   const extractOpen = async (entry) => {
     setArcView((m) => (m ? { ...m, busy: "Извлекаю…" } : m));
     try {
-      const b64 = await arcView.zip.file(entry.name).async("base64");
       const fname = entry.name.split("/").pop();
-      const tmp = "Download/.yevtmp/" + fname;
-      await Filesystem.writeFile({ path: tmp, data: b64, directory: DIR, recursive: true });
-      const u = await Filesystem.getUri({ path: tmp, directory: DIR });
+      const destDir = await absPath("Download/.yevtmp");
+      await Apps.zipExtract({ uri: arcView.uri, entry: entry.name, dest: destDir + "/" + fname });
+      const u = await Filesystem.getUri({ path: "Download/.yevtmp/" + fname, directory: DIR });
       setArcView(null);
       const fe = { name: fname, uri: u.uri, type: "file" };
       if (/\.apk$/i.test(fname)) await showOpenMenu(fe, mimeOf(fname)); // меню с вариантами (Установить / Открыть с помощью)
