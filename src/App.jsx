@@ -819,7 +819,7 @@ export default function App() {
         </span>
         {themeBtn && (
           <button onClick={toggleTheme} aria-label="Тема"
-            style={{ position: "absolute", right: 16, top: "50%", transform: "translateY(-50%)", width: 34, height: 34, borderRadius: 17, border: "none", background: BAR, color: ACC, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 1px 0 rgba(255,255,255,.05) inset, 0 3px 10px rgba(0,0,0,.20)" }}>
+            style={{ position: "absolute", right: 16, top: "50%", transform: "translateY(-50%)", width: 34, height: 34, borderRadius: 17, border: "1px solid var(--line)", background: BAR, color: ACC, display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>
             <Svg d={theme === "light" ? I.sun : I.moon} size={18} />
           </button>
         )}
@@ -1067,9 +1067,9 @@ export default function App() {
               style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", transform: "translateX(" + dragX + "px)", transition: dragging ? "none" : "transform .2s ease", userSelect: "none", pointerEvents: "none" }} />
           </div>
 
-          {/* тулбар сверху: справа-налево — закрыть, имя, удалить, свойства, поделиться */}
-          <div style={{ position: "absolute", top: 0, left: 0, right: 0, paddingTop: "env(safe-area-inset-top)", background: "linear-gradient(to bottom, rgba(0,0,0,.75), transparent)", transform: viewerBar ? "translateY(0)" : "translateY(-110%)", transition: "transform .2s ease", pointerEvents: viewerBar ? "auto" : "none" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "10px 8px 14px" }}>
+          {/* тулбар снизу: справа-налево — закрыть, имя, удалить, свойства, поделиться */}
+          <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, paddingBottom: "env(safe-area-inset-bottom)", background: "linear-gradient(to top, rgba(0,0,0,.8), transparent)", transform: viewerBar ? "translateY(0)" : "translateY(110%)", transition: "transform .2s ease", pointerEvents: viewerBar ? "auto" : "none" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "16px 8px 14px" }}>
               <span onClick={() => Apps.share({ uri: viewerCur.uri, mime: mimeOf(viewerCur.name) }).catch(() => {})} style={{ color: "#fff", display: "flex", padding: 8 }}><Svg d={I.share} size={22} /></span>
               <span onClick={() => setProps(viewerCur)} style={{ color: "#fff", display: "flex", padding: 8 }}><Svg d={I.info} size={22} /></span>
               <span onClick={() => setViewerDel(true)} style={{ color: "#FF6B6B", display: "flex", padding: 8 }}><Svg d={I.trash} size={22} /></span>
@@ -1115,10 +1115,11 @@ export default function App() {
       {confirmDel && (
         <>
           <div style={{ position: "fixed", inset: 0, zIndex: 1290 }} onClick={() => setConfirmDel(null)} />
-          <div style={{ position: "fixed", zIndex: 1300, left: "50%", transform: "translateX(-50%)", top: confirmDel.top - 56,
-            display: "flex", gap: 8, background: BAR, border: "1px solid " + LINE, borderRadius: 14, padding: 8, boxShadow: "0 1px 0 rgba(255,255,255,.07) inset, 0 4px 12px rgba(0,0,0,.4), 0 18px 48px rgba(0,0,0,.62)", animation: "popCenter .15s ease" }}>
-            <button onClick={doDelete} style={{ background: RED, border: "none", borderRadius: 8, color: "#fff", fontSize: 14, fontWeight: 700, padding: "8px 18px" }}>Да</button>
-            <button onClick={() => setConfirmDel(null)} style={{ background: ROW2, border: "1px solid " + LINE, borderRadius: 8, color: SUB, fontSize: 14, padding: "8px 18px" }}>Нет</button>
+          <div style={{ position: "fixed", zIndex: 1300, left: 0, right: 0, top: confirmDel.top - 56, display: "flex", justifyContent: "center", pointerEvents: "none" }}>
+            <div style={{ pointerEvents: "auto", display: "flex", gap: 8, background: BAR, border: "1px solid " + LINE, borderRadius: 14, padding: 8, boxShadow: "0 1px 0 rgba(255,255,255,.07) inset, 0 4px 12px rgba(0,0,0,.4), 0 18px 48px rgba(0,0,0,.62)", animation: "dropGrow .15s ease" }}>
+              <button onClick={doDelete} style={{ background: RED, border: "none", borderRadius: 8, color: "#fff", fontSize: 14, fontWeight: 700, padding: "8px 18px" }}>Да</button>
+              <button onClick={() => setConfirmDel(null)} style={{ background: ROW2, border: "1px solid " + LINE, borderRadius: 8, color: SUB, fontSize: 14, padding: "8px 18px" }}>Нет</button>
+            </div>
           </div>
         </>
       )}
