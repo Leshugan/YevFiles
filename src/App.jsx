@@ -275,6 +275,8 @@ export default function App() {
   const [openMenu, setOpenMenu] = useState(null);
   const [arcView, setArcView] = useState(null);
   const [pendingExtract, setPendingExtract] = useState(null); // { uri, names|null, label }
+  const [menuArmed, setMenuArmed] = useState(false);
+  useEffect(() => { if (openMenu) { setMenuArmed(false); const t = setTimeout(() => setMenuArmed(true), 320); return () => clearTimeout(t); } setMenuArmed(false); }, [openMenu && openMenu.file]);
   const [arcSel, setArcSel] = useState(new Set());
   const arcLp = useRef(false), arcLpT = useRef(null), arcPX = useRef(0), arcPY = useRef(0);
   const arcListRef = useRef(null), arcSpacerRef = useRef(null);
@@ -517,7 +519,6 @@ export default function App() {
   const arcAnchor = useRef(null);
   const absPath = async (rel) => { const u = await Filesystem.getUri({ path: rel, directory: DIR }); let p = u.uri; if (p.startsWith("file://")) p = p.slice(7); try { p = decodeURIComponent(p); } catch {} return p; };
   const extractAllTo = async (uri, destRel, names) => {
-    showToast("DBG extractAllTo вызван → " + destRel);
     const destDir = await absPath(destRel);
     let sub = null;
     try { sub = await Apps.addListener("opProgress", (ev) => setProgress({ current: ev.done, total: ev.total, name: ev.name, mode: "ext" })); } catch {}
@@ -533,7 +534,6 @@ export default function App() {
   const doExtractHere = async () => { const pe = pendingExtract; setPendingExtract(null); if (pe) await extractAllTo(pe.uri, path, pe.names); };
   const arcBase = (n) => n.replace(/\.[^.]+$/, "");
   const openArchive = async (e) => {
-    showToast("DBG openArchive вызван: " + e.name);
     setOpenMenu(null);
     setArcView({ name: e.name, uri: e.uri, entries: null });
     try {
@@ -561,8 +561,7 @@ export default function App() {
     if (e.type === "directory") { setSlide(1); setTimeout(() => setSlide(0), 300); setTabPath(join(path, e.name)); return; }
     arcAnchor.current = ev && ev.currentTarget ? ev.currentTarget.getBoundingClientRect().top : null;
     const ext = (e.name.split(".").pop() || "").toLowerCase();
-    if (EXT.archive.includes(ext)) { showToast("DBG open→МЕНЮ: " + e.name); showOpenMenu(e, mimeOf(e.name)); return; }
-    showToast("DBG open→external: " + e.name);
+    if (EXT.archive.includes(ext)) { showOpenMenu(e, mimeOf(e.name)); return; }
     openExternal(e);
   };
 
@@ -1110,7 +1109,7 @@ export default function App() {
         const apps = openMenu.apps || [];
         const shown = openMenu.editHide ? apps : apps.filter((a) => !hidden.has(a.packageName + "|" + a.activityName));
         return (
-          <div style={S.backdrop} onClick={() => setOpenMenu(null)}>
+          <div style={{ ...S.backdrop, pointerEvents: menuArmed ? "auto" : "none" }} onClick={() => setOpenMenu(null)}>
             <div style={S.sheet} onClick={(e) => e.stopPropagation()}>
               {/\.apk$/i.test(openMenu.file.name) && openMenu.apkInfo && (
                 <div style={{ padding: "10px 12px", margin: "0 0 12px", background: ROW2, borderRadius: 12, fontSize: 13, lineHeight: 1.7, color: SUB }}>
