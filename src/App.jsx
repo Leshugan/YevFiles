@@ -754,7 +754,7 @@ export default function App() {
         </span>
         {themeBtn && (
           <button onClick={toggleTheme} aria-label="Тема"
-            style={{ flexShrink: 0, width: 34, height: 34, borderRadius: 17, border: "1px solid " + LINE, background: "var(--accbg)", color: ACC, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            style={{ flexShrink: 0, width: 36, height: 36, borderRadius: 18, border: "none", background: BAR, color: ACC, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 1px 0 rgba(255,255,255,.05) inset, 0 7px 22px rgba(0,0,0,.38)" }}>
             <Svg d={theme === "light" ? I.sun : I.moon} size={18} />
           </button>
         )}
@@ -852,7 +852,7 @@ export default function App() {
       {selMode ? (
         <nav style={{ ...S.bottom, justifyContent: "flex-start" }}>
           <div style={S.selCount}>
-            <span key={sel.size} style={{ fontSize: 13, fontWeight: 700, color: "#fff", lineHeight: 1, display: "inline-block", animation: "pulse .3s cubic-bezier(.2,.9,.3,1.3)" }}>{sel.size}</span>
+            <span key={sel.size} style={{ fontSize: 13, fontWeight: 700, color: "#fff", lineHeight: 1, display: "block", textAlign: "center", animation: "pulse .3s cubic-bezier(.2,.9,.3,1.3)" }}>{sel.size}</span>
           </div>
           <div style={{ display: "flex", overflowX: "auto", flex: 1, justifyContent: "flex-end" }}>
             <Btn onClick={exitSel} icon={I.x} label="Отмена" flexNone />
@@ -1282,7 +1282,7 @@ function Btn({ onClick, icon, text, label, accent, red, flexNone, disabled }) {
 
 const S = {
   app: { position: "relative", display: "flex", flexDirection: "column", height: "100vh", background: BG, color: TXT, fontFamily: "system-ui,-apple-system,Roboto,sans-serif", overflow: "hidden" },
-  tabsbar: { display: "flex", alignItems: "center", background: BAR, flexShrink: 0, height: 50, margin: "8px 8px 6px", borderRadius: 24, boxShadow: "0 1px 0 rgba(255,255,255,.05) inset, 0 10px 30px rgba(0,0,0,.45)" },
+  tabsbar: { display: "flex", alignItems: "center", background: BAR, flexShrink: 0, height: 50, margin: "8px 8px 6px", borderRadius: 24, boxShadow: "0 1px 0 rgba(255,255,255,.05) inset, 0 7px 22px rgba(0,0,0,.38)" },
   tabs: { display: "flex", overflowX: "auto", flex: 1, alignItems: "center", justifyContent: "center", gap: 6, padding: "0 4px", height: "100%" },
   tab: { display: "flex", alignItems: "center", gap: 6, padding: "0 12px", height: 34, borderRadius: 17, fontSize: 13.5, color: SUB, whiteSpace: "nowrap", background: "var(--chip)", flexShrink: 0, border: "1px solid transparent" },
   tabActive: { color: ACC, background: "var(--accbg)", border: "1px solid " + ACC, fontWeight: 600, boxShadow: "0 0 0 1px var(--accbg), 0 2px 8px var(--accbg)" },
@@ -1317,7 +1317,7 @@ const S = {
   searchClose: { border: "none", background: "transparent", color: SUB, fontSize: 24, width: 40 },
   bottom: { display: "flex", alignItems: "center", background: BAR, flexShrink: 0, borderRadius: 26, margin: "4px 8px calc(8px + env(safe-area-inset-bottom))", boxShadow: "0 1px 0 rgba(255,255,255,.06) inset, 0 2px 6px rgba(0,0,0,.35), 0 12px 32px rgba(0,0,0,.55)" },
   btn: { border: "none", background: "transparent", padding: "6px 6px 7px", display: "flex", flexDirection: "column", alignItems: "center", gap: 2 },
-  selCount: { minWidth: 22, height: 22, padding: "0 6px", marginLeft: 14, marginRight: 8, borderRadius: 11, background: ACC, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  selCount: { minWidth: 22, height: 22, padding: "0 7px", marginLeft: 14, marginRight: 8, borderRadius: 11, background: ACC, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0, lineHeight: 0 },
   btnLabel: { fontSize: 10, color: SUB, whiteSpace: "nowrap" },
   overlay: { position: "fixed", inset: 0, zIndex: 8 },
   menu: { position: "absolute", zIndex: 9, background: BAR, borderRadius: 12, overflow: "hidden", border: "1px solid " + LINE, boxShadow: "0 1px 0 rgba(255,255,255,.07) inset, 0 4px 12px rgba(0,0,0,.4), 0 18px 48px rgba(0,0,0,.62)", minWidth: 200, animation: "dropGrow .2s cubic-bezier(.2,.9,.3,1.2)" },
@@ -1348,5 +1348,5 @@ const S = {
   appRow: { display: "flex", alignItems: "center", gap: 14, padding: "10px 2px", borderBottom: "1px solid " + LINE },
   cbox: { width: 22, height: 22, borderRadius: 6, border: "2px solid " + SUB, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, color: "#fff", flexShrink: 0 },
   cboxOn: { background: ACC, borderColor: ACC },
-  toast: { position: "fixed", left: "50%", bottom: 90, transform: "translateX(-50%)", background: ROW2, color: TXT, padding: "10px 18px", borderRadius: 20, fontSize: 13, border: "1px solid " + LINE, boxShadow: "0 1px 0 rgba(255,255,255,.06) inset, 0 2px 6px rgba(0,0,0,.35), 0 12px 32px rgba(0,0,0,.55)", zIndex: 1500, animation: "toastUp .34s cubic-bezier(.2,.9,.3,1)", maxWidth: "80%", textAlign: "center" },
+  toast: { position: "fixed", left: "50%", bottom: 90, transform: "translateX(-50%)", background: ROW2, color: TXT, padding: "10px 18px", borderRadius: 20, fontSize: 13, border: "1px solid " + LINE, boxShadow: "0 1px 0 rgba(255,255,255,.05) inset, 0 4px 14px rgba(0,0,0,.28)", zIndex: 1500, animation: "toastUp .34s cubic-bezier(.2,.9,.3,1)", maxWidth: "80%", textAlign: "center" },
 };
