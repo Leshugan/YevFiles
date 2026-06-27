@@ -220,6 +220,43 @@ export default function App() {
   const [sysTop, setSysTop] = useState(() => ls.get("fm_systop_v2") === "1");
   const [theme, setTheme] = useState(() => ls.get("fm_theme_v1") || "dark");
   const [themeBtn, setThemeBtn] = useState(() => ls.get("fm_themebtn_v1") !== "0");
+  const FONT_KEY = "fm_fonts_v1";
+  const BUILTIN_FONTS = [
+    { id: "sys", name: "По умолчанию", css: "'Noto Sans',sans-serif" },
+    { id: "comfortaa", name: "Comfortaa", css: "'Comfortaa',cursive" },
+    { id: "roboto", name: "Roboto", css: "'Roboto',sans-serif" },
+    { id: "verdana", name: "Verdana", css: "Verdana,Geneva,sans-serif" },
+  ];
+  const loadFonts = () => { try { const r = ls.get(FONT_KEY); return r ? JSON.parse(r) : { sel: "sys", custom: [] }; } catch { return { sel: "sys", custom: [] }; } };
+  const [fonts, setFonts] = useState(loadFonts);
+  const saveFonts = (f) => { try { ls.set(FONT_KEY, JSON.stringify(f)); } catch {} setFonts(f); };
+  const allFonts = [...BUILTIN_FONTS, ...(fonts.custom || [])];
+  const fontCss = (() => { const f = allFonts.find((x) => x.id === fonts.sel); return f ? f.css : "'Noto Sans',sans-serif"; })();
+  useEffect(() => {
+    let css = "";
+    (fonts.custom || []).forEach((f) => { if (f.dataUrl) css += `@font-face{font-family:'${f.id}';src:url('${f.dataUrl}');}`; });
+    let st = document.getElementById("fm-custom-fonts"); if (!st) { st = document.createElement("style"); st.id = "fm-custom-fonts"; document.head.appendChild(st); } st.textContent = css;
+  }, [fonts.custom]);
+  const fontFileRef = useRef(null);
+  const onFontFile = (e) => {
+    const f = e.target.files && e.target.files[0]; if (!f) return;
+    const r = new FileReader();
+    r.onload = (ev) => {
+      const id = "cf_" + Date.now().toString(36);
+      const name = f.name.replace(/\.(ttf|otf|woff2?)$/i, "");
+      const nf = { id, name, css: `'${id}',sans-serif`, dataUrl: ev.target.result };
+      saveFonts({ ...fonts, custom: [...(fonts.custom || []), nf], sel: id });
+      showToast("Шрифт добавлен: " + name);
+    };
+    r.readAsDataURL(f); e.target.value = "";
+  };
+  const removeFont = (id) => {
+    if (id === "sys") return;
+    const isCustom = (fonts.custom || []).some((f) => f.id === id);
+    const next = { ...fonts, sel: fonts.sel === id ? "sys" : fonts.sel };
+    if (isCustom) next.custom = (fonts.custom || []).filter((f) => f.id !== id);
+    saveFonts(next); showToast("Шрифт удалён");
+  };
   const toggleTheme = () => { const t = theme === "dark" ? "light" : "dark"; setTheme(t); ls.set("fm_theme_v1", t); };
   const [headMenu, setHeadMenu] = useState(false);
   const [settings, setSettings] = useState(false);
@@ -682,8 +719,8 @@ export default function App() {
   const one = sel.size === 1 ? byName([...sel][0]) : null;
 
   return (
-    <div style={{ ...S.app, ...(THEMES[theme] || THEMES.dark) }}>
-      <style>{`html,body{background:${(THEMES[theme] || THEMES.dark)["--bg"]}}`}</style>
+    <div style={{ ...S.app, ...(THEMES[theme] || THEMES.dark), fontFamily: fontCss }}>
+      <style>{`html,body{background:${(THEMES[theme] || THEMES.dark)["--bg"]}}@import url('https://fonts.googleapis.com/css2?family=Comfortaa:wght@400;600;700&family=Roboto:wght@400;500;700&display=swap');`}</style>
       {/* ВКЛАДКИ + действия шапки */}
       <div style={S.tabsbar}>
         <div style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "center", height: "100%", padding: "0 6px" }}>
@@ -751,7 +788,7 @@ export default function App() {
         </span>
         {themeBtn && (
           <button onClick={toggleTheme} aria-label="Тема"
-            style={{ flexShrink: 0, width: 36, height: 36, borderRadius: 18, border: "none", background: BAR, color: ACC, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 1px 0 rgba(255,255,255,.05) inset, 0 7px 22px rgba(0,0,0,.38)" }}>
+            style={{ flexShrink: 0, width: 36, height: 36, borderRadius: 18, border: "none", background: BAR, color: ACC, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 1px 0 rgba(255,255,255,.05) inset, 0 3px 10px rgba(0,0,0,.20)" }}>
             <Svg d={theme === "light" ? I.sun : I.moon} size={18} />
           </button>
         )}
@@ -783,8 +820,8 @@ export default function App() {
             <span style={{ flex: 1, fontSize: 13.5, lineHeight: 1.35 }}>Из «{pendingExtract.label}»{pendingExtract.names ? " (" + pendingExtract.names.length + ")" : ""} — перейдите в папку и нажмите «Извлечь сюда»</span>
           </div>
           <div style={S.saveBar}>
-            <button style={S.saveBtnSave} onClick={doExtractHere}><Svg d={I.dl} size={16} /> Извлечь сюда</button>
             <button style={S.saveBtnCancel} onClick={() => setPendingExtract(null)}>Отмена</button>
+            <button style={S.saveBtnSave} onClick={doExtractHere}><Svg d={I.dl} size={16} /> Извлечь сюда</button>
           </div>
         </>
       )}
@@ -1081,6 +1118,9 @@ export default function App() {
                 <div style={{ ...S.sheetTitle, marginBottom: 0, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{openMenu.file.name}</div>
                 <button style={{ ...S.iconBtn, color: openMenu.editHide ? ACC : SUB }} onClick={() => setOpenMenu({ ...openMenu, editHide: !openMenu.editHide })}><Svg d={I.rename} size={20} /></button>
               </div>
+              {(() => { const isArc = EXT.archive.includes((openMenu.file.name.split(".").pop() || "").toLowerCase()) && !/\.apk$/i.test(openMenu.file.name); return isArc ? (
+                <div style={{ color: ACC, fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Архивы</div>
+              ) : (<>
               <div style={{ fontSize: 12, color: SUB, marginBottom: 6 }}>Открыть как:</div>
               <div style={{ display: "flex", gap: 6, overflowX: "auto", marginBottom: 14, paddingBottom: 2 }}>
                 {OPEN_AS.map(([m, lbl]) => (
@@ -1088,6 +1128,7 @@ export default function App() {
                     style={{ ...S.chip, ...(openMenu.mime === m ? S.chipOn : {}) }}>{lbl}</button>
                 ))}
               </div>
+              </>); })()}
               {openMenu.editHide && <div style={{ fontSize: 12, color: GOLD, marginBottom: 10 }}>Нажмите на приложение, чтобы скрыть/показать его</div>}
               <div style={{ maxHeight: "42vh", overflowY: "auto" }}>
                 {openMenu.apps == null && <div style={{ color: SUB, padding: 20, textAlign: "center" }}>Загрузка приложений…</div>}
@@ -1107,7 +1148,6 @@ export default function App() {
               </div>
               {!openMenu.editHide && EXT.archive.includes((openMenu.file.name.split(".").pop() || "").toLowerCase()) && !/\.apk$/i.test(openMenu.file.name) && (
                 <>
-                  <div style={{ color: ACC, fontSize: 12, fontWeight: 700, margin: "6px 2px 2px" }}>Архивы</div>
                   <div onClick={() => openArchive(openMenu.file)} style={{ ...S.appRow, color: GOLD }}>
                     <span style={{ width: 38, display: "flex", justifyContent: "center" }}><Svg d={I.folder} size={26} /></span>
                     <span style={{ flex: 1, fontSize: 15 }}>Открыть</span>
@@ -1125,12 +1165,6 @@ export default function App() {
                     <span style={{ flex: 1, fontSize: 15 }}>Распаковать здесь</span>
                   </div>
                 </>
-              )}
-              {!openMenu.editHide && /\.(zip|jar)$/i.test(openMenu.file.name) && false && (
-                <div onClick={() => openArchive(openMenu.file)} style={{ ...S.appRow, color: GOLD }}>
-                  <span style={{ width: 38, display: "flex", justifyContent: "center" }}><Svg d={I.folder} size={28} /></span>
-                  <span style={{ flex: 1, fontSize: 15 }}>Открыть</span>
-                </div>
               )}
               {!openMenu.editHide && /\.apk$/i.test(openMenu.file.name) && (
                 <div onClick={() => { setOpenMenu(null); Apps.installApk({ uri: openMenu.file.uri }).catch((er) => showToast("Ошибка: " + (er?.message || ""))); }}
@@ -1174,6 +1208,21 @@ export default function App() {
               <span style={{ color: themeBtn ? ACC : SUB, display: "flex" }}><Svg d={theme === "dark" ? I.sun : I.moon} size={20} /></span>
               Кнопка темы в шапке
               <span style={{ marginLeft: "auto", ...S.tgl, ...(themeBtn ? S.tglOn : {}) }}><span style={{ ...S.knob, ...(themeBtn ? S.knobOn : {}) }} /></span>
+            </div>
+            <div style={{ color: ACC, fontSize: 13, fontWeight: 700, margin: "18px 2px 8px" }}>Шрифты</div>
+            {allFonts.map((f) => (
+              <div key={f.id} style={{ ...S.menuItem, justifyContent: "flex-start" }}>
+                <span onClick={() => saveFonts({ ...fonts, sel: f.id })} style={{ flex: 1, display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ width: 22, color: fonts.sel === f.id ? ACC : "transparent", display: "flex" }}><Svg d={I.check} size={18} /></span>
+                  <span style={{ fontFamily: f.css, fontSize: 15 }}>{f.name}</span>
+                </span>
+                {f.id !== "sys" && <span onClick={() => removeFont(f.id)} style={{ color: RED, display: "flex", padding: 4 }}><Svg d={I.trash} size={18} /></span>}
+              </div>
+            ))}
+            <input ref={fontFileRef} type="file" accept=".ttf,.otf,.woff,.woff2" onChange={onFontFile} style={{ display: "none" }} />
+            <div style={S.menuItem} onClick={() => fontFileRef.current && fontFileRef.current.click()}>
+              <span style={{ color: ACC, display: "flex" }}><Svg d={I.plus} size={20} /></span>
+              Добавить шрифт (TTF/OTF)
             </div>
             <div style={{ color: ACC, fontSize: 13, fontWeight: 700, margin: "18px 2px 8px" }}>Сортировка</div>
             <div style={S.menuItem} onClick={() => { const v = !sysTop; setSysTop(v); ls.set("fm_systop_v2", v ? "1" : "0"); }}>
@@ -1273,6 +1322,7 @@ export default function App() {
         @keyframes cbPop{0%{transform:scale(0);opacity:0}60%{transform:scale(1.25)}100%{transform:scale(1);opacity:1}}
         @keyframes pulse{0%{transform:scale(1)}40%{transform:scale(1.35)}100%{transform:scale(1)}}
         @keyframes toastUp{0%{transform:translateX(-50%) translateY(40px);opacity:0}65%{transform:translateX(-50%) translateY(-6px);opacity:1}100%{transform:translateX(-50%) translateY(0)}}
+        @keyframes popCenter{from{opacity:0;transform:translateX(-50%) scale(.9)}to{opacity:1;transform:translateX(-50%) scale(1)}}
         *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none}
         input{-webkit-user-select:text;user-select:text}
         body{margin:0}::-webkit-scrollbar{width:0}
@@ -1318,7 +1368,7 @@ const S = {
   tabActive: { color: ACC, background: "var(--accbg)", border: "1px solid " + ACC, fontWeight: 600, boxShadow: "0 0 0 1px var(--accbg), 0 2px 8px var(--accbg)" },
   tabX: { fontSize: 17, color: SUB, padding: "0 2px" },
   hbtn: { border: "none", background: "transparent", color: TXT, width: 40, height: 48, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" },
-  crumb: { position: "relative", zIndex: 6, padding: "2px 16px 5px", fontSize: 13, background: "transparent", flexShrink: 0, overflow: "visible", whiteSpace: "nowrap" },
+  crumb: { position: "relative", zIndex: 6, padding: "0 16px 3px", fontSize: 12.5, background: "transparent", flexShrink: 0, overflow: "visible", whiteSpace: "nowrap" },
   list: { flex: 1, overflowY: "auto", overflowX: "hidden", display: "flex", flexDirection: "column" },
   slideWrap: { display: "flex", flexDirection: "column" },
   note: { color: SUB, textAlign: "center", padding: "60px 24px", lineHeight: 1.6 },
@@ -1334,7 +1384,7 @@ const S = {
   rowDate: { fontSize: 12, color: SUB },
   rowSize: { fontSize: 11.5, color: "rgba(176,164,152,.5)", flexShrink: 0, marginLeft: 6 },
   rowDir: { background: "var(--chip)", borderRadius: 14, marginBottom: 6, boxShadow: "0 1px 3px rgba(0,0,0,.12)" },
-  arcSelBar: { position: "absolute", left: "50%", transform: "translateX(-50%)", bottom: 10, display: "flex", alignItems: "center", gap: 8, padding: "6px 8px 6px 14px", background: BAR, borderRadius: 22, boxShadow: "0 1px 0 rgba(255,255,255,.07) inset, 0 4px 12px rgba(0,0,0,.4), 0 18px 48px rgba(0,0,0,.62)", animation: "dropGrow .2s cubic-bezier(.2,.9,.3,1.1)" },
+  arcSelBar: { position: "absolute", left: "50%", transform: "translateX(-50%)", bottom: 10, display: "flex", alignItems: "center", gap: 8, padding: "6px 8px 6px 14px", background: BAR, borderRadius: 22, boxShadow: "0 1px 0 rgba(255,255,255,.07) inset, 0 4px 12px rgba(0,0,0,.4), 0 18px 48px rgba(0,0,0,.62)", animation: "popCenter .2s cubic-bezier(.2,.9,.3,1.1)" },
   arcSelCancel: { background: "transparent", border: "none", borderRadius: 14, color: SUB, fontSize: 13, padding: "7px 12px" },
   arcSelGo: { display: "inline-flex", alignItems: "center", gap: 5, background: ACC, border: "none", borderRadius: 14, color: "#fff", fontWeight: 700, fontSize: 13, padding: "7px 14px" },
   arcScreen: { position: "fixed", top: 62, left: 0, right: 0, bottom: "calc(70px + env(safe-area-inset-bottom))", zIndex: 1250, background: BG, display: "flex", flexDirection: "column" },
