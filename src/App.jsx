@@ -10,8 +10,8 @@ const Apps = registerPlugin("Apps");
 const BG = "var(--bg)", BAR = "var(--bar)", ROW2 = "var(--row2)", ACC = "var(--acc)";
 const GOLD = "var(--gold)", RED = "var(--red)", TXT = "var(--txt)", SUB = "var(--sub)", LINE = "var(--line)";
 const THEMES = {
-  dark:  { "--bg": "#1C140C", "--bar": "#2A2017", "--row2": "#2E251C", "--acc": "#EF6C00", "--accbg": "var(--accbg)", "--gold": "#F5A623", "--red": "#E05252", "--txt": "#F2EAE0", "--sub": "#B0A498", "--line": "#4A3A2A", "--chip": "rgba(255,255,255,.06)", "--hair": "rgba(255,255,255,.08)" },
-  light: { "--bg": "#EEF1F4", "--bar": "#FFFFFF", "--row2": "#E4E8EC", "--acc": "#2F80ED", "--accbg": "rgba(47,128,237,.14)", "--gold": "#2F80ED", "--red": "#D14343", "--txt": "#1E2329", "--sub": "#6B7280", "--line": "#D3D8DE", "--chip": "rgba(0,0,0,.05)", "--hair": "rgba(0,0,0,.08)" },
+  dark:  { "--bg": "#1C140C", "--bar": "#2A2017", "--row2": "#2E251C", "--acc": "#EF6C00", "--accbg": "var(--accbg)", "--gold": "#F5A623", "--red": "#E05252", "--txt": "#F2EAE0", "--sub": "#B0A498", "--line": "#4A3A2A", "--chip": "rgba(255,255,255,.06)", "--hair": "rgba(255,255,255,.08)", "--tgloff": "#4A3A2A" },
+  light: { "--bg": "#EEF1F4", "--bar": "#FFFFFF", "--row2": "#E4E8EC", "--acc": "#2F80ED", "--accbg": "rgba(47,128,237,.14)", "--gold": "#2F80ED", "--red": "#D14343", "--txt": "#1E2329", "--sub": "#6B7280", "--line": "#D3D8DE", "--chip": "rgba(0,0,0,.05)", "--hair": "rgba(0,0,0,.08)", "--tgloff": "#C2C8D0" },
 };
 const DIR = Directory.ExternalStorage;
 const TKEY = "fm_tabs_v1", SKEY = "fm_startup_v1", METAKEY = "fm_meta_v1", SORTKEY = "fm_sort_v1";
@@ -216,7 +216,7 @@ export default function App() {
   const [meta, setMeta] = useState(loadMeta);
   const [showHidden, setShowHidden] = useState(false);
   const [sortMode, setSortMode] = useState(() => ls.get(SORTKEY) || "az");
-  const [sysTop, setSysTop] = useState(() => { const v = ls.get("fm_systop_v2"); return v == null ? true : v === "1"; });
+  const [sysTop, setSysTop] = useState(() => ls.get("fm_systop_v2") === "1");
   const [theme, setTheme] = useState(() => ls.get("fm_theme_v1") || "dark");
   const [headMenu, setHeadMenu] = useState(false);
   const [settings, setSettings] = useState(false);
@@ -792,7 +792,7 @@ export default function App() {
                   onPointerDown={(ev) => rDown(ev, e)} onPointerMove={rMove} onPointerUp={(ev) => rUp(e, ev)} onPointerCancel={() => clearTimeout(lpTimer.current)}>
                   <span style={{ ...S.iconWrap, color: ic.c, background: isSel ? "transparent" : "var(--chip)", overflow: "hidden", position: "relative" }}
                     onPointerDown={(ev) => ev.stopPropagation()} onPointerUp={(ev) => { ev.stopPropagation(); clearTimeout(lpTimer.current); toggle(e.name); }}>
-                    {isSel ? <span style={S.cbk}><Svg d={I.check} size={14} /></span>
+                    {selMode ? (isSel ? <span style={S.cbk}><Svg d={I.check} size={14} /></span> : <span style={S.cbkOff} />)
                       : (isDir && iconDB[keyOf(e.name)]) ? <img src={iconDB[keyOf(e.name)]} alt="" style={S.iconImg} />
                       : (!isDir && (isImg(e.name) || isPdf(e.name) || /\.apk$/i.test(e.name))) ?
                           <ThumbIcon uri={e.uri} cached={thumbs[e.uri]} request={requestThumb} release={releaseThumb}
@@ -810,7 +810,7 @@ export default function App() {
                   </span>
                   {pinned && <span style={{ color: SUB, display: "flex" }}><Svg d={meta.pinTop.has(keyOf(e.name)) ? I.pinT : I.pinB} size={14} /></span>}
                   <span style={S.rowSize}>{isDir ? (e.count != null ? "(" + e.count + ")" : "") : fmtSizeShort(e.size)}</span>
-                  <div style={S.rowLine} />
+                  {!isDir && <div style={S.rowLine} />}
                 </div>
               );
             };
@@ -1282,10 +1282,11 @@ const S = {
   iconImg: { width: "100%", height: "100%", objectFit: "cover", borderRadius: 13 },
   folderThumb: { position: "absolute", right: 1, bottom: 1, width: 26, height: 26, borderRadius: 7, objectFit: "cover", border: "2px solid " + BG },
   cbk: { width: 22, height: 22, borderRadius: 6, background: ACC, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", animation: "cbPop .26s cubic-bezier(.2,.9,.3,1.3)" },
+  cbkOff: { width: 22, height: 22, borderRadius: 6, border: "2px solid " + SUB, background: "transparent" },
   rowMid: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 },
   rowDate: { fontSize: 12, color: SUB },
   rowSize: { fontSize: 11.5, color: "rgba(176,164,152,.5)", flexShrink: 0, marginLeft: 6 },
-  rowDir: { background: "var(--accbg)" },
+  rowDir: { background: "var(--chip)", borderRadius: 14, margin: "3px 8px" },
   arcSelBar: { position: "absolute", left: "50%", transform: "translateX(-50%)", bottom: 10, display: "flex", alignItems: "center", gap: 8, padding: "6px 8px 6px 14px", background: BAR, borderRadius: 22, boxShadow: "0 1px 0 rgba(255,255,255,.07) inset, 0 4px 12px rgba(0,0,0,.4), 0 18px 48px rgba(0,0,0,.62)", animation: "dropGrow .2s cubic-bezier(.2,.9,.3,1.1)" },
   arcSelCancel: { background: "transparent", border: "none", borderRadius: 14, color: SUB, fontSize: 13, padding: "7px 12px" },
   arcSelGo: { display: "inline-flex", alignItems: "center", gap: 5, background: ACC, border: "none", borderRadius: 14, color: "#fff", fontWeight: 700, fontSize: 13, padding: "7px 14px" },
@@ -1306,7 +1307,7 @@ const S = {
   menuItem: { display: "flex", alignItems: "center", gap: 12, padding: "13px 14px", fontSize: 14, color: TXT, whiteSpace: "nowrap" },
   createItem: { padding: "14px 22px", fontSize: 15, color: TXT },
   ctxTitle: { padding: "10px 14px", fontSize: 12, color: SUB, borderBottom: "1px solid " + LINE, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 210 },
-  tgl: { width: 38, height: 22, borderRadius: 11, background: LINE, position: "relative", flexShrink: 0, transition: "background .15s" },
+  tgl: { width: 38, height: 22, borderRadius: 11, background: "var(--tgloff)", position: "relative", flexShrink: 0, transition: "background .15s" },
   tglOn: { background: ACC },
   knob: { position: "absolute", top: 2, left: 2, width: 18, height: 18, borderRadius: 9, background: "#fff", transition: "left .15s" },
   knobOn: { left: 18 },
