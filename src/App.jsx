@@ -515,12 +515,13 @@ export default function App() {
     if (d) { try { const [pkg, act] = d.split("|"); await Apps.open({ uri: e.uri, mime, packageName: pkg, activityName: act }); return; } catch {} }
     await showOpenMenu(e, mime);
   };
-  const showOpenMenu = async (e, mime) => {
+  const showOpenMenu = async (e, mime, opts) => {
+    const edit = !!(opts && opts.edit);
     const cat = OPEN_AS.some(([m]) => m === mime) ? mime : defaultOpenAs(e.name);
-    setOpenMenu({ file: e, mime: cat, apps: null, useDefault: false, editHide: false });
+    setOpenMenu({ file: e, mime: cat, apps: null, useDefault: false, editHide: false, edit });
     if (/\.apk$/i.test(e.name)) { Apps.apkInfo({ uri: e.uri }).then((info) => setOpenMenu((m) => (m && m.file === e ? { ...m, apkInfo: info } : m))).catch(() => {}); }
     try {
-      const { apps } = await Apps.query({ uri: e.uri, mime });
+      const { apps } = await Apps.query({ uri: e.uri, mime, action: edit ? "edit" : "view" });
       setOpenMenu((m) => (m && m.file === e ? { ...m, apps: apps || [] } : m));
     } catch (err) { setOpenMenu((m) => (m && m.file === e ? { ...m, apps: [] } : m)); showToast("Ошибка: " + (err?.message || "")); }
   };
@@ -533,6 +534,7 @@ export default function App() {
       hm[om.mime] = [...arr]; saveMap(HIDEKEY, hm); setOpenMenu({ ...om }); return;
     }
     const defs = loadMap(DEFKEY);
+    if (om.edit) { setOpenMenu(null); try { await Apps.open({ uri: om.file.uri, mime: mimeOf(om.file.name), packageName: app.packageName, activityName: app.activityName, action: "edit" }); } catch (err) { showToast("Не удалось открыть: " + (err?.message || "")); } return; }
     if (om.useDefault) { defs[om.mime] = app.packageName + "|" + app.activityName; saveMap(DEFKEY, defs); }
     else if (defs[om.mime]) { delete defs[om.mime]; saveMap(DEFKEY, defs); } // разовый выбор — сбросить прежнюю привязку
     setOpenMenu(null);
@@ -584,7 +586,11 @@ export default function App() {
     if (e.type === "directory") { setSlide(1); setTimeout(() => setSlide(0), 300); setTabPath(join(path, e.name)); return; }
     arcAnchor.current = ev && ev.currentTarget ? ev.currentTarget.getBoundingClientRect().top : null;
     const ext = (e.name.split(".").pop() || "").toLowerCase();
-    if (isImg(e.name)) { showOpenMenu(e, mimeOf(e.name)); return; }
+    if (isImg(e.name)) {
+      const mime = mimeOf(e.name), cat = defaultOpenAs(e.name), defs = loadMap(DEFKEY), d = defs[cat] || defs[mime];
+      if (d) { const [pkg, act] = d.split("|"); Apps.open({ uri: e.uri, mime, packageName: pkg, activityName: act }).catch(() => showOpenMenu(e, mime)); return; }
+      showOpenMenu(e, mime); return;
+    }
     if (EXT.archive.includes(ext)) { showOpenMenu(e, mimeOf(e.name)); return; }
     openExternal(e);
   };
@@ -819,7 +825,7 @@ export default function App() {
         </span>
         {themeBtn && (
           <button onClick={toggleTheme} aria-label="Тема"
-            style={{ flexShrink: 0, alignSelf: "center", position: "relative", top: 2, width: 34, height: 34, borderRadius: 17, border: "1px solid var(--line)", background: BAR, color: ACC, display: "flex", alignItems: "center", justifyContent: "center", padding: 0, margin: 0, lineHeight: 0 }}>
+            style={{ flexShrink: 0, alignSelf: "center", position: "relative", top: -4, width: 34, height: 34, borderRadius: 17, border: "1px solid var(--line)", background: BAR, color: ACC, display: "flex", alignItems: "center", justifyContent: "center", padding: 0, margin: 0, lineHeight: 0 }}>
             <Svg d={theme === "light" ? I.sun : I.moon} size={18} />
           </button>
         )}
@@ -1079,8 +1085,8 @@ export default function App() {
           <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, paddingBottom: "env(safe-area-inset-bottom)", background: "linear-gradient(to top, rgba(0,0,0,.8), transparent)", transform: viewerBar ? "translateY(0)" : "translateY(110%)", transition: "transform .2s ease", pointerEvents: viewerBar ? "auto" : "none" }}>
             <div style={{ display: "flex", justifyContent: "space-around", alignItems: "flex-end", padding: "16px 76px 14px 8px" }}>
               {[
-                [I.rename, "Изменить", () => Apps.editImage({ uri: viewerCur.uri, mime: mimeOf(viewerCur.name) }).catch(() => showToast("Нет редактора")), false],
                 [I.share, "Поделиться", () => Apps.share({ uri: viewerCur.uri, mime: mimeOf(viewerCur.name) }).catch(() => {}), false],
+                [I.rename, "Изменить", () => showOpenMenu(viewerCur, mimeOf(viewerCur.name), { edit: true }), false],
                 [I.info, "Свойства", () => setProps(viewerCur), false],
                 [I.trash, "Удалить", () => setViewerDel(true), true],
               ].map(([ic, lbl, fn, red], i) => (
@@ -1214,7 +1220,7 @@ export default function App() {
                 <div style={{ ...S.sheetTitle, marginBottom: 0, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{openMenu.file.name}</div>
                 <button style={{ ...S.iconBtn, color: openMenu.editHide ? ACC : SUB }} onClick={() => setOpenMenu({ ...openMenu, editHide: !openMenu.editHide })}><Svg d={I.rename} size={20} /></button>
               </div>
-              {(() => { const isArc = EXT.archive.includes((openMenu.file.name.split(".").pop() || "").toLowerCase()) && !/\.apk$/i.test(openMenu.file.name); return isArc ? null : (<>
+              {(() => { const isArc = EXT.archive.includes((openMenu.file.name.split(".").pop() || "").toLowerCase()) && !/\.apk$/i.test(openMenu.file.name); return (isArc || isImg(openMenu.file.name) || openMenu.edit) ? null : (<>
               <div style={{ fontSize: 12, color: SUB, marginBottom: 6 }}>Открыть как:</div>
               <div style={{ display: "flex", gap: 6, overflowX: "auto", marginBottom: 14, paddingBottom: 2 }}>
                 {OPEN_AS.map(([m, lbl]) => (
@@ -1240,7 +1246,7 @@ export default function App() {
                   );
                 })}
               </div>
-              {!openMenu.editHide && isImg(openMenu.file.name) && (
+              {!openMenu.editHide && !openMenu.edit && isImg(openMenu.file.name) && (
                 <div onClick={() => { const f = openMenu.file; setOpenMenu(null); openViewer(f); }} style={{ ...S.appRow, color: GOLD }}>
                   <span style={{ width: 38, display: "flex", justifyContent: "center" }}><Svg d={I.img} size={26} /></span>
                   <span style={{ flex: 1, fontSize: 15 }}>Открыть</span>
@@ -1273,7 +1279,7 @@ export default function App() {
                   <span style={{ flex: 1, fontSize: 15 }}>Установить / Обновить</span>
                 </div>
               )}
-              {!openMenu.editHide && (
+              {!openMenu.editHide && !openMenu.edit && (
                 <>
                   <div onClick={() => setOpenMenu({ ...openMenu, useDefault: !openMenu.useDefault })}
                     style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 2px", cursor: "pointer" }}>
