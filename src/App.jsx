@@ -260,6 +260,7 @@ export default function App() {
   const toggleTheme = () => { const t = theme === "dark" ? "light" : "dark"; setTheme(t); ls.set("fm_theme_v1", t); };
   const [headMenu, setHeadMenu] = useState(false);
   const [settings, setSettings] = useState(false);
+  const [settingsPage, setSettingsPage] = useState(null); // null=список, "theme"/"fonts"/"sort"/"icons"
   const [iconDB, setIconDB] = useState(() => loadMap(ICONKEY));
   const saveIconDB = (db) => { setIconDB(db); saveMap(ICONKEY, db); };
   const [thumbs, setThumbs] = useState({});
@@ -445,7 +446,7 @@ export default function App() {
   const backRef = useRef(() => {});
   const backExit = useRef(0);
   backRef.current = () => {
-    if (settings) { setSettings(false); return; }
+    if (settings) { if (settingsPage) { setSettingsPage(null); return; } setSettings(false); return; }
     if (arcView && arcSel.size > 0) { setArcSel(new Set()); return; }
     if (arcView) { setArcView(null); return; }
     if (pasteMenu) { setPasteMenu(false); return; }
@@ -554,8 +555,11 @@ export default function App() {
   const resetDefault = () => { const defs = loadMap(DEFKEY); delete defs[openMenu.mime]; saveMap(DEFKEY, defs); showToast("Привязка сброшена"); };
   const open = (e, ev) => {
     if (selMode) { toggle(e.name); return; }
-    if (e.type === "directory") { setSlide(1); setTimeout(() => setSlide(0), 300); setTabPath(join(path, e.name)); }
-    else { arcAnchor.current = ev && ev.currentTarget ? ev.currentTarget.getBoundingClientRect().top : null; openExternal(e); }
+    if (e.type === "directory") { setSlide(1); setTimeout(() => setSlide(0), 300); setTabPath(join(path, e.name)); return; }
+    arcAnchor.current = ev && ev.currentTarget ? ev.currentTarget.getBoundingClientRect().top : null;
+    const ext = (e.name.split(".").pop() || "").toLowerCase();
+    if (EXT.archive.includes(ext)) { showOpenMenu(e, mimeOf(e.name)); return; } // архив/apk — ВСЕГДА меню выбора, без авто-действий
+    openExternal(e);
   };
 
   const addTab = () => { const id = Date.now(); const t = [...tabs, { id, path: "" }]; persist(t); setActive(t.length - 1); };
@@ -771,7 +775,7 @@ export default function App() {
                   <span style={{ marginLeft: "auto", ...S.tgl, ...(showHidden ? S.tglOn : {}) }}><span style={{ ...S.knob, ...(showHidden ? S.knobOn : {}) }} /></span>
                 </div>
                 <div style={{ height: 1, background: LINE }} />
-                <div style={S.menuItem} onClick={() => { setHeadMenu(false); setSettings(true); }}>
+                <div style={S.menuItem} onClick={() => { setHeadMenu(false); setSettings(true); setSettingsPage(null); }}>
                   <span style={{ color: ACC, display: "flex" }}><Svg d={I.gear} size={20} /></span>Настройки
                 </div>
               </div>
@@ -1118,9 +1122,7 @@ export default function App() {
                 <div style={{ ...S.sheetTitle, marginBottom: 0, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{openMenu.file.name}</div>
                 <button style={{ ...S.iconBtn, color: openMenu.editHide ? ACC : SUB }} onClick={() => setOpenMenu({ ...openMenu, editHide: !openMenu.editHide })}><Svg d={I.rename} size={20} /></button>
               </div>
-              {(() => { const isArc = EXT.archive.includes((openMenu.file.name.split(".").pop() || "").toLowerCase()) && !/\.apk$/i.test(openMenu.file.name); return isArc ? (
-                <div style={{ color: ACC, fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Архивы</div>
-              ) : (<>
+              {(() => { const isArc = EXT.archive.includes((openMenu.file.name.split(".").pop() || "").toLowerCase()) && !/\.apk$/i.test(openMenu.file.name); return isArc ? null : (<>
               <div style={{ fontSize: 12, color: SUB, marginBottom: 6 }}>Открыть как:</div>
               <div style={{ display: "flex", gap: 6, overflowX: "auto", marginBottom: 14, paddingBottom: 2 }}>
                 {OPEN_AS.map(([m, lbl]) => (
@@ -1190,61 +1192,82 @@ export default function App() {
 
       {/* НАСТРОЙКИ */}
       {settings && (
-        <div style={S.arcScreen}>
+        <div style={S.settingsScreen}>
           <div style={S.crumb}>
-            <span onClick={() => setSettings(false)} style={{ display: "inline-flex", alignItems: "center", gap: 6, color: ACC }}><Svg d={I.back} size={18} /> Настройки</span>
+            <span onClick={() => { if (settingsPage) setSettingsPage(null); else setSettings(false); }} style={{ display: "inline-flex", alignItems: "center", gap: 6, color: ACC }}>
+              <Svg d={I.back} size={18} /> {settingsPage === "theme" ? "Тема" : settingsPage === "fonts" ? "Шрифты" : settingsPage === "sort" ? "Сортировка" : settingsPage === "icons" ? "Иконки папок" : "Настройки"}
+            </span>
           </div>
-          <div style={{ flex: 1, overflowY: "auto", padding: "8px 14px" }}>
-            <div style={{ color: ACC, fontSize: 13, fontWeight: 700, margin: "10px 2px 8px" }}>Тема</div>
-            <div style={{ display: "flex", gap: 8, marginBottom: 6 }}>
-              {[["dark", "Тёмная"], ["light", "Светлая"]].map(([t, lbl]) => (
-                <button key={t} onClick={() => { setTheme(t); ls.set("fm_theme_v1", t); }}
-                  style={{ flex: 1, height: 44, borderRadius: 14, fontSize: 14, fontWeight: 600,
-                    background: theme === t ? "var(--accbg)" : "transparent",
-                    border: "1px solid " + (theme === t ? ACC : LINE), color: theme === t ? ACC : TXT }}>{lbl}</button>
-              ))}
-            </div>
-            <div style={S.menuItem} onClick={() => { const v = !themeBtn; setThemeBtn(v); ls.set("fm_themebtn_v1", v ? "1" : "0"); }}>
-              <span style={{ color: themeBtn ? ACC : SUB, display: "flex" }}><Svg d={theme === "dark" ? I.sun : I.moon} size={20} /></span>
-              Кнопка темы в шапке
-              <span style={{ marginLeft: "auto", ...S.tgl, ...(themeBtn ? S.tglOn : {}) }}><span style={{ ...S.knob, ...(themeBtn ? S.knobOn : {}) }} /></span>
-            </div>
-            <div style={{ color: ACC, fontSize: 13, fontWeight: 700, margin: "18px 2px 8px" }}>Шрифты</div>
-            {allFonts.map((f) => (
-              <div key={f.id} style={{ ...S.menuItem, justifyContent: "flex-start" }}>
-                <span onClick={() => saveFonts({ ...fonts, sel: f.id })} style={{ flex: 1, display: "flex", alignItems: "center", gap: 10 }}>
-                  <span style={{ width: 22, color: fonts.sel === f.id ? ACC : "transparent", display: "flex" }}><Svg d={I.check} size={18} /></span>
-                  <span style={{ fontFamily: f.css, fontSize: 15 }}>{f.name}</span>
-                </span>
-                {f.id !== "sys" && <span onClick={() => removeFont(f.id)} style={{ color: RED, display: "flex", padding: 4 }}><Svg d={I.trash} size={18} /></span>}
+          <div style={{ flex: 1, overflowY: "auto", padding: "8px 14px calc(20px + env(safe-area-inset-bottom))" }}>
+            {settingsPage === null && (
+              <>
+                {[["theme", I.sun, "Тема"], ["fonts", I.rename, "Шрифты"], ["sort", I.sort, "Сортировка"], ["icons", I.folder, "Иконки папок"]].map(([pg, ic, lbl]) => (
+                  <div key={pg} style={S.menuItem} onClick={() => setSettingsPage(pg)}>
+                    <span style={{ color: ACC, display: "flex" }}><Svg d={ic} size={20} /></span>
+                    <span style={{ flex: 1 }}>{lbl}</span>
+                    <span style={{ color: SUB, display: "flex", transform: "rotate(180deg)" }}><Svg d={I.back} size={18} /></span>
+                  </div>
+                ))}
+              </>
+            )}
+            {settingsPage === "theme" && (
+              <>
+                <div style={{ display: "flex", gap: 8, marginBottom: 6 }}>
+                  {[["dark", "Тёмная"], ["light", "Светлая"]].map(([t, lbl]) => (
+                    <button key={t} onClick={() => { setTheme(t); ls.set("fm_theme_v1", t); }}
+                      style={{ flex: 1, height: 44, borderRadius: 14, fontSize: 14, fontWeight: 600, background: theme === t ? "var(--accbg)" : "transparent", border: "1px solid " + (theme === t ? ACC : LINE), color: theme === t ? ACC : TXT }}>{lbl}</button>
+                  ))}
+                </div>
+                <div style={S.menuItem} onClick={() => { const v = !themeBtn; setThemeBtn(v); ls.set("fm_themebtn_v1", v ? "1" : "0"); }}>
+                  <span style={{ color: themeBtn ? ACC : SUB, display: "flex" }}><Svg d={theme === "dark" ? I.sun : I.moon} size={20} /></span>
+                  Кнопка темы в шапке
+                  <span style={{ marginLeft: "auto", ...S.tgl, ...(themeBtn ? S.tglOn : {}) }}><span style={{ ...S.knob, ...(themeBtn ? S.knobOn : {}) }} /></span>
+                </div>
+              </>
+            )}
+            {settingsPage === "fonts" && (
+              <>
+                {allFonts.map((f) => (
+                  <div key={f.id} style={{ ...S.menuItem, justifyContent: "flex-start" }}>
+                    <span onClick={() => saveFonts({ ...fonts, sel: f.id })} style={{ flex: 1, display: "flex", alignItems: "center", gap: 10 }}>
+                      <span style={{ width: 22, color: fonts.sel === f.id ? ACC : "transparent", display: "flex" }}><Svg d={I.check} size={18} /></span>
+                      <span style={{ fontFamily: f.css, fontSize: 15 }}>{f.name}</span>
+                    </span>
+                    {f.id !== "sys" && <span onClick={() => removeFont(f.id)} style={{ color: RED, display: "flex", padding: 4 }}><Svg d={I.trash} size={18} /></span>}
+                  </div>
+                ))}
+                <input ref={fontFileRef} type="file" accept=".ttf,.otf,.woff,.woff2" onChange={onFontFile} style={{ display: "none" }} />
+                <div style={S.menuItem} onClick={() => fontFileRef.current && fontFileRef.current.click()}>
+                  <span style={{ color: ACC, display: "flex" }}><Svg d={I.plus} size={20} /></span>
+                  Добавить шрифт (TTF/OTF)
+                </div>
+              </>
+            )}
+            {settingsPage === "sort" && (
+              <div style={S.menuItem} onClick={() => { const v = !sysTop; setSysTop(v); ls.set("fm_systop_v2", v ? "1" : "0"); }}>
+                <span style={{ color: sysTop ? ACC : SUB, display: "flex" }}><Svg d={I.folder} size={20} /></span>
+                Системные папки всегда сверху
+                <span style={{ marginLeft: "auto", ...S.tgl, ...(sysTop ? S.tglOn : {}) }}><span style={{ ...S.knob, ...(sysTop ? S.knobOn : {}) }} /></span>
               </div>
-            ))}
-            <input ref={fontFileRef} type="file" accept=".ttf,.otf,.woff,.woff2" onChange={onFontFile} style={{ display: "none" }} />
-            <div style={S.menuItem} onClick={() => fontFileRef.current && fontFileRef.current.click()}>
-              <span style={{ color: ACC, display: "flex" }}><Svg d={I.plus} size={20} /></span>
-              Добавить шрифт (TTF/OTF)
-            </div>
-            <div style={{ color: ACC, fontSize: 13, fontWeight: 700, margin: "18px 2px 8px" }}>Сортировка</div>
-            <div style={S.menuItem} onClick={() => { const v = !sysTop; setSysTop(v); ls.set("fm_systop_v2", v ? "1" : "0"); }}>
-              <span style={{ color: sysTop ? ACC : SUB, display: "flex" }}><Svg d={I.folder} size={20} /></span>
-              Системные папки всегда сверху
-              <span style={{ marginLeft: "auto", ...S.tgl, ...(sysTop ? S.tglOn : {}) }}><span style={{ ...S.knob, ...(sysTop ? S.knobOn : {}) }} /></span>
-            </div>
-            <div style={{ color: ACC, fontSize: 13, fontWeight: 700, margin: "18px 2px 8px" }}>Иконки папок</div>
-            <div style={{ color: SUB, fontSize: 12, lineHeight: 1.5, marginBottom: 12 }}>
-              Чтобы задать иконку папке — создайте в ней папку <span style={{ color: GOLD }}>.icon</span> и положите туда PNG/ICO. Иконка сохранится сюда, а файл удалится.
-            </div>
-            {Object.keys(iconDB).length === 0 && <div style={{ color: SUB, padding: 16, textAlign: "center" }}>Пока нет изменённых иконок</div>}
-            {Object.keys(iconDB).map((k) => (
-              <div key={k} style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 2px", borderBottom: "1px solid " + LINE }}>
-                <img src={iconDB[k]} alt="" style={{ width: 40, height: 40, borderRadius: 11, objectFit: "cover", flexShrink: 0 }} />
-                <span style={{ flex: 1, minWidth: 0 }}>
-                  <span style={{ fontSize: 14, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{baseName(k) || "Storage"}</span>
-                  <span style={{ fontSize: 11, color: SUB, wordBreak: "break-all", display: "block" }}>{"Internal/" + (k || "")}</span>
-                </span>
-                <span onClick={() => { const db = { ...iconDB }; delete db[k]; saveIconDB(db); }} style={{ color: RED, display: "flex", padding: 6 }}><Svg d={I.trash} size={18} /></span>
-              </div>
-            ))}
+            )}
+            {settingsPage === "icons" && (
+              <>
+                <div style={{ color: SUB, fontSize: 12, lineHeight: 1.5, marginBottom: 12 }}>
+                  Чтобы задать иконку папке — создайте в ней папку <span style={{ color: GOLD }}>.icon</span> и положите туда PNG/ICO. Иконка сохранится сюда, а файл удалится.
+                </div>
+                {Object.keys(iconDB).length === 0 && <div style={{ color: SUB, padding: 16, textAlign: "center" }}>Пока нет изменённых иконок</div>}
+                {Object.keys(iconDB).map((k) => (
+                  <div key={k} style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 2px", borderBottom: "1px solid " + LINE }}>
+                    <img src={iconDB[k]} alt="" style={{ width: 40, height: 40, borderRadius: 11, objectFit: "cover", flexShrink: 0 }} />
+                    <span style={{ flex: 1, minWidth: 0 }}>
+                      <span style={{ fontSize: 14, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{baseName(k) || "Storage"}</span>
+                      <span style={{ fontSize: 11, color: SUB, wordBreak: "break-all", display: "block" }}>{"Internal/" + (k || "")}</span>
+                    </span>
+                    <span onClick={() => { const db = { ...iconDB }; delete db[k]; saveIconDB(db); }} style={{ color: RED, display: "flex", padding: 6 }}><Svg d={I.trash} size={18} /></span>
+                  </div>
+                ))}
+              </>
+            )}
           </div>
         </div>
       )}
@@ -1362,13 +1385,13 @@ function Btn({ onClick, icon, text, label, accent, red, flexNone, disabled }) {
 
 const S = {
   app: { position: "relative", display: "flex", flexDirection: "column", height: "100vh", background: BG, color: TXT, fontFamily: "system-ui,-apple-system,Roboto,sans-serif", overflow: "hidden" },
-  tabsbar: { display: "flex", alignItems: "center", background: BAR, flexShrink: 0, height: 50, margin: "8px 8px 6px", borderRadius: 24, boxShadow: "0 1px 0 rgba(255,255,255,.05) inset, 0 7px 22px rgba(0,0,0,.38)" },
+  tabsbar: { display: "flex", alignItems: "center", background: BAR, flexShrink: 0, height: 50, margin: "8px 8px 6px", borderRadius: 24, boxShadow: "0 1px 0 rgba(255,255,255,.05) inset, 0 6px 14px -4px rgba(0,0,0,.35)" },
   tabs: { display: "flex", overflowX: "auto", flex: 1, alignItems: "center", justifyContent: "center", gap: 6, padding: "0 4px", height: "100%" },
   tab: { display: "flex", alignItems: "center", gap: 6, padding: "0 12px", height: 34, borderRadius: 17, fontSize: 13.5, color: SUB, whiteSpace: "nowrap", background: "var(--chip)", flexShrink: 0, border: "1px solid transparent" },
   tabActive: { color: ACC, background: "var(--accbg)", border: "1px solid " + ACC, fontWeight: 600, boxShadow: "0 0 0 1px var(--accbg), 0 2px 8px var(--accbg)" },
   tabX: { fontSize: 17, color: SUB, padding: "0 2px" },
   hbtn: { border: "none", background: "transparent", color: TXT, width: 40, height: 48, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" },
-  crumb: { position: "relative", zIndex: 6, padding: "0 16px 3px", fontSize: 12.5, background: "transparent", flexShrink: 0, overflow: "visible", whiteSpace: "nowrap" },
+  crumb: { position: "relative", zIndex: 6, padding: "2px 16px", fontSize: 12.5, background: "transparent", flexShrink: 0, overflow: "visible", whiteSpace: "nowrap" },
   list: { flex: 1, overflowY: "auto", overflowX: "hidden", display: "flex", flexDirection: "column" },
   slideWrap: { display: "flex", flexDirection: "column" },
   note: { color: SUB, textAlign: "center", padding: "60px 24px", lineHeight: 1.6 },
@@ -1388,6 +1411,7 @@ const S = {
   arcSelCancel: { background: "transparent", border: "none", borderRadius: 14, color: SUB, fontSize: 13, padding: "7px 12px" },
   arcSelGo: { display: "inline-flex", alignItems: "center", gap: 5, background: ACC, border: "none", borderRadius: 14, color: "#fff", fontWeight: 700, fontSize: 13, padding: "7px 14px" },
   arcScreen: { position: "fixed", top: 62, left: 0, right: 0, bottom: "calc(70px + env(safe-area-inset-bottom))", zIndex: 1250, background: BG, display: "flex", flexDirection: "column" },
+  settingsScreen: { position: "fixed", inset: 0, zIndex: 1600, background: BG, display: "flex", flexDirection: "column", paddingTop: "env(safe-area-inset-top)" },
   cnt: { background: "var(--accbg)", color: GOLD, fontSize: 12, fontWeight: 700, padding: "2px 9px", borderRadius: 10, flexShrink: 0 },
   rowSel: { background: "var(--accbg)" },
   name: { flex: 1, fontSize: 15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
