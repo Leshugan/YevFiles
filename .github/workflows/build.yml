@@ -42,7 +42,7 @@ jobs:
 
       - name: Generate app icons
         run: |
-          # Рендерим icon.svg в icon.png через sharp, затем @capacitor/assets
+          # Рендерим icon.svg (собран из наших же глифов) в icon.png через sharp
           if [ -f resources/icon.svg ]; then
             npm i -g sharp-cli >/dev/null 2>&1 || npm i sharp >/dev/null 2>&1 || true
             node -e "const s=require('sharp');s('resources/icon.svg',{density:300}).resize(1024,1024).png().toFile('resources/icon.png').then(()=>console.log('svg->png ok')).catch(e=>{console.log('render skip:',e.message)})" || echo "sharp render skipped, using existing icon.png"
@@ -53,26 +53,38 @@ jobs:
         run: |
           MAN=android/app/src/main/AndroidManifest.xml
           if ! grep -q "MANAGE_EXTERNAL_STORAGE" "$MAN"; then
-            sed -i 's#<application#<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />\n    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />\n    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />\n    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />\n    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />\n    <uses-permission android:name="android.permission.SET_WALLPAPER" />\n    <uses-permission android:name="android.permission.VIBRATE" />\n    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />\n\n    <application#' "$MAN"
+            sed -i 's#<application#<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />\n    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />\n    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />\n    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />\n    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />\n    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />\n    <uses-permission android:name="android.permission.VIBRATE" />\n    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />\n    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />\n    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />\n\n    <application#' "$MAN"
           fi
           # доступ к файлам в legacy-режиме (Android 10)
           sed -i 's#<application #<application android:requestLegacyExternalStorage="true" #' "$MAN"
           # старый back-callback, чтобы кнопка/жест «Назад» доходили до приложения
           sed -i 's#<application #<application android:enableOnBackInvokedCallback="false" #' "$MAN"
-          # FileProvider — для «обои/поделиться/изменить»
+          # FileProvider для открытия файлов сторонними приложениями
           if ! grep -q "appsfp" "$MAN"; then
-            sed -i 's#</application>#    <provider android:name="leshugan.yg.AppsFileProvider" android:authorities="${applicationId}.appsfp" android:exported="false" android:grantUriPermissions="true"><meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/apps_file_paths" /></provider>\n    </application>#' "$MAN"
+            sed -i 's#</application>#    <provider android:name="androidx.core.content.FileProvider" android:authorities="${applicationId}.appsfp" android:exported="false" android:grantUriPermissions="true"><meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/apps_file_paths" /></provider>\n    </application>#' "$MAN"
+          fi
+          # DocumentsProvider — приложение в системных пикерах "Сохранить в..." / "Открыть"
+          if ! grep -q "YevDocumentsProvider" "$MAN"; then
+            sed -i 's#</application>#    <provider android:name="leshugan.fm.YevDocumentsProvider" android:authorities="${applicationId}.documents" android:exported="true" android:grantUriPermissions="true" android:permission="android.permission.MANAGE_DOCUMENTS"><intent-filter><action android:name="android.content.action.DOCUMENTS_PROVIDER" /></intent-filter></provider>\n    </application>#' "$MAN"
+          fi
+          # Приём "Поделиться" (ACTION_SEND) — метка "Сохранить в..."
+          if ! grep -q "android.intent.action.SEND" "$MAN"; then
+            sed -i 's#</activity>#<intent-filter android:label="Сохранить в..."><action android:name="android.intent.action.SEND" /><category android:name="android.intent.category.DEFAULT" /><data android:mimeType="*/*" /></intent-filter><intent-filter android:label="Сохранить в..."><action android:name="android.intent.action.SEND_MULTIPLE" /><category android:name="android.intent.category.DEFAULT" /><data android:mimeType="*/*" /></intent-filter></activity>#' "$MAN"
+          fi
+          # Приём "Открыть с помощью" (ACTION_VIEW) — метка "Открыть/Сохранить"
+          if ! grep -q "yevview" "$MAN"; then
+            sed -i 's#</activity>#<intent-filter android:label="Открыть/Сохранить"><!--yevview--><action android:name="android.intent.action.VIEW" /><category android:name="android.intent.category.DEFAULT" /><category android:name="android.intent.category.BROWSABLE" /><data android:scheme="content" android:mimeType="*/*" /></intent-filter></activity>#' "$MAN"
           fi
           echo "----- manifest -----"
-          grep -E "uses-permission|requestLegacy|appsfp" "$MAN" || true
+          grep -E "uses-permission|requestLegacy|appsfp|YevDocuments|action.SEND|yevview" "$MAN" || true
 
       - name: Install native Apps plugin
         run: |
-          PKG=android/app/src/main/java/leshugan/yg
+          PKG=android/app/src/main/java/leshugan/fm
           mkdir -p "$PKG" android/app/src/main/res/xml
           cp native/AppsPlugin.java "$PKG/AppsPlugin.java"
           cp native/MainActivity.java "$PKG/MainActivity.java"
-          cp native/AppsFileProvider.java "$PKG/AppsFileProvider.java"
+          cp native/YevDocumentsProvider.java "$PKG/YevDocumentsProvider.java"
           cp native/apps_file_paths.xml android/app/src/main/res/xml/apps_file_paths.xml
           echo "native files:" && ls -la "$PKG"
 
@@ -92,7 +104,7 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: gallery-apk
+          name: files-apk
           path: android/app/build/outputs/apk/release/*.apk
 
   cleanup:
