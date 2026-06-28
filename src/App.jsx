@@ -85,6 +85,7 @@ const I = {
   fontA: <><path d="M5 19l5-13 5 13M7 14h6" /><path d="M17 19V9M17 9c2 0 3 1 3 2s-1 2-3 2" /></>,
   launcher: <><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></>,
   book: <><path d="M4 4h11a3 3 0 0 1 3 3v13H7a3 3 0 0 0-3 3z" /><path d="M4 4v16" /></>,
+  bookOpen: <><path d="M12 6.8c-1.7-1.1-4.3-1.6-8-1.4v11.2c3.7-.2 6.3.3 8 1.4 1.7-1.1 4.3-1.6 8-1.4V5.4c-3.7-.2-6.3.3-8 1.4z" /><path d="M12 6.8v11.2" /></>,
   tool: <><path d="M14 7a4 4 0 0 1-5 5l-5 5 2 2 5-5a4 4 0 0 0 5-5z" /><path d="M14 7l3-3 3 3-3 3z" /></>,
   home: <><path d="M3 11l9-7 9 7" /><path d="M5 10v9a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-9" /><path d="M10 20v-6h4v6" /></>,
   selectAll: <><rect x="4" y="4" width="16" height="16" rx="4" /><path d="M8.5 12l2.5 2.5 4.5-5" /></>,
@@ -166,7 +167,7 @@ const SYS_FOLDERS = {
   documents: { d: I.doc2, c: "#5AA9E6" },
   android: { d: I.android, c: "#A4C639" }, data: { d: I.android, c: "#A4C639" }, obb: { d: I.android, c: "#A4C639" },
   apk: { d: I.apk, c: "#A4C639" },
-  bannerhub: { d: I.img, c: "#E36FB0" }, fonts: { d: I.fontA, c: "#C9A227" }, books: { d: I.book, c: "#C98A4B" },
+  bannerhub: { d: I.img, c: "#E36FB0" }, fonts: { d: I.fontA, c: "#C9A227" }, books: { d: I.bookOpen, c: "#C98A4B" },
   games: { d: I.gamepad, c: "#A4C639" }, gamehub: { d: I.gamepad, c: "#A4C639" }, emu: { d: I.emuPad, c: "#A4C639" }, arcade: { d: I.emuPad, c: "#A4C639" }, mame: { d: I.emuPad, c: "#A4C639" },
   retroarch: { d: I.gamepad, c: "#7C5CFF" }, winlator: { d: I.win, c: "#5AA9E6" }, windows: { d: I.win, c: "#5AA9E6" },
   switch: { d: I.switchCon, c: "#5AA9E6" }, "nintendo switch": { d: I.switchCon, c: "#5AA9E6" }, nes: { d: I.gamepad, c: "#E05252" }, dandy: { d: I.gamepad, c: "#E05252" },
@@ -512,7 +513,7 @@ export default function App() {
     const cat = defaultOpenAs(e.name);
     const defs = loadMap(DEFKEY);
     const d = defs[cat] || defs[mime];
-    if (d) { try { const [pkg, act] = d.split("|"); await Apps.open({ uri: e.uri, mime, packageName: pkg, activityName: act }); return; } catch {} }
+    if (d) { try { const [pkg] = d.split("|"); await Apps.open({ uri: e.uri, mime, packageName: pkg }); return; } catch {} }
     await showOpenMenu(e, mime);
   };
   const showOpenMenu = async (e, mime, opts) => {
@@ -588,7 +589,7 @@ export default function App() {
     const ext = (e.name.split(".").pop() || "").toLowerCase();
     if (isImg(e.name)) {
       const mime = mimeOf(e.name), cat = defaultOpenAs(e.name), defs = loadMap(DEFKEY), d = defs[cat] || defs[mime];
-      if (d) { const [pkg, act] = d.split("|"); Apps.open({ uri: e.uri, mime, packageName: pkg, activityName: act }).catch(() => showOpenMenu(e, mime)); return; }
+      if (d) { const [pkg] = d.split("|"); Apps.open({ uri: e.uri, mime, packageName: pkg }).catch(() => showOpenMenu(e, mime)); return; }
       showOpenMenu(e, mime); return;
     }
     if (EXT.archive.includes(ext)) { showOpenMenu(e, mimeOf(e.name)); return; }
@@ -825,7 +826,7 @@ export default function App() {
         </span>
         {themeBtn && (
           <button onClick={toggleTheme} aria-label="Тема"
-            style={{ flexShrink: 0, alignSelf: "center", position: "relative", top: -4, width: 34, height: 34, borderRadius: 17, border: "1px solid var(--line)", background: BAR, color: ACC, display: "flex", alignItems: "center", justifyContent: "center", padding: 0, margin: 0, lineHeight: 0 }}>
+            style={{ flexShrink: 0, alignSelf: "center", position: "relative", top: 0, width: 34, height: 34, borderRadius: 17, border: "1px solid var(--line)", background: BAR, color: ACC, display: "flex", alignItems: "center", justifyContent: "center", padding: 0, margin: 0, lineHeight: 0 }}>
             <Svg d={theme === "light" ? I.sun : I.moon} size={18} />
           </button>
         )}
@@ -1517,7 +1518,7 @@ const S = {
   arcScreen: { position: "fixed", top: 62, left: 0, right: 0, bottom: "calc(70px + env(safe-area-inset-bottom))", zIndex: 1250, background: BG, display: "flex", flexDirection: "column" },
   settingsScreen: { position: "fixed", inset: 0, zIndex: 1600, background: BG, display: "flex", flexDirection: "column", paddingTop: "env(safe-area-inset-top)" },
   cnt: { background: "var(--accbg)", color: GOLD, fontSize: 12, fontWeight: 700, padding: "2px 9px", borderRadius: 10, flexShrink: 0 },
-  rowSel: { background: "var(--accbg)", boxShadow: "inset 3px 0 0 " + ACC },
+  rowSel: { background: "var(--accbg)" },
   name: { flex: 1, fontSize: 15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
   checkOn: { width: 26, height: 26, borderRadius: 13, background: ACC, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15 },
   searchBar: { display: "flex", alignItems: "center", background: ROW2, padding: 8, gap: 8, flexShrink: 0 },
@@ -1525,7 +1526,7 @@ const S = {
   searchClose: { border: "none", background: "transparent", color: SUB, fontSize: 24, width: 40 },
   bottom: { display: "flex", alignItems: "center", background: BAR, flexShrink: 0, borderRadius: 26, margin: "4px 8px calc(8px + env(safe-area-inset-bottom))", boxShadow: "0 1px 0 rgba(255,255,255,.06) inset, 0 2px 6px rgba(0,0,0,.35), 0 12px 32px rgba(0,0,0,.55)" },
   btn: { border: "none", background: "transparent", padding: "6px 6px 7px", display: "flex", flexDirection: "column", alignItems: "center", gap: 2 },
-  selCount: { width: 26, height: 26, marginLeft: 12, marginRight: 12, borderRadius: 13, background: ACC, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0, lineHeight: 0 },
+  selCount: { padding: "3px 9px", marginLeft: 12, marginRight: 14, borderRadius: 12, background: ACC, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0, lineHeight: 0 },
   btnLabel: { fontSize: 10, color: SUB, whiteSpace: "nowrap" },
   overlay: { position: "fixed", inset: 0, zIndex: 8 },
   menu: { position: "absolute", zIndex: 9, background: BAR, borderRadius: 12, overflow: "hidden", border: "1px solid " + LINE, boxShadow: "0 1px 0 rgba(255,255,255,.07) inset, 0 4px 12px rgba(0,0,0,.4), 0 18px 48px rgba(0,0,0,.62)", minWidth: 200, animation: "dropGrow .2s cubic-bezier(.2,.9,.3,1.2)" },
