@@ -405,7 +405,7 @@ export default function App() {
       el.scrollTop = rowsRegion >= usable ? pt : Math.max(0, el.scrollHeight - ch);
     }
     requestAnimationFrame(() => { requestAnimationFrame(() => { restoring.current = false; }); });
-  }, [path, active, entries, selMode, query, clip]);
+  }, [path, active, entries, query, clip]);
   const onListScroll = (e) => { if (restoring.current) return; scrollPos.current[pathKeyRef.current] = e.currentTarget.scrollTop; };
   // Фоновая подгрузка превью: только видимые на экране строки, ограниченная нагрузка
   const thumbQueue = useRef([]);
