@@ -513,7 +513,7 @@ export default function App() {
     const cat = defaultOpenAs(e.name);
     const defs = loadMap(DEFKEY);
     const d = defs[cat] || defs[mime];
-    if (d) { try { const [pkg] = d.split("|"); await Apps.open({ uri: e.uri, mime, packageName: pkg }); return; } catch {} }
+    if (d) { try { const [pkg, act] = d.split("|"); await Apps.open({ uri: e.uri, mime, packageName: pkg, activityName: act }); return; } catch {} }
     await showOpenMenu(e, mime);
   };
   const showOpenMenu = async (e, mime, opts) => {
@@ -589,7 +589,7 @@ export default function App() {
     const ext = (e.name.split(".").pop() || "").toLowerCase();
     if (isImg(e.name)) {
       const mime = mimeOf(e.name), cat = defaultOpenAs(e.name), defs = loadMap(DEFKEY), d = defs[cat] || defs[mime];
-      if (d) { const [pkg] = d.split("|"); Apps.open({ uri: e.uri, mime, packageName: pkg }).catch(() => showOpenMenu(e, mime)); return; }
+      if (d) { const [pkg, act] = d.split("|"); Apps.open({ uri: e.uri, mime, packageName: pkg, activityName: act }).catch(() => showOpenMenu(e, mime)); return; }
       showOpenMenu(e, mime); return;
     }
     if (EXT.archive.includes(ext)) { showOpenMenu(e, mimeOf(e.name)); return; }
@@ -826,7 +826,7 @@ export default function App() {
         </span>
         {themeBtn && (
           <button onClick={toggleTheme} aria-label="Тема"
-            style={{ flexShrink: 0, alignSelf: "center", position: "relative", top: 0, width: 34, height: 34, borderRadius: 17, border: "1px solid var(--line)", background: BAR, color: ACC, display: "flex", alignItems: "center", justifyContent: "center", padding: 0, margin: 0, lineHeight: 0 }}>
+            style={{ flexShrink: 0, alignSelf: "center", position: "relative", top: 0, width: 34, height: 34, borderRadius: 17, border: "none", background: BAR, color: ACC, display: "flex", alignItems: "center", justifyContent: "center", padding: 0, margin: 0, lineHeight: 0, boxShadow: "0 1px 0 rgba(255,255,255,.05) inset, 0 3px 10px rgba(0,0,0,.20)" }}>
             <Svg d={theme === "light" ? I.sun : I.moon} size={18} />
           </button>
         )}
@@ -886,7 +886,7 @@ export default function App() {
               return (
                 <div key={e.name} style={{ ...S.row, ...(isDir ? S.rowDir : {}), ...(isSel ? S.rowSel : {}), opacity: hid ? 0.5 : 1 }}
                   onPointerDown={(ev) => rDown(ev, e)} onPointerMove={rMove} onPointerUp={(ev) => rUp(e, ev)} onPointerCancel={() => clearTimeout(lpTimer.current)}>
-                  <span style={{ ...S.iconWrap, color: ic.c, background: "var(--chip)", overflow: "hidden", position: "relative" }}
+                  <span style={{ ...S.iconWrap, color: ic.c, background: isSel ? "transparent" : "var(--chip)", overflow: "hidden", position: "relative" }}
                     onPointerDown={(ev) => ev.stopPropagation()} onPointerUp={(ev) => { ev.stopPropagation(); clearTimeout(lpTimer.current); toggle(e.name); }}>
                     {(isDir && iconDB[keyOf(e.name)]) ? <img src={iconDB[keyOf(e.name)]} alt="" style={S.iconImg} />
                       : (!isDir && (isImg(e.name) || isPdf(e.name) || /\.apk$/i.test(e.name))) ?
@@ -1518,7 +1518,7 @@ const S = {
   arcScreen: { position: "fixed", top: 62, left: 0, right: 0, bottom: "calc(70px + env(safe-area-inset-bottom))", zIndex: 1250, background: BG, display: "flex", flexDirection: "column" },
   settingsScreen: { position: "fixed", inset: 0, zIndex: 1600, background: BG, display: "flex", flexDirection: "column", paddingTop: "env(safe-area-inset-top)" },
   cnt: { background: "var(--accbg)", color: GOLD, fontSize: 12, fontWeight: 700, padding: "2px 9px", borderRadius: 10, flexShrink: 0 },
-  rowSel: { background: "var(--accbg)" },
+  rowSel: { background: "var(--accbg)", borderRadius: 12, boxShadow: "0 0 0 1px " + ACC + " inset" },
   name: { flex: 1, fontSize: 15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
   checkOn: { width: 26, height: 26, borderRadius: 13, background: ACC, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15 },
   searchBar: { display: "flex", alignItems: "center", background: ROW2, padding: 8, gap: 8, flexShrink: 0 },
