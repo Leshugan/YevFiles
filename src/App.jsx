@@ -536,8 +536,9 @@ export default function App() {
     }
     const defs = loadMap(DEFKEY);
     if (om.edit) { setOpenMenu(null); try { await Apps.open({ uri: om.file.uri, mime: mimeOf(om.file.name), packageName: app.packageName, activityName: app.activityName, action: "edit" }); } catch (err) { showToast("Не удалось открыть: " + (err?.message || "")); } return; }
-    if (om.useDefault) { defs[om.mime] = app.packageName + "|" + app.activityName; saveMap(DEFKEY, defs); }
-    else if (defs[om.mime]) { delete defs[om.mime]; saveMap(DEFKEY, defs); } // разовый выбор — сбросить прежнюю привязку
+    const dkey = defaultOpenAs(om.file.name);
+    if (om.useDefault) { defs[dkey] = app.packageName + "|" + app.activityName; saveMap(DEFKEY, defs); }
+    else if (defs[dkey]) { delete defs[dkey]; saveMap(DEFKEY, defs); } // разовый выбор — сбросить прежнюю привязку
     setOpenMenu(null);
     try { await Apps.open({ uri: om.file.uri, mime: mimeOf(om.file.name), packageName: app.packageName, activityName: app.activityName }); }
     catch (err) { showToast("Не удалось открыть: " + (err?.message || "")); }
@@ -589,6 +590,7 @@ export default function App() {
     const ext = (e.name.split(".").pop() || "").toLowerCase();
     if (isImg(e.name)) {
       const mime = mimeOf(e.name), cat = defaultOpenAs(e.name), defs = loadMap(DEFKEY), d = defs[cat] || defs[mime];
+      if (d === "__viewer__") { openViewer(e); return; }
       if (d) { const [pkg, act] = d.split("|"); Apps.open({ uri: e.uri, mime, packageName: pkg, activityName: act }).catch(() => showOpenMenu(e, mime)); return; }
       showOpenMenu(e, mime); return;
     }
@@ -826,7 +828,7 @@ export default function App() {
         </span>
         {themeBtn && (
           <button onClick={toggleTheme} aria-label="Тема"
-            style={{ flexShrink: 0, alignSelf: "center", position: "relative", top: 0, width: 34, height: 34, borderRadius: 17, border: "none", background: BAR, color: ACC, display: "flex", alignItems: "center", justifyContent: "center", padding: 0, margin: 0, lineHeight: 0, boxShadow: "0 1px 0 rgba(255,255,255,.05) inset, 0 3px 10px rgba(0,0,0,.20)" }}>
+            style={{ position: "absolute", right: 12, top: "calc(100% + 4px)", zIndex: 7, width: 34, height: 34, borderRadius: 17, border: "none", background: BAR, color: ACC, display: "flex", alignItems: "center", justifyContent: "center", padding: 0, margin: 0, lineHeight: 0, boxShadow: "0 1px 0 rgba(255,255,255,.05) inset, 0 3px 10px rgba(0,0,0,.20)" }}>
             <Svg d={theme === "light" ? I.sun : I.moon} size={18} />
           </button>
         )}
@@ -1247,7 +1249,7 @@ export default function App() {
                 })}
               </div>
               {!openMenu.editHide && !openMenu.edit && isImg(openMenu.file.name) && (
-                <div onClick={() => { const f = openMenu.file; setOpenMenu(null); openViewer(f); }} style={{ ...S.appRow, color: GOLD }}>
+                <div onClick={() => { const f = openMenu.file; if (openMenu.useDefault) { const defs = loadMap(DEFKEY); defs[defaultOpenAs(f.name)] = "__viewer__"; saveMap(DEFKEY, defs); } else { const defs = loadMap(DEFKEY); if (defs[defaultOpenAs(f.name)]) { delete defs[defaultOpenAs(f.name)]; saveMap(DEFKEY, defs); } } setOpenMenu(null); openViewer(f); }} style={{ ...S.appRow, color: GOLD }}>
                   <span style={{ width: 38, display: "flex", justifyContent: "center" }}><Svg d={I.img} size={26} /></span>
                   <span style={{ flex: 1, fontSize: 15 }}>Открыть</span>
                 </div>
@@ -1518,7 +1520,7 @@ const S = {
   arcScreen: { position: "fixed", top: 62, left: 0, right: 0, bottom: "calc(70px + env(safe-area-inset-bottom))", zIndex: 1250, background: BG, display: "flex", flexDirection: "column" },
   settingsScreen: { position: "fixed", inset: 0, zIndex: 1600, background: BG, display: "flex", flexDirection: "column", paddingTop: "env(safe-area-inset-top)" },
   cnt: { background: "var(--accbg)", color: GOLD, fontSize: 12, fontWeight: 700, padding: "2px 9px", borderRadius: 10, flexShrink: 0 },
-  rowSel: { background: "var(--accbg)", borderRadius: 12, boxShadow: "0 0 0 1px " + ACC + " inset" },
+  rowSel: { background: "var(--accbg)", borderRadius: 12 },
   name: { flex: 1, fontSize: 15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
   checkOn: { width: 26, height: 26, borderRadius: 13, background: ACC, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15 },
   searchBar: { display: "flex", alignItems: "center", background: ROW2, padding: 8, gap: 8, flexShrink: 0 },
