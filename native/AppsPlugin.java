@@ -1,13 +1,22 @@
-package leshugan.yg;
+package leshugan.fm;
 
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.Context;
+import android.content.BroadcastReceiver;
 import android.content.pm.PackageManager;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageInstaller;
+import android.content.pm.ResolveInfo;
+import android.os.FileObserver;
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
+import android.content.IntentSender;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.drawable.Drawable;
-import android.media.MediaMetadataRetriever;
-import android.media.ThumbnailUtils;
 import android.net.Uri;
 import android.view.Window;
 import android.view.View;
@@ -19,6 +28,7 @@ import android.provider.Settings;
 import android.util.Base64;
 
 import androidx.core.content.FileProvider;
+
 
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
@@ -33,95 +43,91 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.util.ArrayList;
+import java.util.Enumeration;
+import java.util.zip.ZipFile;
+import java.util.zip.ZipEntry;
+import java.io.OutputStream;
+import java.util.List;
 
 @CapacitorPlugin(name = "Apps")
 public class AppsPlugin extends Plugin {
 
-    private static final String IMG = "jpg|jpeg|png|webp|gif|bmp|heic|heif";
-    private static final String VID = "mp4|mkv|avi|mov|webm|3gp|m4v|ts";
+    private FileObserver observer;
+    private boolean instRegistered = false;
 
-    private boolean isImg(String n) { return n.toLowerCase().matches(".*\\.(" + IMG + ")$"); }
-    private boolean isVid(String n) { return n.toLowerCase().matches(".*\\.(" + VID + ")$"); }
-
-    // ===== Рекурсивное сканирование медиа за ОДИН проход.
-    //   .nomedia  — папка и все её подпапки скрыты (уходят в раздел «Скрытые»).
-    //   .nofolder — игнорируются только файлы этой папки, подпапки сканируются как обычно.
     @PluginMethod
-    public void scanMedia(PluginCall call) {
-        final boolean wantHidden = "hidden".equals(call.getString("mode", "visible"));
-        // в фоновом потоке — чтобы не блокировать UI
-        new Thread(() -> {
+    public void query(PluginCall call) {
+        String mime = call.getString("mime", "*/*");
+        String uriStr = call.getString("uri");
+        String action = call.getString("action", "view");
+        String act = "edit".equals(action) ? Intent.ACTION_EDIT : Intent.ACTION_VIEW;
+        PackageManager pm = getContext().getPackageManager();
+
+        Intent intent = new Intent(act);
+        boolean dataSet = false;
+        if (uriStr != null) {
             try {
-                File root = Environment.getExternalStorageDirectory();
-                JSArray out = new JSArray();
-                walk(root, false, wantHidden, out, 0);
-                JSObject ret = new JSObject();
-                ret.put("items", out);
-                ret.put("root", root.getAbsolutePath());
-                call.resolve(ret);
-            } catch (Exception e) { call.reject(e.getMessage()); }
-        }).start();
+                try { StrictMode.setVmPolicy(new StrictMode.VmPolicy.Builder().build()); } catch (Exception ignored) {}
+                intent.setDataAndType(Uri.fromFile(toFile(uriStr)), mime);
+                dataSet = true;
+            } catch (Exception ignored) {}
+        }
+        if (!dataSet) intent.setType(mime);
+
+        List<ResolveInfo> list = pm.queryIntentActivities(intent, PackageManager.MATCH_ALL);
+        if (list.isEmpty()) {
+            Intent alt = new Intent(act);
+            alt.setType(mime);
+            list = pm.queryIntentActivities(alt, PackageManager.MATCH_ALL);
+        }
+        if (list.isEmpty() && !"edit".equals(action)) {
+            Intent edit = new Intent(Intent.ACTION_EDIT);
+            edit.setType(mime);
+            list = pm.queryIntentActivities(edit, PackageManager.MATCH_ALL);
+        }
+
+        JSArray apps = new JSArray();
+        for (ResolveInfo ri : list) {
+            if (ri.activityInfo == null) continue;
+            JSObject o = new JSObject();
+            o.put("label", String.valueOf(ri.loadLabel(pm)));
+            o.put("packageName", ri.activityInfo.packageName);
+            o.put("activityName", ri.activityInfo.name);
+            try { o.put("icon", drawableToBase64(ri.loadIcon(pm))); } catch (Exception ignored) {}
+            apps.put(o);
+        }
+        JSObject ret = new JSObject();
+        ret.put("apps", apps);
+        call.resolve(ret);
     }
 
-    // ===== Кэш списка медиа на диске (приватная папка приложения, без лимитов localStorage) =====
-    private File cacheFile(String key) { String k = (key == null || key.isEmpty()) ? "media" : key.replaceAll("[^a-zA-Z0-9_]", "_"); File d = getContext().getExternalFilesDir(null); if (d == null) d = getContext().getFilesDir(); return new File(d, "cache_" + k + ".json"); }
-
     @PluginMethod
-    public void cacheGet(PluginCall call) {
+    public void open(PluginCall call) {
+        String uriStr = call.getString("uri");
+        String mime = call.getString("mime", "*/*");
+        String pkg = call.getString("packageName");
+        String act = call.getString("activityName");
+        String action = call.getString("action", "view");
+        if (uriStr == null) { call.reject("no uri"); return; }
         try {
-            File f = cacheFile(call.getString("key", "media"));
-            JSObject ret = new JSObject();
-            if (f.exists()) ret.put("data", new String(readAll(new FileInputStream(f)), "UTF-8"));
-            call.resolve(ret);
-        } catch (Exception e) { call.resolve(new JSObject()); }
-    }
-
-    @PluginMethod
-    public void cacheSet(PluginCall call) {
-        final String data = call.getString("data", "");
-        final String key = call.getString("key", "media");
-        new Thread(() -> {
-            try { FileOutputStream o = new FileOutputStream(cacheFile(key)); o.write(data.getBytes("UTF-8")); o.close(); } catch (Exception ignored) {}
-            call.resolve(new JSObject());
-        }).start();
-    }
-
-    private void walk(File dir, boolean insideNomedia, boolean wantHidden, JSArray out, int depth) {
-        if (dir == null || depth > 12) return;
-        File[] kids = dir.listFiles();
-        if (kids == null) return;
-        boolean branchHidden = insideNomedia || new File(dir, ".nomedia").exists();
-        // в обычном режиме НЕ заходим в скрытые ветки вовсе — это даёт мгновенный старт
-        if (!wantHidden && branchHidden) return;
-        boolean noFolder = new File(dir, ".nofolder").exists(); // игнор файлов только этой папки
-        for (File k : kids) {
-            String name = k.getName();
-            if (name.startsWith(".")) continue;             // служебные/скрытые папки и файлы не трогаем
-            if (k.isDirectory()) {
-                String dn = k.getName();
-                if (dir.getName().equals("Android") && (dn.equals("data") || dn.equals("obb"))) continue; // огромные/недоступные ветки
-                walk(k, branchHidden, wantHidden, out, depth + 1);
-            } else {
-                boolean vid = isVid(name);
-                if (!isImg(name) && !vid) continue;
-                if (wantHidden && !branchHidden) continue;   // режим скрытых: только из .nomedia-веток
-                if (!branchHidden && noFolder) continue;     // .nofolder — пропускаем файлы этой папки
-                File p = k.getParentFile();
-                JSObject o = new JSObject();
-                o.put("uri", "file://" + k.getAbsolutePath());
-                o.put("name", name);
-                o.put("size", k.length());
-                o.put("mtime", k.lastModified());
-                o.put("video", vid);
-                o.put("bucketPath", p != null ? p.getAbsolutePath() : "");
-                o.put("bucketName", p != null ? p.getName() : "");
-                out.put(o);
-            }
+            File f = toFile(uriStr);
+            if (!f.exists()) { call.reject("Файл не найден: " + f.getAbsolutePath()); return; }
+            if (f.isDirectory()) { call.reject("Это папка: " + f.getAbsolutePath()); return; }
+            try { StrictMode.setVmPolicy(new StrictMode.VmPolicy.Builder().build()); } catch (Exception ignored) {}
+            Uri data = Uri.fromFile(f);
+            Intent i = new Intent("edit".equals(action) ? Intent.ACTION_EDIT : Intent.ACTION_VIEW);
+            i.setDataAndType(data, mime);
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            if ("edit".equals(action)) i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+            if (pkg != null && act != null) i.setClassName(pkg, act);
+            else if (pkg != null) i.setPackage(pkg);
+            getContext().startActivity(i);
+            call.resolve();
+        } catch (Exception e) {
+            call.reject(e.getMessage());
         }
     }
 
-    // ===== Простой список файлов в папке (для корзины) =====
     @PluginMethod
     public void list(PluginCall call) {
         String uriStr = call.getString("uri");
@@ -130,27 +136,49 @@ public class AppsPlugin extends Plugin {
             File dir = toFile(uriStr);
             File[] kids = dir.listFiles();
             JSArray arr = new JSArray();
-            if (kids != null) for (File k : kids) {
-                if (k.isDirectory()) continue;
-                JSObject o = new JSObject();
-                o.put("uri", "file://" + k.getAbsolutePath());
-                o.put("name", k.getName());
-                o.put("size", k.length());
-                o.put("mtime", k.lastModified());
-                o.put("video", isVid(k.getName()));
-                arr.put(o);
+            if (kids != null) {
+                for (File k : kids) {
+                    JSObject o = new JSObject();
+                    o.put("name", k.getName());
+                    boolean isDir = k.isDirectory();
+                    o.put("type", isDir ? "directory" : "file");
+                    if (isDir) {
+                        File[] sub = k.listFiles();
+                        int cnt = 0; File thumb = null; long thumbTime = 0;
+                        if (sub != null) {
+                            for (File sf : sub) {
+                                if (sf.getName().startsWith(".")) continue;
+                                cnt++;
+                                String ln = sf.getName().toLowerCase();
+                                if (!sf.isDirectory() && (ln.endsWith(".jpg") || ln.endsWith(".jpeg") || ln.endsWith(".png") || ln.endsWith(".webp") || ln.endsWith(".gif") || ln.endsWith(".bmp"))) {
+                                    if (sf.lastModified() >= thumbTime) { thumbTime = sf.lastModified(); thumb = sf; }
+                                }
+                            }
+                        }
+                        o.put("count", cnt);
+                        if (thumb != null) o.put("thumb", "file://" + thumb.getAbsolutePath());
+                    }
+                    o.put("size", k.length());
+                    o.put("mtime", k.lastModified());
+                    o.put("uri", "file://" + k.getAbsolutePath());
+                    arr.put(o);
+                }
             }
-            JSObject ret = new JSObject(); ret.put("files", arr); call.resolve(ret);
-        } catch (Exception e) { call.reject(e.getMessage()); }
+            JSObject ret = new JSObject();
+            ret.put("files", arr);
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject(e.getMessage());
+        }
     }
 
-    // ===== Превью (фото и видео), кэш на диске =====
     private File thumbDir() {
-        File d = new File(Environment.getExternalStorageDirectory(), ".yg_thumbs");
+        File d = new File(android.os.Environment.getExternalStorageDirectory(), ".yev_thumbs");
         if (!d.exists()) d.mkdirs();
         return d;
     }
     private String thumbKey(File src) {
+        // ключ = хэш пути + mtime, чтобы кэш инвалидировался при изменении файла
         String base = src.getAbsolutePath() + "|" + src.lastModified() + "|" + src.length();
         return Integer.toHexString(base.hashCode()) + "_" + src.lastModified();
     }
@@ -164,211 +192,330 @@ public class AppsPlugin extends Plugin {
             if (!f.exists()) { call.resolve(new JSObject()); return; }
             File cacheFile = new File(thumbDir(), thumbKey(f) + ".jpg");
             JSObject ret = new JSObject();
+            // готовое превью из кэша
             if (cacheFile.exists()) {
                 byte[] data = readAll(new FileInputStream(cacheFile));
                 ret.put("thumb", "data:image/jpeg;base64," + Base64.encodeToString(data, Base64.NO_WRAP));
-                try { android.graphics.BitmapFactory.Options bo = new android.graphics.BitmapFactory.Options(); bo.inJustDecodeBounds = true; android.graphics.BitmapFactory.decodeFile(cacheFile.getAbsolutePath(), bo); ret.put("w", bo.outWidth); ret.put("h", bo.outHeight); } catch (Exception ignored) {}
                 call.resolve(ret); return;
             }
+            // удалить устаревшие кэши этого же файла (другой mtime)
+            String prefix = Integer.toHexString((f.getAbsolutePath() + "|").hashCode());
+            File[] stale = thumbDir().listFiles();
             String name = f.getName().toLowerCase();
             Bitmap b = null;
-            if (isImg(name)) {
+            if (name.matches(".*\\.(jpg|jpeg|png|webp|gif|bmp)$")) {
                 android.graphics.BitmapFactory.Options o = new android.graphics.BitmapFactory.Options();
                 o.inJustDecodeBounds = true;
                 android.graphics.BitmapFactory.decodeFile(f.getAbsolutePath(), o);
-                int s = 1; while (o.outWidth / s > 1024 || o.outHeight / s > 1024) s *= 2;
+                int s = 1; while (o.outWidth / s > 200 || o.outHeight / s > 200) s *= 2;
                 android.graphics.BitmapFactory.Options o2 = new android.graphics.BitmapFactory.Options();
                 o2.inSampleSize = s;
                 b = android.graphics.BitmapFactory.decodeFile(f.getAbsolutePath(), o2);
-                b = applyExif(b, f.getAbsolutePath());
-            } else if (isVid(name)) {
-                try { b = ThumbnailUtils.createVideoThumbnail(f.getAbsolutePath(), android.provider.MediaStore.Images.Thumbnails.MINI_KIND); } catch (Throwable ignored) {}
-                if (b == null) {
-                    MediaMetadataRetriever r = new MediaMetadataRetriever();
-                    try { r.setDataSource(f.getAbsolutePath()); b = r.getFrameAtTime(1000000); } catch (Throwable ignored) {}
-                    try { r.release(); } catch (Throwable ignored) {}
+            } else if (name.endsWith(".pdf")) {
+                android.os.ParcelFileDescriptor pfd = android.os.ParcelFileDescriptor.open(f, android.os.ParcelFileDescriptor.MODE_READ_ONLY);
+                android.graphics.pdf.PdfRenderer r = new android.graphics.pdf.PdfRenderer(pfd);
+                if (r.getPageCount() > 0) {
+                    android.graphics.pdf.PdfRenderer.Page page = r.openPage(0);
+                    int w = 150, h = (int) (150f * page.getHeight() / Math.max(1, page.getWidth())); if (h <= 0) h = 190;
+                    b = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888); b.eraseColor(0xFFFFFFFF);
+                    page.render(b, null, null, android.graphics.pdf.PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY); page.close();
                 }
+                r.close(); pfd.close();
+            } else if (name.endsWith(".apk")) {
+                PackageManager pm = getContext().getPackageManager();
+                android.content.pm.PackageInfo pi = pm.getPackageArchiveInfo(f.getAbsolutePath(), 0);
+                if (pi != null) { pi.applicationInfo.sourceDir = f.getAbsolutePath(); pi.applicationInfo.publicSourceDir = f.getAbsolutePath();
+                    Drawable d = pi.applicationInfo.loadIcon(pm); b = drawableToBitmap(d); }
             }
             if (b == null) { call.resolve(ret); return; }
+            // даунскейл до ~150px
             int mx = Math.max(b.getWidth(), b.getHeight());
-            if (mx > 512) { float sc = 512f / mx; b = Bitmap.createScaledBitmap(b, Math.round(b.getWidth() * sc), Math.round(b.getHeight() * sc), true); }
+            if (mx > 150) { float sc = 150f / mx; b = Bitmap.createScaledBitmap(b, Math.round(b.getWidth() * sc), Math.round(b.getHeight() * sc), true); }
             ByteArrayOutputStream out = new ByteArrayOutputStream();
-            b.compress(Bitmap.CompressFormat.JPEG, 86, out);
+            b.compress(Bitmap.CompressFormat.JPEG, 80, out);
             byte[] bytes = out.toByteArray();
-            try { OutputStream fos = new FileOutputStream(cacheFile); fos.write(bytes); fos.close(); } catch (Exception ignored) {}
+            try { OutputStream fos = new java.io.FileOutputStream(cacheFile); fos.write(bytes); fos.close(); } catch (Exception ignored) {}
             ret.put("thumb", "data:image/jpeg;base64," + Base64.encodeToString(bytes, Base64.NO_WRAP));
-            ret.put("w", b.getWidth()); ret.put("h", b.getHeight());
             call.resolve(ret);
         } catch (Exception e) { call.resolve(new JSObject()); }
     }
 
-    // ===== Удалить (насовсем) =====
+    @PluginMethod
+    public void thumbSweep(PluginCall call) {
+        // удаляет кэши старше 30 дней или сверх лимита, чтобы папка не разрасталась
+        try {
+            File dir = thumbDir();
+            File[] files = dir.listFiles();
+            if (files != null) {
+                long now = System.currentTimeMillis();
+                long maxAge = 30L * 24 * 3600 * 1000;
+                long total = 0;
+                java.util.Arrays.sort(files, (a, c) -> Long.compare(c.lastModified(), a.lastModified()));
+                for (File f : files) {
+                    total += f.length();
+                    if (now - f.lastModified() > maxAge || total > 80L * 1024 * 1024) f.delete();
+                }
+            }
+            call.resolve(new JSObject());
+        } catch (Exception e) { call.resolve(new JSObject()); }
+    }
+
+    private Bitmap drawableToBitmap(Drawable d) {
+        int w = Math.max(1, d.getIntrinsicWidth()), h = Math.max(1, d.getIntrinsicHeight());
+        Bitmap b = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+        android.graphics.Canvas c = new android.graphics.Canvas(b);
+        d.setBounds(0, 0, w, h); d.draw(c);
+        return b;
+    }
+
+    private byte[] readAll(InputStream in) throws Exception {
+        ByteArrayOutputStream o = new ByteArrayOutputStream();
+        byte[] buf = new byte[65536]; int r;
+        while ((r = in.read(buf)) > 0) o.write(buf, 0, r);
+        in.close(); return o.toByteArray();
+    }
+
+    @PluginMethod
+    public void pdfThumb(PluginCall call) {
+        String uriStr = call.getString("uri");
+        if (uriStr == null) { call.reject("no uri"); return; }
+        try {
+            File f = toFile(uriStr);
+            android.os.ParcelFileDescriptor pfd = android.os.ParcelFileDescriptor.open(f, android.os.ParcelFileDescriptor.MODE_READ_ONLY);
+            android.graphics.pdf.PdfRenderer r = new android.graphics.pdf.PdfRenderer(pfd);
+            JSObject ret = new JSObject();
+            if (r.getPageCount() > 0) {
+                android.graphics.pdf.PdfRenderer.Page page = r.openPage(0);
+                int w = 160, h = (int) (160f * page.getHeight() / Math.max(1, page.getWidth()));
+                if (h <= 0) h = 200;
+                Bitmap b = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+                b.eraseColor(0xFFFFFFFF);
+                page.render(b, null, null, android.graphics.pdf.PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY);
+                page.close();
+                ByteArrayOutputStream out = new ByteArrayOutputStream();
+                b.compress(Bitmap.CompressFormat.PNG, 90, out);
+                ret.put("thumb", "data:image/png;base64," + Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP));
+            }
+            r.close(); pfd.close();
+            call.resolve(ret);
+        } catch (Exception e) { call.reject(e.getMessage()); }
+    }
+
+    @PluginMethod
+    public void saveSharedTemp(PluginCall call) {
+        try {
+            if (MainActivity.pendingShared.isEmpty()) { call.resolve(new JSObject()); return; }
+            android.net.Uri u = MainActivity.pendingShared.get(0);
+            String name = queryName(u);
+            File dir = new File(android.os.Environment.getExternalStorageDirectory(), "Download/.yevtmp");
+            if (!dir.exists()) dir.mkdirs();
+            File out = new File(dir, name);
+            java.io.InputStream in = getContext().getContentResolver().openInputStream(u);
+            java.io.FileOutputStream fos = new java.io.FileOutputStream(out);
+            byte[] buf = new byte[65536]; int r;
+            while ((r = in.read(buf)) > 0) fos.write(buf, 0, r);
+            fos.close(); in.close();
+            MainActivity.pendingShared.clear();
+            JSObject ret = new JSObject(); ret.put("uri", "file://" + out.getAbsolutePath()); ret.put("name", name); call.resolve(ret);
+        } catch (Exception e) { call.reject(e.getMessage()); }
+    }
+
+    @PluginMethod
+    public void getShared(PluginCall call) {
+        try {
+            JSArray arr = new JSArray();
+            for (android.net.Uri u : MainActivity.pendingShared) {
+                JSObject o = new JSObject();
+                String name = queryName(u);
+                o.put("name", name);
+                o.put("mime", getContext().getContentResolver().getType(u));
+                arr.put(o);
+            }
+            JSObject ret = new JSObject(); ret.put("files", arr); ret.put("mode", MainActivity.pendingMode); call.resolve(ret);
+        } catch (Exception e) { call.reject(e.getMessage()); }
+    }
+
+    @PluginMethod
+    public void saveShared(PluginCall call) {
+        String destDir = call.getString("dir");
+        if (destDir == null) { call.reject("no dir"); return; }
+        try {
+            File dir = toFile(destDir);
+            int ok = 0;
+            for (android.net.Uri u : MainActivity.pendingShared) {
+                String name = queryName(u);
+                File out = new File(dir, name);
+                int n = 0; String base = name, ext = "";
+                int dot = name.lastIndexOf('.');
+                if (dot > 0) { base = name.substring(0, dot); ext = name.substring(dot); }
+                while (out.exists()) { n++; out = new File(dir, base + " (" + n + ")" + ext); }
+                java.io.InputStream in = getContext().getContentResolver().openInputStream(u);
+                java.io.FileOutputStream fos = new java.io.FileOutputStream(out);
+                byte[] buf = new byte[65536]; int r;
+                while ((r = in.read(buf)) > 0) fos.write(buf, 0, r);
+                fos.close(); in.close(); ok++;
+            }
+            MainActivity.pendingShared.clear();
+            JSObject ret = new JSObject(); ret.put("saved", ok); call.resolve(ret);
+        } catch (Exception e) { call.reject(e.getMessage()); }
+    }
+
+    @PluginMethod
+    public void clearShared(PluginCall call) {
+        MainActivity.pendingShared.clear();
+        call.resolve(new JSObject());
+    }
+
+    private String queryName(android.net.Uri u) {
+        String name = null;
+        try {
+            android.database.Cursor c = getContext().getContentResolver().query(u, null, null, null, null);
+            if (c != null) {
+                int idx = c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME);
+                if (idx >= 0 && c.moveToFirst()) name = c.getString(idx);
+                c.close();
+            }
+        } catch (Exception ignored) {}
+        if (name == null) { name = u.getLastPathSegment(); if (name != null && name.contains("/")) name = name.substring(name.lastIndexOf('/') + 1); }
+        if (name == null || name.isEmpty()) name = "shared_" + System.currentTimeMillis();
+        return name;
+    }
+
+    @PluginMethod
+    public void apkInfo(PluginCall call) {
+        String uriStr = call.getString("uri");
+        if (uriStr == null) { call.reject("no uri"); return; }
+        try {
+            File f = toFile(uriStr);
+            String p = f.getAbsolutePath();
+            PackageManager pm = getContext().getPackageManager();
+            android.content.pm.PackageInfo pi = pm.getPackageArchiveInfo(p, 0);
+            JSObject ret = new JSObject();
+            if (pi != null) {
+                pi.applicationInfo.sourceDir = p;
+                pi.applicationInfo.publicSourceDir = p;
+                ret.put("package", pi.packageName);
+                ret.put("versionName", pi.versionName);
+                ret.put("versionCode", android.os.Build.VERSION.SDK_INT >= 28 ? pi.getLongVersionCode() : pi.versionCode);
+                ret.put("targetSdk", pi.applicationInfo.targetSdkVersion);
+                if (android.os.Build.VERSION.SDK_INT >= 24) ret.put("minSdk", pi.applicationInfo.minSdkVersion);
+                try { ret.put("label", pm.getApplicationLabel(pi.applicationInfo).toString()); } catch (Exception ignored) {}
+                // установлена ли уже + версия установленной
+                try {
+                    android.content.pm.PackageInfo inst = pm.getPackageInfo(pi.packageName, 0);
+                    ret.put("installedVersionName", inst.versionName);
+                    ret.put("installed", true);
+                } catch (Exception e) { ret.put("installed", false); }
+            }
+            call.resolve(ret);
+        } catch (Exception e) { call.reject(e.getMessage()); }
+    }
+
+    @PluginMethod
+    public void apkIcon(PluginCall call) {
+        String uriStr = call.getString("uri");
+        if (uriStr == null) { call.reject("no uri"); return; }
+        try {
+            File f = toFile(uriStr);
+            String p = f.getAbsolutePath();
+            PackageManager pm = getContext().getPackageManager();
+            android.content.pm.PackageInfo pi = pm.getPackageArchiveInfo(p, 0);
+            JSObject ret = new JSObject();
+            if (pi != null) {
+                pi.applicationInfo.sourceDir = p;
+                pi.applicationInfo.publicSourceDir = p;
+                Drawable icon = pi.applicationInfo.loadIcon(pm);
+                ret.put("icon", drawableToBase64(icon));
+            }
+            call.resolve(ret);
+        } catch (Exception e) { call.reject(e.getMessage()); }
+    }
+
     @PluginMethod
     public void delete(PluginCall call) {
         String uriStr = call.getString("uri");
         if (uriStr == null) { call.reject("no uri"); return; }
         File f = toFile(uriStr);
         boolean ok = deleteRecursive(f);
-        JSObject ret = new JSObject(); ret.put("deleted", ok || !f.exists()); call.resolve(ret);
+        JSObject ret = new JSObject();
+        ret.put("deleted", ok || !f.exists());
+        call.resolve(ret);
     }
 
-    // ===== Переместить (в корзину / восстановить). Создаёт целевые папки. =====
+    private int[] copyCounter = new int[2]; // [done, total]
+
     @PluginMethod
-    public void move(PluginCall call) {
-        String from = call.getString("from");
-        String to = call.getString("to");
-        if (from == null || to == null) { call.reject("no from/to"); return; }
+    public void copyTree(PluginCall call) {
+        String fromStr = call.getString("from");
+        String toStr = call.getString("to");
+        if (fromStr == null || toStr == null) { call.reject("no from/to"); return; }
         try {
-            File src = toFile(from);
-            File dst = toFile(to);
-            File parent = dst.getParentFile();
-            if (parent != null && !parent.exists()) parent.mkdirs();
-            boolean ok = src.renameTo(dst);
-            if (!ok) {                                  // разные тома — копируем + удаляем
-                FileInputStream in = new FileInputStream(src);
-                FileOutputStream o = new FileOutputStream(dst);
-                byte[] buf = new byte[65536]; int r;
-                while ((r = in.read(buf)) > 0) o.write(buf, 0, r);
-                in.close(); o.close();
-                ok = src.delete();
+            File src = toFile(fromStr);
+            File dst = toFile(toStr);
+            String skip = dst.getCanonicalPath();
+            copyCounter[0] = 0;
+            copyCounter[1] = countFiles(src, skip);
+            copyRecursive(src, dst, skip);
+            JSObject ret = new JSObject(); ret.put("ok", true); ret.put("total", copyCounter[1]); call.resolve(ret);
+        } catch (Exception e) { call.reject(e.getMessage()); }
+    }
+
+    private int countFiles(File src, String skipPath) {
+        try { if (src.getCanonicalPath().equals(skipPath)) return 0; } catch (Exception e) { return 0; }
+        if (src.isDirectory()) {
+            int c = 0; File[] kids = src.listFiles();
+            if (kids != null) for (File k : kids) c += countFiles(k, skipPath);
+            return c;
+        }
+        return 1;
+    }
+
+    private void copyRecursive(File src, File dst, String skipPath) throws Exception {
+        if (src.getCanonicalPath().equals(skipPath)) return;
+        if (src.isDirectory()) {
+            if (!dst.exists()) dst.mkdirs();
+            File[] kids = src.listFiles();
+            if (kids != null) for (File c : kids) {
+                if (c.getCanonicalPath().equals(skipPath)) continue;
+                copyRecursive(c, new File(dst, c.getName()), skipPath);
             }
-            JSObject ret = new JSObject(); ret.put("ok", ok); ret.put("uri", "file://" + dst.getAbsolutePath()); call.resolve(ret);
-        } catch (Exception e) { call.reject(e.getMessage()); }
-    }
-
-    // ===== Создать .nomedia (скрыть альбом) / удалить .nomedia (показать) =====
-    @PluginMethod
-    public void setNomedia(PluginCall call) {
-        String path = call.getString("path");
-        boolean on = Boolean.TRUE.equals(call.getBoolean("on", true));
-        if (path == null) { call.reject("no path"); return; }
-        try {
-            File dir = toFile(path);
-            File nm = new File(dir, ".nomedia");
-            if (on) { if (!nm.exists()) new FileOutputStream(nm).close(); }
-            else { if (nm.exists()) nm.delete(); }
-            JSObject ret = new JSObject(); ret.put("ok", true); call.resolve(ret);
-        } catch (Exception e) { call.reject(e.getMessage()); }
-    }
-
-    // ===== Поделиться =====
-    @PluginMethod
-    public void share(PluginCall call) {
-        String uriStr = call.getString("uri");
-        String mime = call.getString("mime", "image/*");
-        if (uriStr == null) { call.reject("no uri"); return; }
-        try {
-            File f = toFile(uriStr);
-            if (!f.exists()) { call.reject("Файл не найден"); return; }
-            Uri u = providerUri(f);
-            Intent i = new Intent(Intent.ACTION_SEND);
-            i.setType(mime);
-            i.putExtra(Intent.EXTRA_STREAM, u);
-            i.setClipData(android.content.ClipData.newRawUri("", u));
-            i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            Intent ch = Intent.createChooser(i, "Поделиться");
-            ch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            getContext().startActivity(ch);
-            call.resolve();
-        } catch (Exception e) { call.reject(e.getMessage()); }
-    }
-
-    // ===== Редактировать через стороннее приложение =====
-    @PluginMethod
-    public void editImage(PluginCall call) {
-        String uriStr = call.getString("uri");
-        String mime = call.getString("mime", "image/*");
-        if (uriStr == null) { call.reject("no uri"); return; }
-        try {
-            File f = toFile(uriStr);
-            if (!f.exists()) { call.reject("Файл не найден"); return; }
-            Uri u = providerUri(f);
-            Intent i = new Intent(Intent.ACTION_EDIT);
-            i.setDataAndType(u, mime);
-            i.setClipData(android.content.ClipData.newRawUri("", u));
-            i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
-            Intent ch = Intent.createChooser(i, "Изменить через");
-            ch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            getContext().startActivity(ch);
-            call.resolve();
-        } catch (Exception e) { call.reject(e.getMessage()); }
-    }
-
-    // ===== Установить как обои (системный выбор: экран/блокировка) =====
-    @PluginMethod
-    public void setWallpaper(PluginCall call) {
-        String uriStr = call.getString("uri");
-        if (uriStr == null) { call.reject("no uri"); return; }
-        try {
-            File f = toFile(uriStr);
-            if (!f.exists()) { call.reject("Файл не найден"); return; }
-            Uri u = providerUri(f);
-            Intent i = new Intent(Intent.ACTION_ATTACH_DATA);
-            i.addCategory(Intent.CATEGORY_DEFAULT);
-            i.setDataAndType(u, "image/*");
-            i.putExtra("mimeType", "image/*");
-            i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            Intent ch = Intent.createChooser(i, "Установить как обои");
-            ch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            getContext().startActivity(ch);
-            call.resolve();
-        } catch (Exception e) { call.reject(e.getMessage()); }
-    }
-
-    private Bitmap applyExif(Bitmap b, String path) {
-        if (b == null) return null;
-        try {
-            android.media.ExifInterface ex = new android.media.ExifInterface(path);
-            int o = ex.getAttributeInt(android.media.ExifInterface.TAG_ORIENTATION, android.media.ExifInterface.ORIENTATION_NORMAL);
-            int deg = 0;
-            if (o == android.media.ExifInterface.ORIENTATION_ROTATE_90) deg = 90;
-            else if (o == android.media.ExifInterface.ORIENTATION_ROTATE_180) deg = 180;
-            else if (o == android.media.ExifInterface.ORIENTATION_ROTATE_270) deg = 270;
-            if (deg != 0) {
-                android.graphics.Matrix m = new android.graphics.Matrix();
-                m.postRotate(deg);
-                b = Bitmap.createBitmap(b, 0, 0, b.getWidth(), b.getHeight(), m, true);
-            }
-        } catch (Throwable ignored) {}
-        return b;
-    }
-
-    private Uri providerUri(File f) {
-        try { return FileProvider.getUriForFile(getContext(), getContext().getPackageName() + ".appsfp", f); }
-        catch (Exception e) {
-            try { StrictMode.setVmPolicy(new StrictMode.VmPolicy.Builder().build()); } catch (Exception ignored) {}
-            return Uri.fromFile(f);
+        } else {
+            java.io.FileInputStream in = new java.io.FileInputStream(src);
+            java.io.FileOutputStream out = new java.io.FileOutputStream(dst);
+            byte[] buf = new byte[65536]; int r;
+            while ((r = in.read(buf)) > 0) out.write(buf, 0, r);
+            in.close(); out.close();
+            copyCounter[0]++;
+            // событие прогресса в JS + уведомление Android
+            JSObject ev = new JSObject(); ev.put("done", copyCounter[0]); ev.put("total", copyCounter[1]); ev.put("name", src.getName());
+            notifyListeners("opProgress", ev);
+            if (copyCounter[1] > 0) postProgressNotif("Копирование", src.getName(), copyCounter[0], copyCounter[1]);
         }
     }
 
-    // ===== Цвет статус-бара/навбара под тему =====
-    @PluginMethod
-    public void setBars(PluginCall call) {
-        final String color = call.getString("color", "#000000");
-        final boolean light = Boolean.TRUE.equals(call.getBoolean("light", false));
+    private void postProgressNotif(String title, String text, int prog, int max) {
         try {
-            getActivity().runOnUiThread(() -> {
-                try {
-                    Window w = getActivity().getWindow();
-                    int c = Color.parseColor(color);
-                    w.setStatusBarColor(c);
-                    w.setNavigationBarColor(c);
-                    View dv = w.getDecorView();
-                    int flags = dv.getSystemUiVisibility();
-                    if (Build.VERSION.SDK_INT >= 23) { if (light) flags |= View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR; else flags &= ~View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR; }
-                    if (Build.VERSION.SDK_INT >= 26) { if (light) flags |= View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR; else flags &= ~View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR; }
-                    dv.setSystemUiVisibility(flags);
-                } catch (Exception ignored) {}
-            });
+            NotificationManager nm = (NotificationManager) getContext().getSystemService(Context.NOTIFICATION_SERVICE);
+            if (android.os.Build.VERSION.SDK_INT >= 26) {
+                NotificationChannel ch = new NotificationChannel("yev_progress", "Операции с файлами", NotificationManager.IMPORTANCE_LOW);
+                nm.createNotificationChannel(ch);
+            }
+            Notification.Builder b = android.os.Build.VERSION.SDK_INT >= 26 ? new Notification.Builder(getContext(), "yev_progress") : new Notification.Builder(getContext());
+            b.setContentTitle(title).setContentText(text).setSmallIcon(android.R.drawable.stat_sys_download)
+             .setProgress(max, prog, false).setOngoing(prog < max);
+            nm.notify(777, b.build());
+            if (prog >= max) nm.cancel(777);
         } catch (Exception ignored) {}
-        call.resolve();
     }
 
-    // ===== Доступ ко всем файлам =====
     @PluginMethod
     public void hasAllFiles(PluginCall call) {
-        boolean granted = Build.VERSION.SDK_INT < 30 || Environment.isExternalStorageManager();
-        JSObject ret = new JSObject(); ret.put("granted", granted); call.resolve(ret);
+        boolean granted;
+        if (Build.VERSION.SDK_INT >= 30) granted = Environment.isExternalStorageManager();
+        else granted = true;
+        JSObject ret = new JSObject();
+        ret.put("granted", granted);
+        call.resolve(ret);
     }
 
     @PluginMethod
@@ -385,24 +532,307 @@ public class AppsPlugin extends Plugin {
             i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             getContext().startActivity(i);
             call.resolve();
+        } catch (Exception e) {
+            call.reject(e.getMessage());
+        }
+    }
+
+    @PluginMethod
+    public void installApk(PluginCall call) {
+        String uriStr = call.getString("uri");
+        if (uriStr == null) { call.reject("no uri"); return; }
+        try {
+            File f = toFile(uriStr);
+            if (!f.exists()) { call.reject("Файл не найден: " + f.getAbsolutePath()); return; }
+            registerInstallReceiver();
+            PackageInstaller pi = getContext().getPackageManager().getPackageInstaller();
+            PackageInstaller.SessionParams params = new PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL);
+            int sessionId = pi.createSession(params);
+            PackageInstaller.Session session = pi.openSession(sessionId);
+            OutputStream out = session.openWrite("apk", 0, f.length());
+            InputStream in = new FileInputStream(f);
+            byte[] buf = new byte[65536];
+            int n;
+            while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+            session.fsync(out);
+            in.close();
+            out.close();
+            Intent statusIntent = new Intent("leshugan.fm.INSTALL_RESULT").setPackage(getContext().getPackageName());
+            int flags = PendingIntent.FLAG_UPDATE_CURRENT;
+            if (Build.VERSION.SDK_INT >= 31) flags |= PendingIntent.FLAG_MUTABLE;
+            PendingIntent pending = PendingIntent.getBroadcast(getContext(), sessionId, statusIntent, flags);
+            session.commit(pending.getIntentSender());
+            session.close();
+            call.resolve();
         } catch (Exception e) { call.reject(e.getMessage()); }
     }
 
-    // ===== helpers =====
+    @PluginMethod
+    public void uninstall(PluginCall call) {
+        String uriStr = call.getString("uri");
+        if (uriStr == null) { call.reject("no uri"); return; }
+        try {
+            File f = toFile(uriStr);
+            PackageInfo info = getContext().getPackageManager().getPackageArchiveInfo(f.getAbsolutePath(), 0);
+            if (info == null) { call.reject("Не удалось прочитать пакет"); return; }
+            Intent i = new Intent(Intent.ACTION_DELETE, Uri.parse("package:" + info.packageName));
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(i);
+            call.resolve();
+        } catch (Exception e) { call.reject(e.getMessage()); }
+    }
+
+    private void registerInstallReceiver() {
+        if (instRegistered) return;
+        BroadcastReceiver r = new BroadcastReceiver() {
+            @Override public void onReceive(Context c, Intent i) {
+                int status = i.getIntExtra(PackageInstaller.EXTRA_STATUS, -1);
+                if (status == PackageInstaller.STATUS_PENDING_USER_ACTION) {
+                    Intent confirm = i.getParcelableExtra(Intent.EXTRA_INTENT);
+                    if (confirm != null) { confirm.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); c.startActivity(confirm); }
+                }
+            }
+        };
+        IntentFilter filter = new IntentFilter("leshugan.fm.INSTALL_RESULT");
+        if (Build.VERSION.SDK_INT >= 33) getContext().registerReceiver(r, filter, Context.RECEIVER_NOT_EXPORTED);
+        else getContext().registerReceiver(r, filter);
+        instRegistered = true;
+    }
+
+    @PluginMethod
+    public void notifyProgress(PluginCall call) {
+        String title = call.getString("title", "Операция");
+        int progress = call.getInt("progress", 0);
+        int max = call.getInt("max", 100);
+        String text = call.getString("text", "");
+        try {
+            NotificationManager nm = (NotificationManager) getContext().getSystemService(Context.NOTIFICATION_SERVICE);
+            String ch = "yev_progress";
+            Notification.Builder b;
+            if (Build.VERSION.SDK_INT >= 26) {
+                NotificationChannel c = new NotificationChannel(ch, "Операции с файлами", NotificationManager.IMPORTANCE_LOW);
+                nm.createNotificationChannel(c);
+                b = new Notification.Builder(getContext(), ch);
+            } else {
+                b = new Notification.Builder(getContext());
+            }
+            b.setContentTitle(title).setContentText(text)
+             .setSmallIcon(android.R.drawable.stat_sys_download)
+             .setProgress(max, progress, false).setOngoing(true).setOnlyAlertOnce(true);
+            nm.notify(777, b.build());
+            call.resolve();
+        } catch (Exception e) { call.reject(e.getMessage()); }
+    }
+
+    @PluginMethod
+    public void cancelNotify(PluginCall call) {
+        try { NotificationManager nm = (NotificationManager) getContext().getSystemService(Context.NOTIFICATION_SERVICE); nm.cancel(777); } catch (Exception ignored) {}
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void watch(PluginCall call) {
+        String uriStr = call.getString("uri");
+        if (uriStr == null) { call.reject("no uri"); return; }
+        try {
+            final String path = toFile(uriStr).getAbsolutePath();
+            if (observer != null) { observer.stopWatching(); observer = null; }
+            int mask = FileObserver.CREATE | FileObserver.DELETE | FileObserver.MOVED_FROM | FileObserver.MOVED_TO | FileObserver.CLOSE_WRITE | FileObserver.MODIFY;
+            observer = new FileObserver(path, mask) {
+                @Override public void onEvent(int event, String p) { notifyListeners("fschange", new JSObject()); }
+            };
+            observer.startWatching();
+            call.resolve();
+        } catch (Exception e) { call.reject(e.getMessage()); }
+    }
+
+    @PluginMethod
+    public void zipList(PluginCall call) {
+        String uriStr = call.getString("uri");
+        if (uriStr == null) { call.reject("no uri"); return; }
+        try {
+            File f = toFile(uriStr);
+            ZipFile zf = new ZipFile(f);
+            JSArray arr = new JSArray();
+            Enumeration<? extends ZipEntry> en = zf.entries();
+            while (en.hasMoreElements()) {
+                ZipEntry e = en.nextElement();
+                JSObject o = new JSObject();
+                o.put("name", e.getName());
+                o.put("size", e.getSize());
+                o.put("dir", e.isDirectory());
+                arr.put(o);
+            }
+            zf.close();
+            JSObject ret = new JSObject();
+            ret.put("entries", arr);
+            call.resolve(ret);
+        } catch (Exception e) { call.reject(e.getMessage()); }
+    }
+
+    @PluginMethod
+    public void zipExtract(PluginCall call) {
+        String uriStr = call.getString("uri");
+        String entry = call.getString("entry");
+        String dest = call.getString("dest");
+        if (uriStr == null || entry == null || dest == null) { call.reject("bad args"); return; }
+        ZipFile zf = null;
+        try {
+            zf = new ZipFile(toFile(uriStr));
+            ZipEntry ze = zf.getEntry(entry);
+            if (ze == null) { call.reject("entry not found"); return; }
+            File out = new File(dest);
+            if (out.getParentFile() != null) out.getParentFile().mkdirs();
+            InputStream in = zf.getInputStream(ze);
+            OutputStream fos = new FileOutputStream(out);
+            byte[] buf = new byte[65536];
+            int n;
+            while ((n = in.read(buf)) > 0) fos.write(buf, 0, n);
+            fos.close(); in.close();
+            JSObject ret = new JSObject();
+            ret.put("path", out.getAbsolutePath());
+            call.resolve(ret);
+        } catch (Exception e) { call.reject(e.getMessage()); }
+        finally { if (zf != null) try { zf.close(); } catch (Exception ignored) {} }
+    }
+
+    @PluginMethod
+    public void zipExtractAll(PluginCall call) {
+        String uriStr = call.getString("uri");
+        String destDir = call.getString("dest");
+        if (uriStr == null || destDir == null) { call.reject("bad args"); return; }
+        JSArray names = call.getArray("entries");
+        ZipFile zf = null;
+        try {
+            zf = new ZipFile(toFile(uriStr));
+            java.util.List<String> list = new java.util.ArrayList<>();
+            if (names != null) {
+                for (int i = 0; i < names.length(); i++) list.add(names.getString(i));
+            } else {
+                Enumeration<? extends ZipEntry> en = zf.entries();
+                while (en.hasMoreElements()) { ZipEntry e = en.nextElement(); if (!e.isDirectory()) list.add(e.getName()); }
+            }
+            int total = list.size(), done = 0;
+            byte[] buf = new byte[65536];
+            for (String nm : list) {
+                ZipEntry ze = zf.getEntry(nm);
+                if (ze == null) continue;
+                File out = new File(destDir, nm);
+                if (ze.isDirectory()) { out.mkdirs(); continue; }
+                if (out.getParentFile() != null) out.getParentFile().mkdirs();
+                InputStream in = zf.getInputStream(ze);
+                OutputStream fos = new FileOutputStream(out);
+                int n;
+                while ((n = in.read(buf)) > 0) fos.write(buf, 0, n);
+                fos.close(); in.close();
+                done++;
+                JSObject ev = new JSObject();
+                ev.put("done", done); ev.put("total", total); ev.put("name", nm);
+                notifyListeners("opProgress", ev);
+            }
+            call.resolve();
+        } catch (Exception e) { call.reject(e.getMessage()); }
+        finally { if (zf != null) try { zf.close(); } catch (Exception ignored) {} }
+    }
+
+    @PluginMethod
+    public void share(PluginCall call) {
+        String uriStr = call.getString("uri");
+        String mime = call.getString("mime", "*/*");
+        if (uriStr == null) { call.reject("no uri"); return; }
+        try {
+            File f = toFile(uriStr);
+            if (!f.exists()) { call.reject("Файл не найден"); return; }
+            try { StrictMode.setVmPolicy(new StrictMode.VmPolicy.Builder().build()); } catch (Exception ignored) {}
+            Intent i = new Intent(Intent.ACTION_SEND);
+            i.setType(mime);
+            i.putExtra(Intent.EXTRA_STREAM, Uri.fromFile(f));
+            i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            Intent ch = Intent.createChooser(i, "Поделиться");
+            ch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(ch);
+            call.resolve();
+        } catch (Exception e) { call.reject(e.getMessage()); }
+    }
+
+    @PluginMethod
+    public void editImage(PluginCall call) {
+        String uriStr = call.getString("uri");
+        String mime = call.getString("mime", "image/*");
+        if (uriStr == null) { call.reject("no uri"); return; }
+        try {
+            File f = toFile(uriStr);
+            if (!f.exists()) { call.reject("Файл не найден"); return; }
+            try { StrictMode.setVmPolicy(new StrictMode.VmPolicy.Builder().build()); } catch (Exception ignored) {}
+            Intent i = new Intent(Intent.ACTION_EDIT);
+            i.setDataAndType(Uri.fromFile(f), mime);
+            i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+            Intent ch = Intent.createChooser(i, "Изменить через");
+            ch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(ch);
+            call.resolve();
+        } catch (Exception e) { call.reject(e.getMessage()); }
+    }
+
+    @PluginMethod
+    public void setBars(PluginCall call) {
+        final String color = call.getString("color", "#000000");
+        final boolean light = call.getBoolean("light", false);
+        try {
+            getActivity().runOnUiThread(() -> {
+                try {
+                    Window w = getActivity().getWindow();
+                    int c = Color.parseColor(color);
+                    w.setStatusBarColor(c);
+                    w.setNavigationBarColor(c);
+                    View dv = w.getDecorView();
+                    int flags = dv.getSystemUiVisibility();
+                    if (Build.VERSION.SDK_INT >= 23) {
+                        if (light) flags |= View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
+                        else flags &= ~View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
+                    }
+                    if (Build.VERSION.SDK_INT >= 26) {
+                        if (light) flags |= View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+                        else flags &= ~View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+                    }
+                    dv.setSystemUiVisibility(flags);
+                } catch (Exception ignored) {}
+            });
+        } catch (Exception ignored) {}
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void unwatch(PluginCall call) {
+        if (observer != null) { observer.stopWatching(); observer = null; }
+        call.resolve();
+    }
+
     private boolean deleteRecursive(File f) {
-        if (f.isDirectory()) { File[] kids = f.listFiles(); if (kids != null) for (File k : kids) deleteRecursive(k); }
+        if (f.isDirectory()) {
+            File[] kids = f.listFiles();
+            if (kids != null) for (File k : kids) deleteRecursive(k);
+        }
         return f.delete();
     }
+
     private File toFile(String u) {
         String p = u;
         if (p.startsWith("file://")) p = p.substring(7);
         if (p.indexOf('%') >= 0) { try { p = java.net.URLDecoder.decode(p, "UTF-8"); } catch (Exception ignored) {} }
         return new File(p);
     }
-    private byte[] readAll(InputStream in) throws Exception {
-        ByteArrayOutputStream o = new ByteArrayOutputStream();
-        byte[] buf = new byte[65536]; int r;
-        while ((r = in.read(buf)) > 0) o.write(buf, 0, r);
-        in.close(); return o.toByteArray();
+
+    private String drawableToBase64(Drawable d) {
+        int w = d.getIntrinsicWidth(), h = d.getIntrinsicHeight();
+        if (w <= 0) w = 96; if (h <= 0) h = 96;
+        w = Math.min(w, 144); h = Math.min(h, 144);
+        Bitmap b = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+        Canvas c = new Canvas(b);
+        d.setBounds(0, 0, w, h);
+        d.draw(c);
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        b.compress(Bitmap.CompressFormat.PNG, 100, out);
+        return "data:image/png;base64," + Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP);
     }
 }
