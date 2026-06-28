@@ -1,8 +1,8 @@
 import type { CapacitorConfig } from "@capacitor/cli";
 
 const config: CapacitorConfig = {
-  appId: "leshugan.fm",
-  appName: "YevFiles",
+  appId: "leshugan.yg",
+  appName: "YevGallery",
   webDir: "dist",
   android: {
     allowMixedContent: false,
