@@ -9,7 +9,7 @@ const Apps = registerPlugin("Apps");
 const BG = "var(--bg)", BAR = "var(--bar)", ROW2 = "var(--row2)", ACC = "var(--acc)";
 const GOLD = "var(--gold)", RED = "var(--red)", TXT = "var(--txt)", SUB = "var(--sub)", LINE = "var(--line)";
 const THEMES = {
-  dark:  { "--bg": "#1C140C", "--bar": "#2A2017", "--row2": "#2E251C", "--acc": "#EF6C00", "--accbg": "var(--accbg)", "--gold": "#F5A623", "--red": "#E05252", "--txt": "#F2EAE0", "--sub": "#B0A498", "--line": "#4A3A2A", "--chip": "rgba(255,255,255,.06)", "--hair": "rgba(255,255,255,.08)", "--tgloff": "#4A3A2A" },
+  dark:  { "--bg": "#1C140C", "--bar": "#2A2017", "--row2": "#2E251C", "--acc": "#EF6C00", "--accbg": "rgba(239,108,0,.18)", "--gold": "#F5A623", "--red": "#E05252", "--txt": "#F2EAE0", "--sub": "#B0A498", "--line": "#4A3A2A", "--chip": "rgba(255,255,255,.06)", "--hair": "rgba(255,255,255,.08)", "--tgloff": "#4A3A2A" },
   light: { "--bg": "#EEF1F4", "--bar": "#FFFFFF", "--row2": "#E4E8EC", "--acc": "#2F80ED", "--accbg": "rgba(47,128,237,.14)", "--gold": "#2F80ED", "--red": "#D14343", "--txt": "#1E2329", "--sub": "#6B7280", "--line": "#D3D8DE", "--chip": "rgba(0,0,0,.05)", "--hair": "rgba(0,0,0,.08)", "--tgloff": "#C2C8D0" },
 };
 const DIR = Directory.ExternalStorage;
@@ -937,9 +937,9 @@ export default function App() {
       {selMode ? (
         <nav style={{ ...S.bottom, justifyContent: "flex-start" }}>
           <div style={S.selCount}>
-            <span key={sel.size} style={{ fontSize: 13, fontWeight: 700, color: "#fff", lineHeight: 1, display: "block", textAlign: "center", animation: "pulse .3s cubic-bezier(.2,.9,.3,1.3)" }}>{sel.size}</span>
+            <span key={sel.size} style={{ fontSize: 11, fontWeight: 700, color: "#fff", lineHeight: 1, display: "block", textAlign: "center", animation: "pulse .3s cubic-bezier(.2,.9,.3,1.3)" }}>{sel.size}</span>
           </div>
-          <div style={{ display: "flex", overflowX: "auto", flex: 1, justifyContent: "flex-end" }}>
+          <div style={{ display: "flex", overflowX: "auto", flex: 1, justifyContent: "flex-start" }}>
             <Btn onClick={exitSel} icon={I.x} label="Отмена" flexNone />
             <Btn onClick={() => setProps(one)} icon={I.info} label="Свойства" flexNone disabled={sel.size !== 1} />
             <Btn onClick={() => grab("cut")} icon={I.cut} label="Вырезать" flexNone />
@@ -1528,7 +1528,7 @@ const S = {
   searchClose: { border: "none", background: "transparent", color: SUB, fontSize: 24, width: 40 },
   bottom: { display: "flex", alignItems: "center", background: BAR, flexShrink: 0, borderRadius: 26, margin: "4px 8px calc(8px + env(safe-area-inset-bottom))", boxShadow: "0 1px 0 rgba(255,255,255,.06) inset, 0 2px 6px rgba(0,0,0,.35), 0 12px 32px rgba(0,0,0,.55)" },
   btn: { border: "none", background: "transparent", padding: "6px 6px 7px", display: "flex", flexDirection: "column", alignItems: "center", gap: 2 },
-  selCount: { padding: "3px 9px", marginLeft: 12, marginRight: 14, borderRadius: 12, background: ACC, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0, lineHeight: 0 },
+  selCount: { padding: "2px 6px", marginLeft: 10, marginRight: 16, borderRadius: 10, background: ACC, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0, lineHeight: 0 },
   btnLabel: { fontSize: 10, color: SUB, whiteSpace: "nowrap" },
   overlay: { position: "fixed", inset: 0, zIndex: 8 },
   menu: { position: "absolute", zIndex: 9, background: BAR, borderRadius: 12, overflow: "hidden", border: "1px solid " + LINE, boxShadow: "0 1px 0 rgba(255,255,255,.07) inset, 0 4px 12px rgba(0,0,0,.4), 0 18px 48px rgba(0,0,0,.62)", minWidth: 200, animation: "dropGrow .2s cubic-bezier(.2,.9,.3,1.2)" },
