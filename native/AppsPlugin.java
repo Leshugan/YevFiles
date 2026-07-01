@@ -663,6 +663,29 @@ public class AppsPlugin extends Plugin {
         } catch (Exception e) { call.reject(e.getMessage()); }
     }
 
+    private boolean zipIsEncrypted(File f) {
+        try { net.lingala.zip4j.ZipFile z = new net.lingala.zip4j.ZipFile(f); boolean e = z.isEncrypted(); z.close(); return e; }
+        catch (Exception ex) { return false; }
+    }
+
+    private void zip4jExtract(File src, String destDir, java.util.List<String> names, String password) throws Exception {
+        net.lingala.zip4j.ZipFile z = new net.lingala.zip4j.ZipFile(src);
+        if (password != null) z.setPassword(password.toCharArray());
+        try {
+            if (names != null && !names.isEmpty()) {
+                int total = names.size(), done = 0;
+                for (String nm : names) {
+                    z.extractFile(nm, destDir);
+                    done++;
+                    JSObject ev = new JSObject(); ev.put("done", done); ev.put("total", total); ev.put("name", nm);
+                    notifyListeners("opProgress", ev);
+                }
+            } else {
+                z.extractAll(destDir);
+            }
+        } finally { try { z.close(); } catch (Exception ignored) {} }
+    }
+
     @PluginMethod
     public void zipList(PluginCall call) {
         String uriStr = call.getString("uri");
@@ -683,6 +706,7 @@ public class AppsPlugin extends Plugin {
             zf.close();
             JSObject ret = new JSObject();
             ret.put("entries", arr);
+            ret.put("encrypted", zipIsEncrypted(f));
             call.resolve(ret);
         } catch (Exception e) { call.reject(e.getMessage()); }
     }
@@ -693,6 +717,18 @@ public class AppsPlugin extends Plugin {
         String entry = call.getString("entry");
         String dest = call.getString("dest");
         if (uriStr == null || entry == null || dest == null) { call.reject("bad args"); return; }
+        String password = call.getString("password");
+        File src0 = toFile(uriStr);
+        if (zipIsEncrypted(src0)) {
+            if (password == null) { call.reject("Требуется пароль", "ENCRYPTED"); return; }
+            try {
+                File out = new File(dest);
+                String destDir = out.getParentFile() != null ? out.getParentFile().getAbsolutePath() : dest;
+                java.util.List<String> one = new java.util.ArrayList<>(); one.add(entry);
+                zip4jExtract(src0, destDir, one, password);
+                JSObject ret = new JSObject(); ret.put("path", dest); call.resolve(ret); return;
+            } catch (Exception e) { call.reject("Неверный пароль или ошибка", "BADPASS"); return; }
+        }
         ZipFile zf = null;
         try {
             zf = new ZipFile(toFile(uriStr));
@@ -719,6 +755,18 @@ public class AppsPlugin extends Plugin {
         String destDir = call.getString("dest");
         if (uriStr == null || destDir == null) { call.reject("bad args"); return; }
         JSArray names = call.getArray("entries");
+        String password = call.getString("password");
+        File src = toFile(uriStr);
+        // архивы с паролем — через zip4j
+        if (zipIsEncrypted(src)) {
+            if (password == null) { call.reject("Требуется пароль", "ENCRYPTED"); return; }
+            try {
+                java.util.List<String> list = null;
+                if (names != null) { list = new java.util.ArrayList<>(); for (int i = 0; i < names.length(); i++) list.add(names.getString(i)); }
+                zip4jExtract(src, destDir, list, password);
+                JSObject ret = new JSObject(); ret.put("done", true); call.resolve(ret); return;
+            } catch (Exception e) { call.reject("Неверный пароль или ошибка", "BADPASS"); return; }
+        }
         ZipFile zf = null;
         try {
             zf = new ZipFile(toFile(uriStr));
