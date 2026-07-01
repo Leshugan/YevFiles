@@ -883,8 +883,13 @@ public class AppsPlugin extends Plugin {
     }
 
     private Uri contentUriFor(File f) {
-        try { return FileProvider.getUriForFile(getContext(), getContext().getPackageName() + ".appsfp", f); }
-        catch (Exception e) { return Uri.fromFile(f); }
+        String pkg = getContext().getPackageName();
+        // основной: провайдер Capacitor (.fileprovider) — он гарантированно зарегистрирован;
+        // его пути переопределены нашим file_paths.xml (весь storage)
+        try { return FileProvider.getUriForFile(getContext(), pkg + ".fileprovider", f); } catch (Exception ignored) {}
+        try { return FileProvider.getUriForFile(getContext(), pkg + ".appsfp", f); } catch (Exception ignored) {}
+        try { StrictMode.setVmPolicy(new StrictMode.VmPolicy.Builder().build()); } catch (Exception ignored) {}
+        return Uri.fromFile(f);
     }
 
     private String drawableToBase64(Drawable d) {
