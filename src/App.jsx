@@ -156,6 +156,7 @@ const EXT = {
   video: ["mp4", "mkv", "avi", "mov", "webm", "3gp", "flv"],
   audio: ["mp3", "wav", "ogg", "flac", "m4a", "aac"],
   archive: ["zip", "rar", "7z", "tar", "gz", "apk", "obb"],
+  font: ["ttf", "otf", "woff", "woff2"],
   code: ["js", "jsx", "ts", "json", "html", "css", "xml", "py", "java", "kt", "c", "cpp", "sh"],
 };
 const SYS_FOLDERS = {
@@ -183,6 +184,7 @@ const fileIcon = (name) => {
   const ext = (name.split(".").pop() || "").toLowerCase();
   if (ext === "pdf") return { d: I.pdf, c: "#E0574F" };
   if (ext === "apk") return { d: I.apk, c: "#6FD3A8" };
+  if (["ttf", "otf", "woff", "woff2"].includes(ext)) return { d: I.txt, c: "#C9A0FF" };
   if (ext === "lnk") return { d: I.lnk, c: GOLD };
   if (["txt", "md", "log", "ini", "cfg"].includes(ext)) return { d: I.txt, c: "#9FD0FF" };
   if (EXT.img.includes(ext)) return { d: I.img, c: "#7FB3FF" };
@@ -286,6 +288,21 @@ export default function App() {
   const [thumbs, setThumbs] = useState({});
   const isImg = (n) => /\.(png|jpg|jpeg|webp|gif|bmp)$/i.test(n);
   const isPdf = (n) => /\.pdf$/i.test(n);
+  const isFont = (n) => /\.(ttf|otf|woff2?|woff)$/i.test(n);
+  const [fontView, setFontView] = useState(null);
+  const [fontText, setFontText] = useState("");
+  const openFontViewer = async (e) => {
+    setFontText(""); setFontView({ name: e.name, loading: true });
+    try {
+      const r = await Filesystem.readFile({ path: e.uri });
+      const ext = (e.name.split(".").pop() || "").toLowerCase();
+      const fmt = ext === "otf" ? "opentype" : ext === "woff2" ? "woff2" : ext === "woff" ? "woff" : "truetype";
+      const mime = ext === "otf" ? "font/otf" : ext === "woff2" ? "font/woff2" : ext === "woff" ? "font/woff" : "font/ttf";
+      const fam = "fv_" + Date.now();
+      const css = "@font-face{font-family:'" + fam + "';src:url(data:" + mime + ";base64," + r.data + ") format('" + fmt + "');}";
+      setFontView({ name: e.name, family: fam, css });
+    } catch (err) { setFontView(null); showToast("Не удалось открыть шрифт: " + (err?.message || "")); }
+  };
   const cfs = (u) => { try { return Capacitor.convertFileSrc(u); } catch { return u; } };
   const [tabsMenu, setTabsMenu] = useState(false);
   const [selMenu, setSelMenu] = useState(false);
@@ -499,6 +516,8 @@ export default function App() {
   const backRef = useRef(() => {});
   const backExit = useRef(0);
   backRef.current = () => {
+    if (fontView) { setFontView(null); return; }
+    if (conflict) { resolveConflict("cancel", false); return; }
     if (settings) { if (settingsPage) { setSettingsPage(null); return; } setSettings(false); return; }
     if (arcView && arcSel.size > 0) { setArcSel(new Set()); return; }
     if (arcView) { setArcView(null); return; }
@@ -630,6 +649,7 @@ export default function App() {
     if (e.type === "directory") { setSlide(1); setTimeout(() => setSlide(0), 300); setTabPath(join(path, e.name)); return; }
     arcAnchor.current = ev && ev.currentTarget ? ev.currentTarget.getBoundingClientRect().top : null;
     const ext = (e.name.split(".").pop() || "").toLowerCase();
+    if (isFont(e.name)) { openFontViewer(e); return; }
     if (isImg(e.name)) {
       const mime = mimeOf(e.name), cat = defaultOpenAs(e.name), defs = loadMap(DEFKEY), d = defs[cat] || defs[mime];
       if (d === "__viewer__") { openViewer(e); return; }
@@ -1173,7 +1193,7 @@ export default function App() {
             <div style={{ display: "flex", justifyContent: "space-around", alignItems: "flex-end", padding: "16px 76px 14px 8px" }}>
               {[
                 [I.share, "Поделиться", () => Apps.share({ uri: viewerCur.uri, mime: mimeOf(viewerCur.name) }).catch(() => {}), false],
-                [I.rename, "Изменить", () => { Apps.editImage({ uri: viewerCur.uri, mime: mimeOf(viewerCur.name) }).catch((e) => showToast("Ошибка: " + (e?.message || ""))); }, false],
+                [I.rename, "Изменить", () => showOpenMenu(viewerCur, mimeOf(viewerCur.name), { edit: true }), false],
                 [I.info, "Свойства", () => setProps(viewerCur), false],
                 [I.trash, "Удалить", () => setViewerDel(true), true],
               ].map(([ic, lbl, fn, red], i) => (
@@ -1217,6 +1237,44 @@ export default function App() {
             <Prop k="Скрытый" v={isHidden(props) ? "Да" : "Нет"} />
             <button style={{ ...S.sheetGhost, width: "100%", marginTop: 14 }} onClick={() => setProps(null)}>Закрыть</button>
           </div>
+        </div>
+      )}
+
+      {/* ВЬЮВЕР ШРИФТОВ */}
+      {fontView && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 1350, background: BG, display: "flex", flexDirection: "column" }}>
+          {fontView.css && <style>{fontView.css}</style>}
+          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "calc(env(safe-area-inset-top) + 10px) 14px 10px", borderBottom: "1px solid " + LINE }}>
+            <button onClick={() => setFontView(null)} style={{ background: "transparent", border: "none", color: ACC, padding: 4, display: "flex" }}><Svg d={I.back} size={24} /></button>
+            <div style={{ flex: 1, minWidth: 0, color: TXT, fontSize: 15, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{fontView.name}</div>
+          </div>
+          {fontView.loading ? (
+            <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: SUB }}>Загрузка…</div>
+          ) : (
+            <div style={{ flex: 1, overflowY: "auto", padding: 16 }}>
+              <input value={fontText} onChange={(e) => setFontText(e.target.value)} placeholder="Введите свой текст…"
+                style={{ width: "100%", boxSizing: "border-box", background: BAR, border: "1px solid " + LINE, borderRadius: 12, color: TXT, fontSize: 15, padding: "12px 14px", marginBottom: 18, outline: "none" }} />
+              {fontText.trim() && [40, 28, 20].map((sz) => (
+                <div key={"c" + sz} style={{ fontFamily: "'" + fontView.family + "'", fontSize: sz, color: TXT, lineHeight: 1.35, marginBottom: 14, wordBreak: "break-word" }}>{fontText}</div>
+              ))}
+              {[
+                ["Français", "Ça fête où? Règle, hôte, cœur, naïve — été à Noël."],
+                ["Русский", "Съешь же ещё этих мягких французских булок да выпей чаю."],
+                ["English", "The quick brown fox jumps over the lazy dog."],
+                ["123", "0123456789 !?#$%&*()_+-=@"],
+              ].map(([lbl, txt]) => (
+                <div key={lbl} style={{ marginBottom: 20 }}>
+                  <div style={{ color: SUB, fontSize: 11, textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>{lbl}</div>
+                  {[34, 24, 18, 14].map((sz) => (
+                    <div key={lbl + sz} style={{ fontFamily: "'" + fontView.family + "'", fontSize: sz, color: TXT, lineHeight: 1.4, marginBottom: 8, wordBreak: "break-word" }}>{txt}</div>
+                  ))}
+                </div>
+              ))}
+              <div style={{ fontFamily: "'" + fontView.family + "'", fontSize: 26, color: TXT, marginBottom: 8 }}>ABCDEFGHIJKLMNOPQRSTUVWXYZ</div>
+              <div style={{ fontFamily: "'" + fontView.family + "'", fontSize: 26, color: TXT, marginBottom: 8 }}>abcdefghijklmnopqrstuvwxyz</div>
+              <div style={{ fontFamily: "'" + fontView.family + "'", fontSize: 26, color: TXT, marginBottom: 40 }}>АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ</div>
+            </div>
+          )}
         </div>
       )}
 
