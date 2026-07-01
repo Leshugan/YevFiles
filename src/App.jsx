@@ -215,6 +215,21 @@ export default function App() {
   const [query, setQuery] = useState(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [confirmDel, setConfirmDel] = useState(false);
+  const [delInfo, setDelInfo] = useState(null);
+  useEffect(() => {
+    if (!confirmDel) { setDelInfo(null); return; }
+    const items = [...sel].map((n) => entries.find((x) => x.name === n)).filter(Boolean);
+    let cancelled = false;
+    (async () => {
+      let bytes = 0, count = 0;
+      for (const e of items) {
+        if (e.type === "directory") { try { const r = await Apps.pathSize({ uri: e.uri }); bytes += r.bytes || 0; count += r.count || 0; } catch {} }
+        else { bytes += e.size || 0; count += 1; }
+      }
+      if (!cancelled) setDelInfo({ items: items.length, bytes, count });
+    })();
+    return () => { cancelled = true; };
+  }, [confirmDel]);
   const [sheet, setSheet] = useState(null);
   const [toast, setToast] = useState(null);
   const [slide, setSlide] = useState(0);
@@ -277,15 +292,19 @@ export default function App() {
   const [viewer, setViewer] = useState(null);       // { items:[entry], idx }
   const [viewerBar, setViewerBar] = useState(false); // видна ли панель
   const [dragX, setDragX] = useState(0);
+  const [dragY, setDragY] = useState(0);
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const pinchRef = useRef(null);
   const [dragging, setDragging] = useState(false);
   const [viewerDel, setViewerDel] = useState(false);
   const vTouch = useRef(null);
   const openViewer = (entry) => {
     const items = entries.filter((e) => e.type !== "directory" && isImg(e.name));
     const idx = items.findIndex((e) => e.name === entry.name);
-    setViewer({ items, idx: idx < 0 ? 0 : idx }); setViewerBar(true); setDragX(0); setViewerDel(false);
+    setViewer({ items, idx: idx < 0 ? 0 : idx }); setViewerBar(true); setDragX(0); setDragY(0); setZoom(1); setPan({ x: 0, y: 0 }); setViewerDel(false);
   };
-  const viewerGo = (d) => { setViewer((v) => { if (!v) return v; const ni = v.idx + d; if (ni < 0 || ni >= v.items.length) return v; return { ...v, idx: ni }; }); };
+  const viewerGo = (d) => { setZoom(1); setPan({ x: 0, y: 0 }); setViewer((v) => { if (!v) return v; const ni = v.idx + d; if (ni < 0 || ni >= v.items.length) return v; return { ...v, idx: ni }; }); };
   const viewerCur = viewer && viewer.items[viewer.idx];
   const viewerDelete = async () => {
     if (!viewerCur) return; setViewerDel(false);
@@ -631,6 +650,7 @@ export default function App() {
   const doCreateNomedia = async () => { try { await Filesystem.writeFile({ path: targetUri(".nomedia"), data: "", encoding: Encoding.UTF8 }); refresh(); showToast("Создан .nomedia"); } catch (e) { showToast("Ошибка: " + e.message); } };
   const doRename = async (oldName, newName) => { setSheet(null); if (!newName || newName === oldName) return; const e = byName(oldName); if (!e) return; try { await Filesystem.rename({ from: e.uri, to: targetUri(newName) }); exitSel(); refresh(); } catch (er) { showToast("Ошибка: " + er.message); } };
   const delTree = async (e) => {
+    try { const r = await Apps.deletePath({ uri: e.uri }); if (r && r.ok) return; } catch {}
     try { const r = await Apps.delete({ uri: e.uri }); if (r && r.deleted) return; } catch {}
     // фолбэк
     if (e.type === "directory") {
@@ -828,7 +848,7 @@ export default function App() {
         </span>
         {themeBtn && (
           <button onClick={toggleTheme} aria-label="Тема"
-            style={{ position: "absolute", right: 12, top: "calc(100% + 4px)", zIndex: 7, width: 34, height: 34, borderRadius: 17, border: "none", background: BAR, color: ACC, display: "flex", alignItems: "center", justifyContent: "center", padding: 0, margin: 0, lineHeight: 0, boxShadow: "0 1px 0 rgba(255,255,255,.05) inset, 0 3px 10px rgba(0,0,0,.20)" }}>
+            style={{ position: "absolute", right: 12, top: "calc(100% + 4px)", zIndex: 7, width: 34, height: 34, borderRadius: 17, border: "1px solid rgba(255,255,255,.14)", background: BAR, color: ACC, display: "flex", alignItems: "center", justifyContent: "center", padding: 0, margin: 0, lineHeight: 0, boxShadow: "0 2px 8px rgba(0,0,0,.28)" }}>
             <Svg d={theme === "light" ? I.sun : I.moon} size={18} />
           </button>
         )}
@@ -1058,21 +1078,32 @@ export default function App() {
       {viewer && viewerCur && (
         <div style={{ position: "fixed", inset: 0, zIndex: 1300, background: "#000", display: "flex", flexDirection: "column", touchAction: "none", overflow: "hidden" }}>
           <div style={{ flex: 1, position: "relative", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" }}
-            onTouchStart={(e) => { const t = e.touches[0]; vTouch.current = { x: t.clientX, y: t.clientY, t: Date.now() }; setDragging(true); }}
-            onTouchMove={(e) => { if (!vTouch.current) return; const t = e.touches[0]; const dx = t.clientX - vTouch.current.x; const dy = t.clientY - vTouch.current.y; if (Math.abs(dx) > Math.abs(dy)) setDragX(dx); }}
+            onTouchStart={(e) => {
+              if (e.touches.length === 2) { const a = e.touches[0], b = e.touches[1]; pinchRef.current = { d: Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY), z: zoom }; vTouch.current = null; setDragging(true); return; }
+              const t = e.touches[0]; vTouch.current = { x: t.clientX, y: t.clientY, t: Date.now(), px: pan.x, py: pan.y }; setDragging(true);
+            }}
+            onTouchMove={(e) => {
+              if (pinchRef.current && e.touches.length === 2) { const a = e.touches[0], b = e.touches[1]; const d = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY); setZoom(Math.max(1, Math.min(5, pinchRef.current.z * d / pinchRef.current.d))); return; }
+              if (!vTouch.current) return; const t = e.touches[0]; const dx = t.clientX - vTouch.current.x; const dy = t.clientY - vTouch.current.y;
+              if (zoom > 1) { setPan({ x: vTouch.current.px + dx, y: vTouch.current.py + dy }); return; }
+              if (dy > Math.abs(dx)) setDragY(dy); else setDragX(dx);
+            }}
             onTouchEnd={(e) => {
               setDragging(false);
-              const v = vTouch.current; vTouch.current = null; if (!v) { setDragX(0); return; }
+              if (pinchRef.current) { pinchRef.current = null; if (zoom < 1.05) { setZoom(1); setPan({ x: 0, y: 0 }); } return; }
+              const v = vTouch.current; vTouch.current = null; if (!v) { setDragX(0); setDragY(0); return; }
+              if (zoom > 1) return;
               const t = e.changedTouches[0]; const dx = t.clientX - v.x; const dy = t.clientY - v.y; const dt = Date.now() - v.t;
-              if (Math.abs(dx) < 12 && Math.abs(dy) < 12 && dt < 300) { setViewerBar((b) => !b); setDragX(0); return; }
+              if (Math.abs(dx) < 12 && Math.abs(dy) < 12 && dt < 300) { setViewerBar((b) => !b); setDragX(0); setDragY(0); return; }
+              if (dy > 120 && dy > Math.abs(dx)) { setViewer(null); setDragX(0); setDragY(0); return; }
               const TH = Math.min(45, window.innerWidth * 0.10);
               const flick = dt < 260 && Math.abs(dx) > 28;
               if ((dx < -TH || (flick && dx < 0)) && viewer.idx < viewer.items.length - 1) viewerGo(1);
               else if ((dx > TH || (flick && dx > 0)) && viewer.idx > 0) viewerGo(-1);
-              setDragX(0);
+              setDragX(0); setDragY(0);
             }}>
             <img key={viewerCur.uri} src={cfs(viewerCur.uri)} alt={viewerCur.name}
-              style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", transform: "translateX(" + dragX + "px)", transition: dragging ? "none" : "transform .2s ease", userSelect: "none", pointerEvents: "none" }} />
+              style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", transform: "translate(" + (pan.x + dragX) + "px," + (pan.y + dragY) + "px) scale(" + zoom + ")", transition: dragging ? "none" : "transform .2s ease", opacity: dragY > 0 ? Math.max(0.3, 1 - dragY / 500) : 1, userSelect: "none", pointerEvents: "none" }} />
           </div>
 
           {/* заголовок сверху: имя + счётчик + крестик справа */}
@@ -1139,9 +1170,15 @@ export default function App() {
       {confirmDel && (
         <>
           <div style={{ position: "fixed", inset: 0, zIndex: 1290 }} onClick={() => setConfirmDel(null)} />
-          <div style={{ position: "fixed", zIndex: 1300, left: Math.max(80, Math.min(confirmDel.cx, window.innerWidth - 80)), transform: "translateX(-50%)", top: confirmDel.top - 56, display: "flex", gap: 8, background: BAR, border: "1px solid " + LINE, borderRadius: 14, padding: 8, boxShadow: "0 1px 0 rgba(255,255,255,.07) inset, 0 4px 12px rgba(0,0,0,.4), 0 18px 48px rgba(0,0,0,.62)", animation: "popCenter .15s ease" }}>
-            <button onClick={doDelete} style={{ background: RED, border: "none", borderRadius: 8, color: "#fff", fontSize: 14, fontWeight: 700, padding: "8px 18px" }}>Да</button>
-            <button onClick={() => setConfirmDel(null)} style={{ background: ROW2, border: "1px solid " + LINE, borderRadius: 8, color: SUB, fontSize: 14, padding: "8px 18px" }}>Нет</button>
+          <div style={{ position: "fixed", zIndex: 1300, left: Math.max(90, Math.min(confirmDel.cx, window.innerWidth - 90)), transform: "translateX(-50%)", top: confirmDel.top - 92, minWidth: 180, background: BAR, border: "1px solid " + LINE, borderRadius: 14, padding: 10, boxShadow: "0 1px 0 rgba(255,255,255,.07) inset, 0 4px 12px rgba(0,0,0,.4), 0 18px 48px rgba(0,0,0,.62)", animation: "popCenter .15s ease" }}>
+            <div style={{ color: TXT, fontSize: 13, textAlign: "center", marginBottom: 8 }}>
+              Удалить {delInfo ? delInfo.items : [...sel].length}?<br />
+              <span style={{ color: SUB, fontSize: 12 }}>{delInfo ? (delInfo.count + " файл(ов) · " + fmtSizeShort(delInfo.bytes)) : "подсчёт…"}</span>
+            </div>
+            <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+              <button onClick={doDelete} style={{ background: RED, border: "none", borderRadius: 8, color: "#fff", fontSize: 14, fontWeight: 700, padding: "8px 20px" }}>Да</button>
+              <button onClick={() => setConfirmDel(null)} style={{ background: ROW2, border: "1px solid " + LINE, borderRadius: 8, color: SUB, fontSize: 14, padding: "8px 20px" }}>Нет</button>
+            </div>
           </div>
         </>
       )}
@@ -1210,9 +1247,14 @@ export default function App() {
             <div style={S.sheet} onClick={(e) => e.stopPropagation()}>
               {/\.apk$/i.test(openMenu.file.name) && openMenu.apkInfo && (
                 <div style={{ padding: "10px 12px", margin: "0 0 12px", background: ROW2, borderRadius: 12, fontSize: 13, lineHeight: 1.7, color: SUB }}>
-                  {openMenu.apkInfo.label && <div style={{ color: TXT, fontWeight: 600, fontSize: 14, marginBottom: 2 }}>{openMenu.apkInfo.label}</div>}
-                  {openMenu.apkInfo.package && <div style={{ color: "#7FB4E6", wordBreak: "break-all" }}>{openMenu.apkInfo.package}</div>}
-                  {openMenu.apkInfo.versionName && <div>Версия: <span style={{ color: TXT }}>{openMenu.apkInfo.versionName} ({openMenu.apkInfo.versionCode})</span></div>}
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
+                    {openMenu.apkInfo.icon && <img src={openMenu.apkInfo.icon} alt="" style={{ width: 40, height: 40, borderRadius: 9, flexShrink: 0 }} />}
+                    <div style={{ minWidth: 0 }}>
+                      {openMenu.apkInfo.label && <div style={{ color: TXT, fontWeight: 600, fontSize: 15 }}>{openMenu.apkInfo.label}</div>}
+                      {openMenu.apkInfo.package && <div style={{ color: "#7FB4E6", wordBreak: "break-all", fontSize: 12 }}>{openMenu.apkInfo.package}</div>}
+                    </div>
+                  </div>
+                  {openMenu.apkInfo.versionName && <div>Версия: <span style={{ color: TXT }}>{openMenu.apkInfo.versionName} ({openMenu.apkInfo.versionCode})</span>{openMenu.apkInfo.installed && openMenu.apkInfo.installedVersionCode != null && Number(openMenu.apkInfo.versionCode) > Number(openMenu.apkInfo.installedVersionCode) && <span style={{ color: "#5FCF80", fontWeight: 700 }}> (новее)</span>}</div>}
                   {openMenu.apkInfo.installed && <div>Установлено: <span style={{ color: GOLD }}>{openMenu.apkInfo.installedVersionName || "—"}</span></div>}
                   <div>Целевая ОС: <span style={{ color: TXT }}>SDK {openMenu.apkInfo.targetSdk}</span></div>
                   {openMenu.apkInfo.minSdk != null && <div>Минимальная ОС: <span style={{ color: TXT }}>SDK {openMenu.apkInfo.minSdk}</span></div>}
@@ -1222,7 +1264,7 @@ export default function App() {
                 <div style={{ ...S.sheetTitle, marginBottom: 0, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{openMenu.file.name}</div>
                 <button style={{ ...S.iconBtn, color: openMenu.editHide ? ACC : SUB }} onClick={() => setOpenMenu({ ...openMenu, editHide: !openMenu.editHide })}><Svg d={I.rename} size={20} /></button>
               </div>
-              {(() => { const isArc = EXT.archive.includes((openMenu.file.name.split(".").pop() || "").toLowerCase()) && !/\.apk$/i.test(openMenu.file.name); return (isArc || isImg(openMenu.file.name) || openMenu.edit) ? null : (<>
+              {(() => { const isArc = EXT.archive.includes((openMenu.file.name.split(".").pop() || "").toLowerCase()) && !/\.apk$/i.test(openMenu.file.name); return (isArc || isImg(openMenu.file.name) || /\.apk$/i.test(openMenu.file.name) || openMenu.edit) ? null : (<>
               <div style={{ fontSize: 12, color: SUB, marginBottom: 6 }}>Открыть как:</div>
               <div style={{ display: "flex", gap: 6, overflowX: "auto", marginBottom: 14, paddingBottom: 2 }}>
                 {OPEN_AS.map(([m, lbl]) => (
@@ -1279,6 +1321,12 @@ export default function App() {
                   style={{ ...S.appRow, color: "#6FD3A8" }}>
                   <span style={{ width: 38, display: "flex", justifyContent: "center" }}><Svg d={I.plus} size={28} /></span>
                   <span style={{ flex: 1, fontSize: 15 }}>Установить / Обновить</span>
+                </div>
+              )}
+              {!openMenu.editHide && /\.apk$/i.test(openMenu.file.name) && (
+                <div onClick={() => openArchive(openMenu.file)} style={{ ...S.appRow, color: GOLD }}>
+                  <span style={{ width: 38, display: "flex", justifyContent: "center" }}><Svg d={I.folder} size={26} /></span>
+                  <span style={{ flex: 1, fontSize: 15 }}>Открыть как архив</span>
                 </div>
               )}
               {!openMenu.editHide && !openMenu.edit && (
@@ -1559,5 +1607,5 @@ const S = {
   appRow: { display: "flex", alignItems: "center", gap: 14, padding: "10px 2px", borderBottom: "1px solid " + LINE },
   cbox: { width: 22, height: 22, borderRadius: 6, border: "2px solid " + SUB, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, color: "#fff", flexShrink: 0 },
   cboxOn: { background: ACC, borderColor: ACC },
-  toast: { position: "fixed", left: "50%", bottom: 90, transform: "translateX(-50%)", background: ROW2, color: TXT, padding: "10px 18px", borderRadius: 20, fontSize: 13, border: "1px solid " + LINE, boxShadow: "0 1px 0 rgba(255,255,255,.05) inset, 0 4px 14px rgba(0,0,0,.28)", zIndex: 1500, animation: "toastUp .34s cubic-bezier(.2,.9,.3,1)", maxWidth: "80%", textAlign: "center" },
+  toast: { position: "fixed", left: "50%", bottom: 90, transform: "translateX(-50%)", pointerEvents: "none", background: ROW2, color: TXT, padding: "10px 18px", borderRadius: 20, fontSize: 13, border: "1px solid " + LINE, boxShadow: "0 1px 0 rgba(255,255,255,.05) inset, 0 4px 14px rgba(0,0,0,.28)", zIndex: 1500, animation: "toastUp .34s cubic-bezier(.2,.9,.3,1)", maxWidth: "80%", textAlign: "center" },
 };
