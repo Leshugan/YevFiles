@@ -794,12 +794,87 @@ public class AppsPlugin extends Plugin {
         } finally { try { z.close(); } catch (Exception ignored) {} }
     }
 
+    // ==== gz / tar / tgz поддержка (без внешних библиотек) ====
+    private String arcKind(File f) {
+        String n = f.getName().toLowerCase();
+        if (n.endsWith(".tar.gz") || n.endsWith(".tgz")) return "tgz";
+        if (n.endsWith(".tar")) return "tar";
+        if (n.endsWith(".gz")) return "gz";
+        return "zip";
+    }
+    private String gzBase(File f) {
+        String n = f.getName(); String low = n.toLowerCase();
+        if (low.endsWith(".tar.gz")) return n.substring(0, n.length() - 3);
+        if (low.endsWith(".tgz")) return n.substring(0, n.length() - 4) + ".tar";
+        if (low.endsWith(".gz")) return n.substring(0, n.length() - 3);
+        return n;
+    }
+    private void gzExtract(File f, File outFile) throws Exception {
+        if (outFile.getParentFile() != null) outFile.getParentFile().mkdirs();
+        InputStream in = new java.util.zip.GZIPInputStream(new FileInputStream(f));
+        OutputStream os = new FileOutputStream(outFile);
+        byte[] buf = new byte[65536]; int n; while ((n = in.read(buf)) > 0) os.write(buf, 0, n);
+        os.close(); in.close();
+    }
+    private InputStream tarStream(File f, String kind) throws Exception {
+        return kind.equals("tgz") ? new java.util.zip.GZIPInputStream(new FileInputStream(f)) : new FileInputStream(f);
+    }
+    private int readFully(InputStream in, byte[] b, int len) throws Exception { int off = 0; while (off < len) { int r = in.read(b, off, len - off); if (r < 0) break; off += r; } return off; }
+    private void skipFully(InputStream in, long n) throws Exception { byte[] t = new byte[8192]; while (n > 0) { int want = (int) Math.min(t.length, n); int r = in.read(t, 0, want); if (r < 0) break; n -= r; } }
+    private String tarStr(byte[] b, int off, int len) { int end = off; while (end < off + len && b[end] != 0) end++; return new String(b, off, end - off).trim(); }
+    private long tarOctal(byte[] b, int off, int len) { long v = 0; for (int i = off; i < off + len; i++) { int c = b[i] & 0xff; if (c == 0 || c == ' ') continue; if (c < '0' || c > '7') continue; v = v * 8 + (c - '0'); } return v; }
+    private java.util.List<String[]> tarEntries(InputStream in) throws Exception {
+        java.util.List<String[]> out = new java.util.ArrayList<>(); byte[] hdr = new byte[512];
+        while (true) {
+            if (readFully(in, hdr, 512) < 512) break;
+            boolean zero = true; for (byte b : hdr) if (b != 0) { zero = false; break; } if (zero) break;
+            String name = tarStr(hdr, 0, 100); if (name.isEmpty()) break;
+            long size = tarOctal(hdr, 124, 12); char type = (char) hdr[156];
+            out.add(new String[]{ name, String.valueOf(size), String.valueOf(type) });
+            skipFully(in, ((size + 511) / 512) * 512);
+        }
+        return out;
+    }
+    private void tarExtract(InputStream in, File destDir, java.util.Set<String> only, File singleOut, int total) throws Exception {
+        byte[] hdr = new byte[512]; byte[] buf = new byte[65536]; int done = 0;
+        while (true) {
+            if (readFully(in, hdr, 512) < 512) break;
+            boolean zero = true; for (byte b : hdr) if (b != 0) { zero = false; break; } if (zero) break;
+            String name = tarStr(hdr, 0, 100); if (name.isEmpty()) break;
+            long size = tarOctal(hdr, 124, 12); char type = (char) hdr[156];
+            boolean isDir = type == '5' || name.endsWith("/");
+            long pad = ((size + 511) / 512) * 512 - size;
+            boolean take = !isDir && (only == null || only.contains(name));
+            if (take) {
+                File out = singleOut != null ? singleOut : new File(destDir, name);
+                if (out.getParentFile() != null) out.getParentFile().mkdirs();
+                OutputStream fos = new FileOutputStream(out);
+                long rem = size; while (rem > 0) { int want = (int) Math.min(buf.length, rem); int got = in.read(buf, 0, want); if (got < 0) break; fos.write(buf, 0, got); rem -= got; }
+                fos.close(); skipFully(in, pad);
+                done++;
+                JSObject ev = new JSObject(); ev.put("done", done); ev.put("total", total); ev.put("name", name); notifyListeners("opProgress", ev);
+                if (singleOut != null) return;
+            } else { skipFully(in, size + pad); }
+        }
+    }
+
     @PluginMethod
     public void zipList(PluginCall call) {
         String uriStr = call.getString("uri");
         if (uriStr == null) { call.reject("no uri"); return; }
         try {
             File f = toFile(uriStr);
+            String kind = arcKind(f);
+            if (kind.equals("gz")) {
+                JSArray arr = new JSArray(); JSObject o = new JSObject(); o.put("name", gzBase(f)); o.put("size", 0); o.put("dir", false); arr.put(o);
+                JSObject ret = new JSObject(); ret.put("entries", arr); ret.put("encrypted", false); call.resolve(ret); return;
+            }
+            if (kind.equals("tar") || kind.equals("tgz")) {
+                InputStream in = tarStream(f, kind); java.util.List<String[]> es = tarEntries(in); in.close();
+                JSArray arr = new JSArray();
+                for (String[] e : es) { JSObject o = new JSObject(); o.put("name", e[0]); o.put("size", Long.parseLong(e[1])); o.put("dir", e[2].equals("5") || e[0].endsWith("/")); arr.put(o); }
+                JSObject ret = new JSObject(); ret.put("entries", arr); ret.put("encrypted", false); call.resolve(ret); return;
+            }
             boolean enc = zipIsEncrypted(f);
             JSArray arr = new JSArray();
             if (enc) {
@@ -842,6 +917,14 @@ public class AppsPlugin extends Plugin {
         if (uriStr == null || entry == null || dest == null) { call.reject("bad args"); return; }
         String password = call.getString("password");
         File src0 = toFile(uriStr);
+        String k0 = arcKind(src0);
+        if (!k0.equals("zip")) {
+            try {
+                if (k0.equals("gz")) { gzExtract(src0, new File(dest)); }
+                else { InputStream in = tarStream(src0, k0); java.util.Set<String> only = new java.util.HashSet<>(); only.add(entry); tarExtract(in, null, only, new File(dest), 1); in.close(); }
+                JSObject ret = new JSObject(); ret.put("path", dest); call.resolve(ret); return;
+            } catch (Exception e) { call.reject(e.getMessage()); return; }
+        }
         if (zipIsEncrypted(src0)) {
             if (password == null) { call.reject("Требуется пароль", "ENCRYPTED"); return; }
             try {
@@ -880,6 +963,22 @@ public class AppsPlugin extends Plugin {
         JSArray names = call.getArray("entries");
         String password = call.getString("password");
         File src = toFile(uriStr);
+        String kA = arcKind(src);
+        if (!kA.equals("zip")) {
+            try {
+                if (kA.equals("gz")) {
+                    File out = new File(destDir, gzBase(src)); gzExtract(src, out);
+                    JSObject ev = new JSObject(); ev.put("done", 1); ev.put("total", 1); ev.put("name", gzBase(src)); notifyListeners("opProgress", ev);
+                } else {
+                    java.util.Set<String> only = null; int total = 0;
+                    InputStream cin = tarStream(src, kA); java.util.List<String[]> es = tarEntries(cin); cin.close();
+                    for (String[] e : es) if (!(e[2].equals("5") || e[0].endsWith("/"))) total++;
+                    if (names != null) { only = new java.util.HashSet<>(); for (int i = 0; i < names.length(); i++) only.add(names.getString(i)); total = only.size(); }
+                    InputStream in = tarStream(src, kA); tarExtract(in, new File(destDir), only, null, total); in.close();
+                }
+                JSObject ret = new JSObject(); ret.put("done", true); call.resolve(ret); return;
+            } catch (Exception e) { call.reject(e.getMessage()); return; }
+        }
         // архивы с паролем — через zip4j
         if (zipIsEncrypted(src)) {
             if (password == null) { call.reject("Требуется пароль", "ENCRYPTED"); return; }
