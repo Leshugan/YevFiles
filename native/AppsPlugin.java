@@ -777,16 +777,6 @@ public class AppsPlugin extends Plugin {
         }).start();
     }
 
-    private boolean deleteRecursive(File f) {
-        try {
-            if (f.isDirectory()) {
-                File[] kids = f.listFiles();
-                if (kids != null) for (File k : kids) deleteRecursive(k);
-            }
-            return f.delete();
-        } catch (Exception e) { return false; }
-    }
-
     @PluginMethod
     public void share(PluginCall call) {
         String uriStr = call.getString("uri");
