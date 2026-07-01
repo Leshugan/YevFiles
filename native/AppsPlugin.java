@@ -427,17 +427,39 @@ public class AppsPlugin extends Plugin {
                 if (android.os.Build.VERSION.SDK_INT >= 24) ret.put("minSdk", pi.applicationInfo.minSdkVersion);
                 try { ret.put("label", pm.getApplicationLabel(pi.applicationInfo).toString()); } catch (Exception ignored) {}
                 try { Drawable ic = pm.getApplicationIcon(pi.applicationInfo); ret.put("icon", drawableToBase64(ic)); } catch (Exception ignored) {}
-                // установлена ли уже + версия установленной
+                // подпись apk (из архива)
+                String apkSig = null;
+                try { android.content.pm.PackageInfo sp = pm.getPackageArchiveInfo(p, PackageManager.GET_SIGNATURES); apkSig = firstCertSha256(sp); } catch (Exception ignored) {}
+                if (apkSig != null) ret.put("sig", apkSig);
+                // установлена ли уже + версия + подпись установленной
                 try {
                     android.content.pm.PackageInfo inst = pm.getPackageInfo(pi.packageName, 0);
                     ret.put("installedVersionName", inst.versionName);
                     ret.put("installedVersionCode", android.os.Build.VERSION.SDK_INT >= 28 ? inst.getLongVersionCode() : inst.versionCode);
                     ret.put("installed", true);
+                    try {
+                        android.content.pm.PackageInfo instSig = pm.getPackageInfo(pi.packageName, PackageManager.GET_SIGNATURES);
+                        String is = firstCertSha256(instSig);
+                        if (is != null) ret.put("installedSig", is);
+                        if (apkSig != null && is != null) ret.put("sigMatch", apkSig.equals(is));
+                    } catch (Exception ignored) {}
                 } catch (Exception e) { ret.put("installed", false); }
             }
             if (tmpBase != null) try { tmpBase.delete(); } catch (Exception ignored) {}
             call.resolve(ret);
         } catch (Exception e) { call.reject(e.getMessage()); }
+    }
+
+    private String firstCertSha256(android.content.pm.PackageInfo pi) {
+        try {
+            android.content.pm.Signature[] sigs = pi.signatures;
+            if (sigs == null || sigs.length == 0) return null;
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+            byte[] d = md.digest(sigs[0].toByteArray());
+            StringBuilder sb = new StringBuilder();
+            for (byte b : d) sb.append(String.format("%02X", b));
+            return sb.toString();
+        } catch (Exception e) { return null; }
     }
 
     private File extractBaseApk(File pkg) {
