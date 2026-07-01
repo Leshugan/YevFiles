@@ -15,7 +15,7 @@ const THEMES = {
 const DIR = Directory.ExternalStorage;
 const APP_VERSION = "fm-2026.06.27-a";
 const TKEY = "fm_tabs_v1", SKEY = "fm_startup_v1", METAKEY = "fm_meta_v1", SORTKEY = "fm_sort_v1";
-const DEFKEY = "fm_defaults_v1", HIDEKEY = "fm_hideapps_v1", ICONKEY = "fm_foldericons_v1", ORDERKEY = "fm_menuorder_v1";
+const DEFKEY = "fm_defaults_v1", HIDEKEY = "fm_hideapps_v1", ICONKEY = "fm_foldericons_v1";
 const loadMap = (k) => { try { return JSON.parse(ls.get(k)) || {}; } catch { return {}; } };
 const saveMap = (k, m) => ls.set(k, JSON.stringify(m));
 const OPEN_AS = [["*/*", "Любой тип"], ["text/plain", "Текст"], ["image/*", "Изображение"], ["video/*", "Видео"], ["audio/*", "Аудио"], ["application/pdf", "PDF"]];
@@ -107,7 +107,6 @@ const I = {
   sort: <><path d="M7 4v16M7 20l-3-3M7 4l3 3" /><path d="M17 20V4M17 4l3 3M17 20l-3-3" /></>,
   gear: <><circle cx="12" cy="12" r="3" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2" /></>,
   eye: <><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" /><circle cx="12" cy="12" r="3" /></>,
-  drag: <><path d="M4 8h16M4 12h16M4 16h16" /></>,
   eyeOff: <><path d="M3 3l18 18" /><path d="M10.6 10.6a3 3 0 0 0 4.2 4.2" /><path d="M9.9 5.1A9.7 9.7 0 0 1 12 5c6.5 0 10 7 10 7a16 16 0 0 1-3.2 3.9M6.2 6.2A16 16 0 0 0 2 12s3.5 7 10 7a9.7 9.7 0 0 0 3.1-.5" /></>,
   pinT: <><path d="M12 3v8M8 7l4-4 4 4" /><path d="M5 14h14M5 14v6h14v-6" /></>,
   pinB: <><path d="M12 21v-8M8 17l4 4 4-4" /><path d="M5 10h14M5 10V4h14v6" /></>,
@@ -645,64 +644,6 @@ export default function App() {
   const startExtract = (uri, names, label) => { setOpenMenu(null); setArcView(null); setArcSel(new Set()); setPendingExtract({ uri, names: names || null, label: label || "архив" }); };
   const doExtractHere = async () => { const pe = pendingExtract; setPendingExtract(null); if (pe) await extractAllTo(pe.uri, path, pe.names); };
   const arcBase = (n) => n.replace(/\.[^.]+$/, "");
-  const [dragId, setDragId] = useState(null);
-  const dragRef = useRef(null);
-  const suppressClick = useRef(false);
-  const menuCat = (om) => { const f = om.file; const ext = (f.name.split(".").pop() || "").toLowerCase(); if (om.split) return "split"; if (/\.apk$/i.test(f.name)) return "apk"; if (EXT.archive.includes(ext)) return "archive"; if (isImg(f.name)) return "image"; return om.mime; };
-  const buildMenuItems = (om) => {
-    const f = om.file; const ext = (f.name.split(".").pop() || "").toLowerCase();
-    const isApkF = /\.apk$/i.test(f.name); const isArc = EXT.archive.includes(ext) && !isApkF; const items = [];
-    if (isImg(f.name)) items.push({ id: "viewer", label: "Открыть", d: I.img, size: 26, color: GOLD, onClick: () => { const defs = loadMap(DEFKEY); if (om.useDefault) defs[defaultOpenAs(f.name)] = "__viewer__"; else if (defs[defaultOpenAs(f.name)]) delete defs[defaultOpenAs(f.name)]; saveMap(DEFKEY, defs); setOpenMenu(null); openViewer(f); } });
-    if (isApkF) {
-      items.push({ id: "apk_archive", label: "Открыть как архив", d: I.folder, size: 26, color: GOLD, onClick: () => openArchive(f) });
-      items.push({ id: "apk_install", label: "Установщик пакетов", d: I.plus, size: 28, color: "#6FD3A8", onClick: () => { setOpenMenu(null); Apps.installApk({ uri: f.uri }).catch((er) => showToast("Ошибка: " + (er?.message || ""))); } });
-    }
-    if (om.split) {
-      items.push({ id: "split_install", label: "Установщик пакетов (split)", d: I.plus, size: 28, color: "#6FD3A8", onClick: () => { setOpenMenu(null); showToast("Установка пакета…"); Apps.installSplit({ uri: f.uri }).catch((er) => showToast("Ошибка: " + (er?.message || ""))); } });
-      items.push({ id: "split_archive", label: "Открыть как архив", d: I.folder, size: 26, color: GOLD, onClick: () => openArchive(f) });
-    }
-    if (isArc) {
-      items.push({ id: "arc_open", label: "Открыть", d: I.folder, size: 26, color: GOLD, onClick: () => openArchive(f) });
-      items.push({ id: "arc_to", label: "Распаковать в…", d: I.dl, size: 22, color: TXT, onClick: () => startExtract(f.uri, null, f.name) });
-      items.push({ id: "arc_folder", label: "Распаковать в папку «" + arcBase(f.name) + "»", d: I.folder, size: 22, color: TXT, onClick: () => { setOpenMenu(null); extractAllTo(f.uri, join(path, arcBase(f.name)), null); } });
-      items.push({ id: "arc_here", label: "Распаковать здесь", d: I.dl, size: 22, color: TXT, onClick: () => { setOpenMenu(null); extractAllTo(f.uri, path, null); } });
-    }
-    (om.apps || []).forEach((a) => items.push({ id: "app|" + a.packageName + "|" + a.activityName, label: a.label, icon: a.icon, color: TXT, onClick: () => pickApp(a) }));
-    return items;
-  };
-  const orderItems = (items, cat) => { const saved = loadMap(ORDERKEY)[cat] || []; const byId = {}; items.forEach((it) => (byId[it.id] = it)); const res = []; saved.forEach((id) => { if (byId[id]) { res.push(byId[id]); delete byId[id]; } }); items.forEach((it) => { if (byId[it.id]) res.push(it); }); return res; };
-  const toggleHideItem = (cat, id) => { const m = loadMap(HIDEKEY); const arr = new Set(m[cat] || []); if (arr.has(id)) arr.delete(id); else arr.add(id); m[cat] = [...arr]; saveMap(HIDEKEY, m); setOpenMenu((o) => (o ? { ...o } : o)); };
-  const menuDragStart = (idx, e, ordered) => {
-    if (!openMenu || !openMenu.editHide) return;
-    const id = ordered[idx] && ordered[idx].id; if (!id) return;
-    const y0 = e.touches[0].clientY, x0 = e.touches[0].clientX;
-    dragRef.current = { id, active: false, moved: false, y0, x0, order: ordered.map((x) => x.id), t: setTimeout(() => {
-      const dt = dragRef.current; if (!dt || dt.moved) return; dt.active = true;
-      const els = dt.order.map((i) => document.querySelector('[data-mid="' + i + '"]'));
-      dt.slots = els.map((el) => { const r = el.getBoundingClientRect(); return { top: r.top, h: r.height, mid: r.top + r.height / 2 }; });
-      dt.els = els; dt.startIndex = dt.order.indexOf(id); dt.curIndex = dt.startIndex; setDragId(id); buzz(12);
-    }, 320) };
-  };
-  const menuDragMove = (e) => {
-    const dt = dragRef.current; if (!dt) return;
-    if (!dt.active) { const tt = e.touches[0]; if (Math.abs(tt.clientX - dt.x0) > 8 || Math.abs(tt.clientY - dt.y0) > 8) { dt.moved = true; if (dt.t) clearTimeout(dt.t); } return; }
-    e.preventDefault(); const t = e.touches[0]; if (!dt.slots) return;
-    const startSlot = dt.slots[dt.startIndex], self = dt.els[dt.startIndex];
-    const dragY = t.clientY - dt.y0;
-    if (self) { self.style.transition = "none"; self.style.transform = "translateY(" + dragY + "px)"; self.style.zIndex = "30"; self.style.position = "relative"; }
-    const dragMid = startSlot.mid + dragY; let newIndex = dt.startIndex;
-    for (let i = 0; i < dt.slots.length; i++) { if (i === dt.startIndex) continue; const s = dt.slots[i]; if (i < dt.startIndex && dragMid < s.mid) newIndex = Math.min(newIndex, i); else if (i > dt.startIndex && dragMid > s.mid) newIndex = Math.max(newIndex, i); }
-    if (newIndex !== dt.curIndex) { dt.curIndex = newIndex; const dragH = startSlot.h; dt.order.forEach((id, i) => { if (i === dt.startIndex) return; const el = dt.els[i]; if (!el) return; let shift = 0; if (dt.startIndex < newIndex && i > dt.startIndex && i <= newIndex) shift = -dragH; else if (dt.startIndex > newIndex && i < dt.startIndex && i >= newIndex) shift = dragH; el.style.transition = "transform 200ms cubic-bezier(.22,1,.36,1)"; el.style.transform = shift ? "translateY(" + shift + "px)" : ""; }); }
-  };
-  const menuDragEnd = (cat) => {
-    const dt = dragRef.current; dragRef.current = null;
-    if (!dt) return; if (dt.t) clearTimeout(dt.t);
-    if (!dt.active) return;
-    (dt.els || []).forEach((el) => { if (el) { el.style.transition = ""; el.style.transform = ""; el.style.zIndex = ""; el.style.position = ""; } });
-    suppressClick.current = true; setTimeout(() => (suppressClick.current = false), 60);
-    const from = dt.startIndex, to = dt.curIndex; setDragId(null);
-    if (from !== to) { const no = [...dt.order]; const [m] = no.splice(from, 1); no.splice(to, 0, m); const om = loadMap(ORDERKEY); om[cat] = no; saveMap(ORDERKEY, om); setOpenMenu((o) => (o ? { ...o } : o)); }
-  };
   const openArchive = async (e) => {
     setOpenMenu(null);
     setArcView({ name: e.name, uri: e.uri, entries: null });
@@ -1499,10 +1440,9 @@ export default function App() {
 
       {/* МЕНЮ ОТКРЫТИЯ ФАЙЛА */}
       {openMenu && (() => {
-        const cat = menuCat(openMenu);
-        const hidden = new Set(loadMap(HIDEKEY)[cat] || []);
-        const allItems = orderItems(buildMenuItems(openMenu), cat);
-        const visible = openMenu.editHide ? allItems : allItems.filter((it) => !hidden.has(it.id));
+        const hidden = new Set(loadMap(HIDEKEY)[openMenu.mime] || []);
+        const apps = openMenu.apps || [];
+        const shown = openMenu.editHide ? apps : apps.filter((a) => !hidden.has(a.packageName + "|" + a.activityName));
         return (
           <div style={{ ...S.backdrop, pointerEvents: menuArmed ? "auto" : "none" }} onClick={() => setOpenMenu(null)}>
             <div style={S.sheet} onClick={(e) => e.stopPropagation()}>
@@ -1537,26 +1477,69 @@ export default function App() {
                 ))}
               </div>
               </>); })()}
-              {openMenu.editHide && <div style={{ fontSize: 12, color: GOLD, marginBottom: 10 }}>Тап по глазу — скрыть/показать. Удерживай и тащи — переместить.</div>}
-              <div style={{ maxHeight: "50vh", overflowY: dragId ? "hidden" : "auto" }} onTouchMove={menuDragMove} onTouchEnd={() => menuDragEnd(cat)} onTouchCancel={() => menuDragEnd(cat)}>
+              {openMenu.editHide && <div style={{ fontSize: 12, color: GOLD, marginBottom: 10 }}>Нажмите на приложение, чтобы скрыть/показать его</div>}
+              {!openMenu.editHide && /\.apk$/i.test(openMenu.file.name) && (
+                <div onClick={() => openArchive(openMenu.file)} style={{ ...S.appRow, color: GOLD }}>
+                  <span style={{ width: 38, display: "flex", justifyContent: "center" }}><Svg d={I.folder} size={26} /></span>
+                  <span style={{ flex: 1, fontSize: 15 }}>Открыть как архив</span>
+                </div>
+              )}
+              {!openMenu.editHide && openMenu.split && (
+                <>
+                  <div onClick={() => { setOpenMenu(null); showToast("Установка пакета…"); Apps.installSplit({ uri: openMenu.file.uri }).catch((er) => showToast("Ошибка: " + (er?.message || ""))); }} style={{ ...S.appRow, color: "#6FD3A8" }}>
+                    <span style={{ width: 38, display: "flex", justifyContent: "center" }}><Svg d={I.plus} size={28} /></span>
+                    <span style={{ flex: 1, fontSize: 15 }}>Установщик пакетов (split)</span>
+                  </div>
+                  <div onClick={() => openArchive(openMenu.file)} style={{ ...S.appRow, color: GOLD }}>
+                    <span style={{ width: 38, display: "flex", justifyContent: "center" }}><Svg d={I.folder} size={26} /></span>
+                    <span style={{ flex: 1, fontSize: 15 }}>Открыть как архив</span>
+                  </div>
+                </>
+              )}
+              {!openMenu.split && !/\.apk$/i.test(openMenu.file.name) && !(EXT.archive.includes((openMenu.file.name.split(".").pop() || "").toLowerCase())) && (
+              <div style={{ maxHeight: "42vh", overflowY: "auto" }}>
                 {openMenu.apps == null && <div style={{ color: SUB, padding: 20, textAlign: "center" }}>Загрузка приложений…</div>}
-                {openMenu.apps != null && visible.length === 0 && <div style={{ color: SUB, padding: 16, textAlign: "center" }}>Нет пунктов</div>}
-                {visible.map((it, idx) => {
-                  const isHid = hidden.has(it.id);
+                {openMenu.apps && shown.length === 0 && <div style={{ color: SUB, padding: 16, textAlign: "center" }}>Нет приложений</div>}
+                {shown.map((a) => {
+                  const id = a.packageName + "|" + a.activityName;
+                  const isHid = hidden.has(id);
                   return (
-                    <div key={it.id} data-mid={it.id}
-                      onTouchStart={(e) => menuDragStart(idx, e, visible)}
-                      onClick={() => { if (suppressClick.current) return; if (openMenu.editHide) toggleHideItem(cat, it.id); else it.onClick(); }}
-                      style={{ ...S.appRow, color: it.color || TXT, opacity: isHid ? 0.4 : 1, background: dragId === it.id ? ROW2 : "transparent" }}>
-                      {it.icon ? <img src={it.icon} alt="" style={{ width: 38, height: 38, borderRadius: 9 }} />
-                        : <span style={{ width: 38, display: "flex", justifyContent: "center" }}><Svg d={it.d} size={it.size || 26} /></span>}
-                      <span style={{ flex: 1, fontSize: 15 }}>{it.label}</span>
-                      {openMenu.editHide && <span style={{ color: isHid ? SUB : ACC, display: "flex", marginRight: 8 }}><Svg d={isHid ? I.eyeOff : I.eye} size={20} /></span>}
-                      {openMenu.editHide && <span style={{ color: SUB, display: "flex" }}><Svg d={I.drag} size={20} /></span>}
+                    <div key={id} onClick={() => pickApp(a)} style={{ ...S.appRow, opacity: isHid ? 0.45 : 1 }}>
+                      {a.icon ? <img src={a.icon} alt="" style={{ width: 38, height: 38, borderRadius: 9 }} />
+                        : <span style={{ color: SUB, display: "flex" }}><Svg d={I.file} size={32} /></span>}
+                      <span style={{ flex: 1, fontSize: 15 }}>{a.label}</span>
+                      {openMenu.editHide && <span style={{ color: isHid ? SUB : ACC, display: "flex" }}><Svg d={isHid ? I.eyeOff : I.eye} size={20} /></span>}
                     </div>
                   );
                 })}
               </div>
+              )}
+              {!openMenu.editHide && !openMenu.edit && isImg(openMenu.file.name) && (
+                <div onClick={() => { const f = openMenu.file; if (openMenu.useDefault) { const defs = loadMap(DEFKEY); defs[defaultOpenAs(f.name)] = "__viewer__"; saveMap(DEFKEY, defs); } else { const defs = loadMap(DEFKEY); if (defs[defaultOpenAs(f.name)]) { delete defs[defaultOpenAs(f.name)]; saveMap(DEFKEY, defs); } } setOpenMenu(null); openViewer(f); }} style={{ ...S.appRow, color: GOLD }}>
+                  <span style={{ width: 38, display: "flex", justifyContent: "center" }}><Svg d={I.img} size={26} /></span>
+                  <span style={{ flex: 1, fontSize: 15 }}>Открыть</span>
+                </div>
+              )}
+              {!openMenu.editHide && EXT.archive.includes((openMenu.file.name.split(".").pop() || "").toLowerCase()) && !/\.apk$/i.test(openMenu.file.name) && (
+                <>
+                  <div onClick={() => openArchive(openMenu.file)} style={{ ...S.appRow, color: GOLD }}>
+                    <span style={{ width: 38, display: "flex", justifyContent: "center" }}><Svg d={I.folder} size={26} /></span>
+                    <span style={{ flex: 1, fontSize: 15 }}>Открыть</span>
+                  </div>
+                  <div onClick={() => startExtract(openMenu.file.uri, null, openMenu.file.name)} style={{ ...S.appRow, color: TXT }}>
+                    <span style={{ width: 38, display: "flex", justifyContent: "center" }}><Svg d={I.dl} size={22} /></span>
+                    <span style={{ flex: 1, fontSize: 15 }}>Распаковать в…</span>
+                  </div>
+                  <div onClick={() => { const f = openMenu.file; setOpenMenu(null); extractAllTo(f.uri, join(path, arcBase(f.name)), null); }} style={{ ...S.appRow, color: TXT }}>
+                    <span style={{ width: 38, display: "flex", justifyContent: "center" }}><Svg d={I.folder} size={22} /></span>
+                    <span style={{ flex: 1, fontSize: 15 }}>Распаковать в папку «{arcBase(openMenu.file.name)}»</span>
+                  </div>
+                  <div onClick={() => { const f = openMenu.file; setOpenMenu(null); extractAllTo(f.uri, path, null); }} style={{ ...S.appRow, color: TXT }}>
+                    <span style={{ width: 38, display: "flex", justifyContent: "center" }}><Svg d={I.dl} size={22} /></span>
+                    <span style={{ flex: 1, fontSize: 15 }}>Распаковать здесь</span>
+                  </div>
+                </>
+              )}
               {!openMenu.editHide && !openMenu.edit && !openMenu.split && !/\.apk$/i.test(openMenu.file.name) && (
                 <>
                   <div onClick={() => setOpenMenu({ ...openMenu, useDefault: !openMenu.useDefault })}
@@ -1566,6 +1549,13 @@ export default function App() {
                   </div>
                   <button style={{ ...S.sheetGhost, width: "100%", color: RED, borderColor: LINE }} onClick={resetDefault}>Сбросить привязку</button>
                 </>
+              )}
+              {!openMenu.editHide && /\.apk$/i.test(openMenu.file.name) && (
+                <div onClick={() => { setOpenMenu(null); Apps.installApk({ uri: openMenu.file.uri }).catch((er) => showToast("Ошибка: " + (er?.message || ""))); }}
+                  style={{ ...S.appRow, color: "#6FD3A8", marginTop: 4 }}>
+                  <span style={{ width: 38, display: "flex", justifyContent: "center" }}><Svg d={I.plus} size={28} /></span>
+                  <span style={{ flex: 1, fontSize: 15 }}>Установщик пакетов</span>
+                </div>
               )}
             </div>
           </div>
