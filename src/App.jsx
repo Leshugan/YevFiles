@@ -654,7 +654,18 @@ export default function App() {
     try {
       const fname = entry.name.split("/").pop();
       const destDir = await absPath("Download/.yevtmp");
-      await Apps.zipExtract({ uri: arcView.uri, entry: entry.name, dest: destDir + "/" + fname });
+      const doOne = async (password) => Apps.zipExtract({ uri: arcView.uri, entry: entry.name, dest: destDir + "/" + fname, password: password || undefined });
+      try { await doOne(null); }
+      catch (err) {
+        const enc = err && (err.code === "ENCRYPTED" || err.code === "BADPASS" || /ENCRYPTED|BADPASS|пароль/i.test(err.message || ""));
+        if (!enc) throw err;
+        let ok = false;
+        for (let t = 0; t < 3 && !ok; t++) {
+          const pw = await askPassword(t > 0);
+          if (pw == null || pw === "") { setArcView((m) => (m ? { ...m, busy: null } : m)); return; }
+          try { await doOne(pw); ok = true; } catch (e2) { if (t === 2) { showToast("Неверный пароль"); setArcView((m) => (m ? { ...m, busy: null } : m)); return; } }
+        }
+      }
       const u = await Filesystem.getUri({ path: "Download/.yevtmp/" + fname, directory: DIR });
       setArcView(null);
       const fe = { name: fname, uri: u.uri, type: "file" };
@@ -1448,6 +1459,25 @@ export default function App() {
               </div>
               </>); })()}
               {openMenu.editHide && <div style={{ fontSize: 12, color: GOLD, marginBottom: 10 }}>Нажмите на приложение, чтобы скрыть/показать его</div>}
+              {!openMenu.editHide && /\.apk$/i.test(openMenu.file.name) && (
+                <div onClick={() => openArchive(openMenu.file)} style={{ ...S.appRow, color: GOLD }}>
+                  <span style={{ width: 38, display: "flex", justifyContent: "center" }}><Svg d={I.folder} size={26} /></span>
+                  <span style={{ flex: 1, fontSize: 15 }}>Открыть как архив</span>
+                </div>
+              )}
+              {!openMenu.editHide && openMenu.split && (
+                <>
+                  <div onClick={() => { setOpenMenu(null); showToast("Установка пакета…"); Apps.installSplit({ uri: openMenu.file.uri }).catch((er) => showToast("Ошибка: " + (er?.message || ""))); }} style={{ ...S.appRow, color: "#6FD3A8" }}>
+                    <span style={{ width: 38, display: "flex", justifyContent: "center" }}><Svg d={I.plus} size={28} /></span>
+                    <span style={{ flex: 1, fontSize: 15 }}>Установщик пакетов (split)</span>
+                  </div>
+                  <div onClick={() => openArchive(openMenu.file)} style={{ ...S.appRow, color: GOLD }}>
+                    <span style={{ width: 38, display: "flex", justifyContent: "center" }}><Svg d={I.folder} size={26} /></span>
+                    <span style={{ flex: 1, fontSize: 15 }}>Открыть как архив</span>
+                  </div>
+                </>
+              )}
+              {!openMenu.split && (
               <div style={{ maxHeight: "42vh", overflowY: "auto" }}>
                 {openMenu.apps == null && <div style={{ color: SUB, padding: 20, textAlign: "center" }}>Загрузка приложений…</div>}
                 {openMenu.apps && shown.length === 0 && <div style={{ color: SUB, padding: 16, textAlign: "center" }}>Нет приложений</div>}
@@ -1464,6 +1494,7 @@ export default function App() {
                   );
                 })}
               </div>
+              )}
               {!openMenu.editHide && !openMenu.edit && isImg(openMenu.file.name) && (
                 <div onClick={() => { const f = openMenu.file; if (openMenu.useDefault) { const defs = loadMap(DEFKEY); defs[defaultOpenAs(f.name)] = "__viewer__"; saveMap(DEFKEY, defs); } else { const defs = loadMap(DEFKEY); if (defs[defaultOpenAs(f.name)]) { delete defs[defaultOpenAs(f.name)]; saveMap(DEFKEY, defs); } } setOpenMenu(null); openViewer(f); }} style={{ ...S.appRow, color: GOLD }}>
                   <span style={{ width: 38, display: "flex", justifyContent: "center" }}><Svg d={I.img} size={26} /></span>
@@ -1490,27 +1521,14 @@ export default function App() {
                   </div>
                 </>
               )}
-              {!openMenu.editHide && openMenu.split && (
-                <div onClick={() => { setOpenMenu(null); showToast("Установка пакета…"); Apps.installSplit({ uri: openMenu.file.uri }).catch((er) => showToast("Ошибка: " + (er?.message || ""))); }}
-                  style={{ ...S.appRow, color: "#6FD3A8" }}>
-                  <span style={{ width: 38, display: "flex", justifyContent: "center" }}><Svg d={I.plus} size={28} /></span>
-                  <span style={{ flex: 1, fontSize: 15 }}>Установить пакет (split)</span>
-                </div>
-              )}
-              {!openMenu.editHide && openMenu.split && (
-                <div onClick={() => openArchive(openMenu.file)} style={{ ...S.appRow, color: GOLD }}>
-                  <span style={{ width: 38, display: "flex", justifyContent: "center" }}><Svg d={I.folder} size={26} /></span>
-                  <span style={{ flex: 1, fontSize: 15 }}>Открыть как архив</span>
-                </div>
-              )}
-              {!openMenu.editHide && /\.apk$/i.test(openMenu.file.name) && (
+              {!openMenu.editHide && /\.apk$/i.test(openMenu.file.name) && false && (
                 <div onClick={() => { setOpenMenu(null); Apps.installApk({ uri: openMenu.file.uri }).catch((er) => showToast("Ошибка: " + (er?.message || ""))); }}
                   style={{ ...S.appRow, color: "#6FD3A8" }}>
                   <span style={{ width: 38, display: "flex", justifyContent: "center" }}><Svg d={I.plus} size={28} /></span>
                   <span style={{ flex: 1, fontSize: 15 }}>Установить / Обновить</span>
                 </div>
               )}
-              {!openMenu.editHide && /\.apk$/i.test(openMenu.file.name) && (
+              {!openMenu.editHide && /\.apk$/i.test(openMenu.file.name) && false && (
                 <div onClick={() => openArchive(openMenu.file)} style={{ ...S.appRow, color: GOLD }}>
                   <span style={{ width: 38, display: "flex", justifyContent: "center" }}><Svg d={I.folder} size={26} /></span>
                   <span style={{ flex: 1, fontSize: 15 }}>Открыть как архив</span>
