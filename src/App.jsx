@@ -1146,7 +1146,7 @@ export default function App() {
        <div style={{ pointerEvents: "auto" }}>
       {selMode ? (
         <nav style={{ ...S.bottom, justifyContent: "flex-start" }}>
-          <div style={{ width: 64, display: "flex", justifyContent: "center", flexShrink: 0 }}>
+          <div style={{ width: 48, display: "flex", justifyContent: "center", flexShrink: 0 }}>
             <div style={S.selCount}>
               <span key={sel.size} style={{ fontSize: 11, fontWeight: 700, color: "#fff", lineHeight: 1, display: "block", textAlign: "center", animation: "pulse .3s cubic-bezier(.2,.9,.3,1.3)" }}>{sel.size}</span>
             </div>
