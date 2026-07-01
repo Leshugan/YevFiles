@@ -477,6 +477,11 @@ export default function App() {
     return () => { document.removeEventListener("visibilitychange", onVis); window.removeEventListener("focus", onVis); };
   }, [list]);
   useEffect(() => { ls.set(SORTKEY, sortMode); }, [sortMode]);
+  const [propApkIcon, setPropApkIcon] = useState(null);
+  useEffect(() => {
+    setPropApkIcon(null);
+    if (props && /\.apk$/i.test(props.name)) { Apps.apkInfo({ uri: props.uri }).then((info) => setPropApkIcon(info && info.icon || null)).catch(() => {}); }
+  }, [props]);
   const [propSize, setPropSize] = useState(null);
   useEffect(() => {
     if (!props || props.type !== "directory") { setPropCount(null); setPropSize(null); return; }
@@ -885,7 +890,7 @@ export default function App() {
           <button style={S.accessBtn} onClick={() => Apps.requestAllFiles().catch(() => {})}>Дать доступ</button>
         </div>
       )}
-      {shared.length > 0 && (
+      {false && shared.length > 0 && (
         <>
           <div style={S.savePop}>
             <Svg d={I.dl} size={20} />
@@ -1179,7 +1184,7 @@ export default function App() {
       {props && (
         <div style={S.backdrop} onClick={() => setProps(null)}>
           <div style={S.sheet} onClick={(e) => e.stopPropagation()}>
-            <div style={S.sheetTitle}>{props.name}</div>
+            <div style={S.sheetTitle}>{propApkIcon && <img src={propApkIcon} alt="" style={{ width: 28, height: 28, borderRadius: 7, verticalAlign: "middle", marginRight: 10 }} />}{props.name}</div>
             <Prop k="Путь (нажмите, чтобы скопировать)" v={path ? "/" + keyOf(props.name) : "/" + props.name} onClick={() => copyPath(props.uri)} link />
             {props.type === "directory" && <Prop k="Содержимое" v={propCount ? propCount.d + " папок, " + propCount.f + " файлов" : "…"} />}
             <Prop k="Вес" v={props.type === "directory" ? (propSize == null ? "подсчёт…" : fmtSize(propSize)) : fmtSize(props.size)} />
@@ -1191,24 +1196,27 @@ export default function App() {
         </div>
       )}
 
-      {/* КОНФЛИКТ ИМЁН ПРИ ВСТАВКЕ */}
+      {/* КОНФЛИКТ ИМЁН ПРИ ВСТАВКЕ — компактно, внизу */}
       {conflict && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 1450, background: "rgba(0,0,0,.55)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <div style={{ background: BAR, borderRadius: 16, padding: 18, width: "82%", maxWidth: 340, boxShadow: "0 18px 48px rgba(0,0,0,.6)" }}>
-            <div style={{ color: TXT, fontSize: 15, marginBottom: 4 }}>Уже существует</div>
-            <div style={{ color: SUB, fontSize: 13, marginBottom: 16, wordBreak: "break-all" }}>{conflict.name}</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              <button onClick={() => resolveConflict("overwrite", conflictApplyAll)} style={{ background: RED, border: "none", borderRadius: 10, color: "#fff", fontSize: 14, fontWeight: 600, padding: "11px 0" }}>Перезаписать</button>
-              <button onClick={() => resolveConflict("rename", conflictApplyAll)} style={{ background: ACC, border: "none", borderRadius: 10, color: "#fff", fontSize: 14, fontWeight: 600, padding: "11px 0" }}>Создать копию (1)</button>
-              <button onClick={() => resolveConflict("skip", conflictApplyAll)} style={{ background: ROW2, border: "1px solid " + LINE, borderRadius: 10, color: TXT, fontSize: 14, padding: "11px 0" }}>Пропустить</button>
-              <button onClick={() => resolveConflict("cancel", false)} style={{ background: "transparent", border: "none", color: SUB, fontSize: 13, padding: "6px 0" }}>Отменить всё</button>
+        <>
+          <div style={{ position: "fixed", inset: 0, zIndex: 1449 }} />
+          <div style={{ position: "fixed", zIndex: 1450, left: 10, right: 10, bottom: "calc(84px + env(safe-area-inset-bottom))", background: BAR, border: "1px solid " + LINE, borderRadius: 16, padding: 12, boxShadow: "0 18px 48px rgba(0,0,0,.6)" }}>
+            <div style={{ color: TXT, fontSize: 13, marginBottom: 2 }}>Уже существует:</div>
+            <div style={{ color: SUB, fontSize: 12, marginBottom: 10, wordBreak: "break-all" }}>{conflict.name}</div>
+            <div style={{ display: "flex", gap: 6 }}>
+              <button onClick={() => resolveConflict("overwrite", conflictApplyAll)} style={{ flex: 1, background: RED, border: "none", borderRadius: 9, color: "#fff", fontSize: 13, fontWeight: 600, padding: "10px 0" }}>Перезаписать</button>
+              <button onClick={() => resolveConflict("rename", conflictApplyAll)} style={{ flex: 1, background: ACC, border: "none", borderRadius: 9, color: "#fff", fontSize: 13, fontWeight: 600, padding: "10px 0" }}>Копия (1)</button>
+              <button onClick={() => resolveConflict("skip", conflictApplyAll)} style={{ flex: 1, background: ROW2, border: "1px solid " + LINE, borderRadius: 9, color: TXT, fontSize: 13, padding: "10px 0" }}>Пропустить</button>
             </div>
-            <div onClick={() => setConflictApplyAll((v) => !v)} style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, color: SUB, fontSize: 13 }}>
-              <span style={{ ...S.cbox, ...(conflictApplyAll ? S.cboxOn : {}) }}>{conflictApplyAll ? <Svg d={I.check} size={13} /> : null}</span>
-              Применить ко всем
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 8 }}>
+              <div onClick={() => setConflictApplyAll((v) => !v)} style={{ display: "flex", alignItems: "center", gap: 7, color: SUB, fontSize: 12 }}>
+                <span style={{ ...S.cbox, ...(conflictApplyAll ? S.cboxOn : {}) }}>{conflictApplyAll ? <Svg d={I.check} size={12} /> : null}</span>
+                Ко всем
+              </div>
+              <button onClick={() => resolveConflict("cancel", false)} style={{ background: "transparent", border: "none", color: SUB, fontSize: 12, padding: "4px 6px" }}>Отменить всё</button>
             </div>
           </div>
-        </div>
+        </>
       )}
 
       {/* ПОДТВЕРЖДЕНИЕ УДАЛЕНИЯ — над кнопкой «Удалить» */}
