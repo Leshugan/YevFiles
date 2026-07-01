@@ -9,7 +9,7 @@ const Apps = registerPlugin("Apps");
 const BG = "var(--bg)", BAR = "var(--bar)", ROW2 = "var(--row2)", ACC = "var(--acc)";
 const GOLD = "var(--gold)", RED = "var(--red)", TXT = "var(--txt)", SUB = "var(--sub)", LINE = "var(--line)", INK = "var(--ink)";
 const THEMES = {
-  dark:  { "--bg": "#1A120A", "--bar": "#33271B", "--row2": "#3B2E20", "--acc": "#EF6C00", "--accbg": "rgba(239,108,0,.18)", "--gold": "#F5A623", "--red": "#E05252", "--txt": "#F2EAE0", "--ink": "#E0D5C8", "--sub": "#B0A498", "--line": "#544230", "--chip": "rgba(255,255,255,.06)", "--hair": "rgba(255,255,255,.12)", "--tgloff": "#4A3A2A" },
+  dark:  { "--bg": "#1B130B", "--bar": "#2C2219", "--row2": "#332619", "--acc": "#EF6C00", "--accbg": "rgba(239,108,0,.18)", "--gold": "#F5A623", "--red": "#E05252", "--txt": "#F2EAE0", "--ink": "#E0D5C8", "--sub": "#B0A498", "--line": "#4A3A2A", "--chip": "rgba(255,255,255,.06)", "--hair": "rgba(255,255,255,.07)", "--tgloff": "#4A3A2A" },
   light: { "--bg": "#EEF1F4", "--bar": "#FFFFFF", "--row2": "#E4E8EC", "--acc": "#2F80ED", "--accbg": "rgba(47,128,237,.14)", "--gold": "#2F80ED", "--red": "#D14343", "--txt": "#1E2329", "--ink": "#3D4754", "--sub": "#6B7280", "--line": "#D3D8DE", "--chip": "rgba(0,0,0,.05)", "--hair": "rgba(0,0,0,.08)", "--tgloff": "#C2C8D0" },
 };
 const DIR = Directory.ExternalStorage;
@@ -315,6 +315,7 @@ export default function App() {
   const isPdf = (n) => /\.pdf$/i.test(n);
   const isFont = (n) => /\.(ttf|otf|woff2?|woff)$/i.test(n);
   const isSplitApk = (n) => /\.(apks|xapk|apkm|apkx)$/i.test(n);
+  const isGzTar = (n) => /\.(tgz|tar|gz)$/i.test(n);
   const [fontView, setFontView] = useState(null);
   const [fontText, setFontText] = useState("");
   const openFontViewer = async (e) => {
@@ -672,11 +673,14 @@ export default function App() {
   const dragRef = useRef(null);
   const suppressClick = useRef(false);
   const menuCat = (om) => { const f = om.file; const ext = (f.name.split(".").pop() || "").toLowerCase(); if (om.split) return "split"; if (/\.apk$/i.test(f.name)) return "apk"; if (EXT.archive.includes(ext)) return "archive"; if (isImg(f.name)) return "image"; return om.mime; };
-  // только СТОКОВЫЕ пункты (приложения — отдельным списком, не сюда)
+  // ЕДИНЫЙ список: приложения (логическая категория) сверху по умолчанию, стоковые снизу; всё скрываемо/перемещаемо
   const buildStockItems = (om) => {
     const f = om.file; const ext = (f.name.split(".").pop() || "").toLowerCase();
     const isApkF = /\.apk$/i.test(f.name); const isArc = /\.(zip|jar|war|obb)$/i.test(f.name); const items = [];
-    if (isImg(f.name)) items.push({ id: "viewer", label: "Открыть", d: I.img, size: 26, color: GOLD, onClick: () => { const defs = loadMap(DEFKEY); if (om.useDefault) defs[defaultOpenAs(f.name)] = "__viewer__"; else if (defs[defaultOpenAs(f.name)]) delete defs[defaultOpenAs(f.name)]; saveMap(DEFKEY, defs); setOpenMenu(null); openViewer(f); } });
+    const fm = mimeOf(f.name);
+    const showApps = !om.split && ((fm !== "*/*" && fm !== "application/octet-stream") || (om.asCat && om.mime !== "*/*"));
+    if (showApps) (om.apps || []).forEach((a) => items.push({ id: "app|" + a.packageName + "|" + a.activityName, label: a.label, icon: a.icon, color: TXT, onClick: () => pickApp(a) }));
+    if (isImg(f.name)) items.push({ id: "viewer", label: "Открыть (просмотр)", d: I.img, size: 26, color: GOLD, onClick: () => { const defs = loadMap(DEFKEY); if (om.useDefault) defs[defaultOpenAs(f.name)] = "__viewer__"; else if (defs[defaultOpenAs(f.name)]) delete defs[defaultOpenAs(f.name)]; saveMap(DEFKEY, defs); setOpenMenu(null); openViewer(f); } });
     if (isApkF) {
       items.push({ id: "apk_archive", label: "Открыть как архив", d: I.folder, size: 26, color: GOLD, onClick: () => openArchive(f) });
     }
@@ -684,7 +688,7 @@ export default function App() {
       items.push({ id: "split_install", label: "Установщик пакетов (split)", d: I.plus, size: 28, color: "#6FD3A8", onClick: () => { setOpenMenu(null); showToast("Установка пакета…"); Apps.installSplit({ uri: f.uri }).catch((er) => showToast("Ошибка: " + (er?.message || ""))); } });
       items.push({ id: "split_archive", label: "Открыть как архив", d: I.folder, size: 26, color: GOLD, onClick: () => openArchive(f) });
     }
-    if (isArc) {
+    if (isArc || isGzTar(f.name)) {
       items.push({ id: "arc_open", label: "Открыть", d: I.folder, size: 26, color: GOLD, onClick: () => openArchive(f) });
       items.push({ id: "arc_to", label: "Распаковать в…", d: I.dl, size: 22, color: TXT, onClick: () => startExtract(f.uri, null, f.name) });
       items.push({ id: "arc_folder", label: "Распаковать в папку «" + arcBase(f.name) + "»", d: I.folder, size: 22, color: TXT, onClick: () => { setOpenMenu(null); extractAllTo(f.uri, join(path, arcBase(f.name)), null); } });
@@ -1455,10 +1459,15 @@ export default function App() {
         <>
           <div style={{ position: "fixed", inset: 0, zIndex: 1290 }} onClick={() => setConfirmDel(null)} />
           <div style={{ position: "fixed", zIndex: 1300, left: Math.max(90, Math.min(confirmDel.cx, window.innerWidth - 90)), transform: "translateX(-50%)", top: confirmDel.top - 92, minWidth: 180, background: BAR, border: "1px solid " + LINE, borderRadius: 14, padding: 10, boxShadow: "0 1px 0 rgba(255,255,255,.07) inset, 0 4px 12px rgba(0,0,0,.4), 0 18px 48px rgba(0,0,0,.62)", animation: "popCenter .15s ease" }}>
-            <div style={{ color: TXT, fontSize: 13, textAlign: "center", marginBottom: 8 }}>
-              Удалить {delInfo ? delInfo.items : [...sel].length}?<br />
-              <span style={{ color: SUB, fontSize: 12 }}>{delInfo ? (delInfo.count + " файл(ов) · " + fmtSizeShort(delInfo.bytes)) : "подсчёт…"}</span>
+            <div style={{ color: TXT, fontSize: 14, fontWeight: 600, textAlign: "center", marginBottom: delInfo && delInfo.bytes > 0 ? 8 : 10 }}>
+              Удалить {delInfo ? delInfo.items : [...sel].length}?
             </div>
+            {delInfo && delInfo.bytes > 0 && (
+              <div style={{ textAlign: "center", marginBottom: 10 }}>
+                <span style={{ display: "inline-block", background: "rgba(224,82,82,.15)", color: "#E88", fontSize: 12, fontWeight: 600, padding: "3px 11px", borderRadius: 999 }}>{fmtSizeShort(delInfo.bytes)}</span>
+              </div>
+            )}
+            {!delInfo && (<div style={{ color: SUB, fontSize: 12, textAlign: "center", marginBottom: 10 }}>подсчёт…</div>)}
             <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
               <button onClick={doDelete} style={{ background: RED, border: "none", borderRadius: 8, color: "#fff", fontSize: 14, fontWeight: 700, padding: "8px 20px" }}>Да</button>
               <button onClick={() => setConfirmDel(null)} style={{ background: ROW2, border: "1px solid " + LINE, borderRadius: 8, color: SUB, fontSize: 14, padding: "8px 20px" }}>Нет</button>
@@ -1523,9 +1532,6 @@ export default function App() {
 
       {/* МЕНЮ ОТКРЫТИЯ ФАЙЛА */}
       {openMenu && (() => {
-        const hidden = new Set(loadMap(HIDEKEY)[openMenu.mime] || []);
-        const apps = openMenu.apps || [];
-        const shown = openMenu.editHide ? apps : apps.filter((a) => !hidden.has(a.packageName + "|" + a.activityName));
         return (
           <div style={{ ...S.backdrop, pointerEvents: menuArmed ? "auto" : "none" }} onClick={() => setOpenMenu(null)}>
             <div style={S.sheet} onClick={(e) => e.stopPropagation()}>
@@ -1568,7 +1574,7 @@ export default function App() {
                 </>
               )}
               {openMenu.editHide && <div style={{ fontSize: 12, color: GOLD, marginBottom: 10 }}>Глаз — скрыть/показать. Кнопки перетаскиваются (удержание). Тап по приложению — скрыть/показать.</div>}
-              <div onTouchMove={menuDragMove} onTouchEnd={() => menuDragEnd(menuCat(openMenu))} onTouchCancel={() => menuDragEnd(menuCat(openMenu))}>
+              <div style={{ maxHeight: "52vh", overflowY: dragId ? "hidden" : "auto" }} onTouchMove={menuDragMove} onTouchEnd={() => menuDragEnd(menuCat(openMenu))} onTouchCancel={() => menuDragEnd(menuCat(openMenu))}>
                 {(() => {
                   const cat = menuCat(openMenu);
                   const sh = new Set(loadMap(HIDEKEY)[cat] || []);
@@ -1581,7 +1587,8 @@ export default function App() {
                         onTouchStart={(e) => menuDragStart(idx, e, vis)}
                         onClick={() => { if (suppressClick.current) return; if (openMenu.editHide) toggleHideItem(cat, it.id); else it.onClick(); }}
                         style={{ ...S.appRow, color: it.color || TXT, opacity: isHid ? 0.4 : 1, background: dragId === it.id ? ROW2 : "transparent" }}>
-                        <span style={{ width: 38, display: "flex", justifyContent: "center" }}><Svg d={it.d} size={it.size || 26} /></span>
+                        {it.icon ? <img src={it.icon} alt="" style={{ width: 38, height: 38, borderRadius: 9 }} />
+                          : <span style={{ width: 38, display: "flex", justifyContent: "center" }}><Svg d={it.d} size={it.size || 26} /></span>}
                         <span style={{ flex: 1, fontSize: 15 }}>{it.label}</span>
                         {openMenu.editHide && <span style={{ color: isHid ? SUB : ACC, display: "flex", marginRight: 8 }}><Svg d={isHid ? I.eyeOff : I.eye} size={20} /></span>}
                         {openMenu.editHide && <span style={{ color: SUB, display: "flex" }}><Svg d={I.drag} size={20} /></span>}
@@ -1590,23 +1597,8 @@ export default function App() {
                   });
                 })()}
               </div>
-              {(() => { const fm = mimeOf(openMenu.file.name); return !openMenu.split && ((fm !== "*/*" && fm !== "application/octet-stream") || (openMenu.asCat && openMenu.mime !== "*/*")); })() && (
-              <div style={{ maxHeight: "42vh", overflowY: "auto" }}>
-                {openMenu.apps == null && <div style={{ color: SUB, padding: 20, textAlign: "center" }}>Загрузка приложений…</div>}
-                {openMenu.apps && shown.length === 0 && <div style={{ color: SUB, padding: 16, textAlign: "center" }}>Нет приложений</div>}
-                {shown.map((a) => {
-                  const id = a.packageName + "|" + a.activityName;
-                  const isHid = hidden.has(id);
-                  return (
-                    <div key={id} onClick={() => pickApp(a)} style={{ ...S.appRow, opacity: isHid ? 0.45 : 1 }}>
-                      {a.icon ? <img src={a.icon} alt="" style={{ width: 38, height: 38, borderRadius: 9 }} />
-                        : <span style={{ color: SUB, display: "flex" }}><Svg d={I.file} size={32} /></span>}
-                      <span style={{ flex: 1, fontSize: 15 }}>{a.label}</span>
-                      {openMenu.editHide && <span style={{ color: isHid ? SUB : ACC, display: "flex" }}><Svg d={isHid ? I.eyeOff : I.eye} size={20} /></span>}
-                    </div>
-                  );
-                })}
-              </div>
+              {openMenu.apps == null && (() => { const fm = mimeOf(openMenu.file.name); return !openMenu.split && ((fm !== "*/*" && fm !== "application/octet-stream") || (openMenu.asCat && openMenu.mime !== "*/*")); })() && (
+                <div style={{ color: SUB, padding: 16, textAlign: "center" }}>Загрузка приложений…</div>
               )}
               {!openMenu.editHide && !openMenu.edit && !openMenu.split && !/\.apk$/i.test(openMenu.file.name) && (
                 <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 2px 2px" }}>
@@ -1819,7 +1811,7 @@ function Btn({ onClick, icon, text, label, accent, red, flexNone, disabled }) {
 
 const S = {
   app: { position: "relative", display: "flex", flexDirection: "column", height: "100vh", background: BG, color: TXT, fontFamily: "system-ui,-apple-system,Roboto,sans-serif", overflow: "hidden" },
-  tabsbar: { display: "flex", alignItems: "center", background: BAR, flexShrink: 0, height: 50, margin: "8px 8px 6px", borderRadius: 24, boxShadow: "0 1px 0 rgba(255,255,255,.09) inset, 0 0 0 1px var(--hair), 0 10px 22px -8px rgba(0,0,0,.55)" },
+  tabsbar: { display: "flex", alignItems: "center", background: BAR, flexShrink: 0, height: 50, margin: "8px 8px 6px", borderRadius: 24, boxShadow: "0 1px 0 rgba(255,255,255,.06) inset, 0 8px 22px -10px rgba(0,0,0,.6)" },
   tabs: { display: "flex", overflowX: "auto", flex: 1, alignItems: "center", justifyContent: "center", gap: 6, padding: "0 4px", height: "100%" },
   tab: { display: "flex", alignItems: "center", gap: 6, padding: "0 12px", height: 34, borderRadius: 17, fontSize: 13.5, color: SUB, whiteSpace: "nowrap", background: "var(--chip)", flexShrink: 0, border: "1px solid transparent" },
   tabActive: { color: ACC, background: "var(--accbg)", border: "1px solid " + ACC, fontWeight: 600, boxShadow: "0 0 0 1px var(--accbg), 0 2px 8px var(--accbg)" },
@@ -1853,7 +1845,7 @@ const S = {
   searchBar: { display: "flex", alignItems: "center", background: ROW2, padding: 8, gap: 8, flexShrink: 0 },
   searchInput: { flex: 1, padding: "10px 12px", borderRadius: 8, border: "1px solid " + LINE, background: BAR, color: TXT, fontSize: 15, outline: "none" },
   searchClose: { border: "none", background: "transparent", color: SUB, fontSize: 24, width: 40 },
-  bottom: { display: "flex", alignItems: "center", background: BAR, flexShrink: 0, borderRadius: 26, margin: "4px 8px calc(8px + env(safe-area-inset-bottom))", boxShadow: "0 1px 0 rgba(255,255,255,.09) inset, 0 0 0 1px var(--hair), 0 -2px 10px -4px rgba(0,0,0,.3), 0 10px 26px -8px rgba(0,0,0,.55)" },
+  bottom: { display: "flex", alignItems: "center", background: BAR, flexShrink: 0, borderRadius: 26, margin: "4px 8px calc(8px + env(safe-area-inset-bottom))", boxShadow: "0 1px 0 rgba(255,255,255,.06) inset, 0 8px 24px -10px rgba(0,0,0,.6)" },
   btn: { border: "none", background: "transparent", padding: "6px 6px 7px", display: "flex", flexDirection: "column", alignItems: "center", gap: 2 },
   selCount: { width: 22, height: 22, borderRadius: 11, background: ACC, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0, lineHeight: 0 },
   btnLabel: { fontSize: 10, color: SUB, whiteSpace: "nowrap" },
