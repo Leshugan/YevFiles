@@ -289,6 +289,9 @@ export default function App() {
   const [thumbs, setThumbs] = useState({});
   const [pwPrompt, setPwPrompt] = useState(null); // { resolve, retry }
   const [pwVal, setPwVal] = useState("");
+  const pwCacheRef = useRef({});
+  const getCachedPw = (uri) => { const e = pwCacheRef.current[uri]; return e && e.exp > Date.now() ? e.pw : null; };
+  const setCachedPw = (uri, pw) => { pwCacheRef.current[uri] = { pw, exp: Date.now() + 3600000 }; };
   const askPassword = (retry) => new Promise((resolve) => { setPwVal(""); setPwPrompt({ resolve, retry: !!retry }); });
   const resolvePassword = (val) => { setPwPrompt((p) => { if (p) p.resolve(val); return null; }); };
   const isImg = (n) => /\.(png|jpg|jpeg|webp|gif|bmp)$/i.test(n);
@@ -574,7 +577,7 @@ export default function App() {
     const edit = !!(opts && opts.edit);
     const cat = OPEN_AS.some(([m]) => m === mime) ? mime : defaultOpenAs(e.name);
     setOpenMenu({ file: e, mime: cat, apps: null, useDefault: false, editHide: false, edit });
-    if (/\.apk$/i.test(e.name)) { Apps.apkInfo({ uri: e.uri }).then((info) => setOpenMenu((m) => (m && m.file === e ? { ...m, apkInfo: info } : m))).catch(() => {}); }
+    if (/\.(apk|apks|xapk|apkm|apkx)$/i.test(e.name)) { Apps.apkInfo({ uri: e.uri }).then((info) => setOpenMenu((m) => (m && m.file === e ? { ...m, apkInfo: info } : m))).catch(() => {}); }
     try {
       const { apps } = await Apps.query({ uri: e.uri, mime, action: edit ? "edit" : "view" });
       setOpenMenu((m) => (m && m.file === e ? { ...m, apps: apps || [] } : m));
@@ -620,7 +623,7 @@ export default function App() {
     setProgress({ current: 0, total: (names ? names.length : 1), name: "", mode: "ext" });
     const doExtract = async (password) => Apps.zipExtractAll({ uri, dest: destDir, entries: names || undefined, password: password || undefined });
     try {
-      await doExtract(null);
+      await doExtract(getCachedPw(uri));
       showToast("Извлечено в " + (baseName(destRel) || "Storage"));
     } catch (e) {
       const enc = e && (e.code === "ENCRYPTED" || e.code === "BADPASS" || /ENCRYPTED|BADPASS|пароль/i.test(e.message || ""));
@@ -629,7 +632,7 @@ export default function App() {
         for (let t = 0; t < 3 && !ok; t++) {
           const pw = await askPassword(t > 0);
           if (pw == null || pw === "") { break; }
-          try { await doExtract(pw); showToast("Извлечено в " + (baseName(destRel) || "Storage")); ok = true; }
+          try { await doExtract(pw); setCachedPw(uri, pw); showToast("Извлечено в " + (baseName(destRel) || "Storage")); ok = true; }
           catch (e2) { if (t === 2) showToast("Неверный пароль"); }
         }
       } else showToast("Ошибка: " + (e?.message || ""));
@@ -655,7 +658,7 @@ export default function App() {
       const fname = entry.name.split("/").pop();
       const destDir = await absPath("Download/.yevtmp");
       const doOne = async (password) => Apps.zipExtract({ uri: arcView.uri, entry: entry.name, dest: destDir + "/" + fname, password: password || undefined });
-      try { await doOne(null); }
+      try { await doOne(getCachedPw(arcView.uri)); }
       catch (err) {
         const enc = err && (err.code === "ENCRYPTED" || err.code === "BADPASS" || /ENCRYPTED|BADPASS|пароль/i.test(err.message || ""));
         if (!enc) throw err;
@@ -663,7 +666,7 @@ export default function App() {
         for (let t = 0; t < 3 && !ok; t++) {
           const pw = await askPassword(t > 0);
           if (pw == null || pw === "") { setArcView((m) => (m ? { ...m, busy: null } : m)); return; }
-          try { await doOne(pw); ok = true; } catch (e2) { if (t === 2) { showToast("Неверный пароль"); setArcView((m) => (m ? { ...m, busy: null } : m)); return; } }
+          try { await doOne(pw); setCachedPw(arcView.uri, pw); ok = true; } catch (e2) { if (t === 2) { showToast("Неверный пароль"); setArcView((m) => (m ? { ...m, busy: null } : m)); return; } }
         }
       }
       const u = await Filesystem.getUri({ path: "Download/.yevtmp/" + fname, directory: DIR });
@@ -1430,7 +1433,7 @@ export default function App() {
         return (
           <div style={{ ...S.backdrop, pointerEvents: menuArmed ? "auto" : "none" }} onClick={() => setOpenMenu(null)}>
             <div style={S.sheet} onClick={(e) => e.stopPropagation()}>
-              {/\.apk$/i.test(openMenu.file.name) && openMenu.apkInfo && (
+              {/\.(apk|apks|xapk|apkm|apkx)$/i.test(openMenu.file.name) && openMenu.apkInfo && (
                 <div style={{ padding: "10px 12px", margin: "0 0 12px", background: ROW2, borderRadius: 12, fontSize: 13, lineHeight: 1.7, color: SUB }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
                     {openMenu.apkInfo.icon && <img src={openMenu.apkInfo.icon} alt="" style={{ width: 40, height: 40, borderRadius: 9, flexShrink: 0 }} />}
@@ -1477,7 +1480,7 @@ export default function App() {
                   </div>
                 </>
               )}
-              {!openMenu.split && (
+              {!openMenu.split && !/\.apk$/i.test(openMenu.file.name) && (
               <div style={{ maxHeight: "42vh", overflowY: "auto" }}>
                 {openMenu.apps == null && <div style={{ color: SUB, padding: 20, textAlign: "center" }}>Загрузка приложений…</div>}
                 {openMenu.apps && shown.length === 0 && <div style={{ color: SUB, padding: 16, textAlign: "center" }}>Нет приложений</div>}
@@ -1534,7 +1537,7 @@ export default function App() {
                   <span style={{ flex: 1, fontSize: 15 }}>Открыть как архив</span>
                 </div>
               )}
-              {!openMenu.editHide && !openMenu.edit && (
+              {!openMenu.editHide && !openMenu.edit && !openMenu.split && !/\.apk$/i.test(openMenu.file.name) && (
                 <>
                   <div onClick={() => setOpenMenu({ ...openMenu, useDefault: !openMenu.useDefault })}
                     style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 2px", cursor: "pointer" }}>
@@ -1543,6 +1546,13 @@ export default function App() {
                   </div>
                   <button style={{ ...S.sheetGhost, width: "100%", color: RED, borderColor: LINE }} onClick={resetDefault}>Сбросить привязку</button>
                 </>
+              )}
+              {!openMenu.editHide && /\.apk$/i.test(openMenu.file.name) && (
+                <div onClick={() => { setOpenMenu(null); Apps.installApk({ uri: openMenu.file.uri }).catch((er) => showToast("Ошибка: " + (er?.message || ""))); }}
+                  style={{ ...S.appRow, color: "#6FD3A8", marginTop: 4 }}>
+                  <span style={{ width: 38, display: "flex", justifyContent: "center" }}><Svg d={I.plus} size={28} /></span>
+                  <span style={{ flex: 1, fontSize: 15 }}>Установщик пакетов</span>
+                </div>
               )}
             </div>
           </div>
