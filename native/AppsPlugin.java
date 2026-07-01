@@ -410,6 +410,10 @@ public class AppsPlugin extends Plugin {
         try {
             File f = toFile(uriStr);
             String p = f.getAbsolutePath();
+            String lower = f.getName().toLowerCase();
+            boolean split = lower.endsWith(".apks") || lower.endsWith(".xapk") || lower.endsWith(".apkm") || lower.endsWith(".apkx");
+            File tmpBase = null;
+            if (split) { tmpBase = extractBaseApk(f); if (tmpBase != null) p = tmpBase.getAbsolutePath(); }
             PackageManager pm = getContext().getPackageManager();
             android.content.pm.PackageInfo pi = pm.getPackageArchiveInfo(p, 0);
             JSObject ret = new JSObject();
@@ -431,8 +435,35 @@ public class AppsPlugin extends Plugin {
                     ret.put("installed", true);
                 } catch (Exception e) { ret.put("installed", false); }
             }
+            if (tmpBase != null) try { tmpBase.delete(); } catch (Exception ignored) {}
             call.resolve(ret);
         } catch (Exception e) { call.reject(e.getMessage()); }
+    }
+
+    private File extractBaseApk(File pkg) {
+        try {
+            ZipFile zf = new ZipFile(pkg);
+            ZipEntry best = null; long bestSize = -1;
+            Enumeration<? extends ZipEntry> en = zf.entries();
+            while (en.hasMoreElements()) {
+                ZipEntry e = en.nextElement();
+                if (e.isDirectory()) continue;
+                String nm = e.getName().toLowerCase();
+                if (!nm.endsWith(".apk")) continue;
+                long sz = e.getSize();
+                // base обычно самый большой .apk (не config.* / split_*)
+                boolean cfg = nm.contains("config.") || nm.contains("split_") || nm.contains("split.");
+                if (!cfg && (best == null || sz > bestSize)) { best = e; bestSize = sz; }
+                else if (best == null) { best = e; bestSize = sz; }
+            }
+            if (best == null) { zf.close(); return null; }
+            File out = new File(getContext().getCacheDir(), "base_" + System.currentTimeMillis() + ".apk");
+            InputStream in = zf.getInputStream(best);
+            OutputStream os = new FileOutputStream(out);
+            byte[] buf = new byte[65536]; int n; while ((n = in.read(buf)) > 0) os.write(buf, 0, n);
+            os.close(); in.close(); zf.close();
+            return out;
+        } catch (Exception e) { return null; }
     }
 
     @PluginMethod
