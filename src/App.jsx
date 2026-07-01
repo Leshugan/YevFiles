@@ -93,7 +93,7 @@ const I = {
   doc2: <><path d="M6 2h9l5 5v15H6z" /><path d="M14 2v6h6" /><path d="M9 13h6M9 16h6" /></>,
   gamepad: <><path d="M7.5 7h9a4.5 4.5 0 0 1 4.4 3.6l1 5A2.6 2.6 0 0 1 18.4 18l-2-2.2a2 2 0 0 0-1.5-.7H9.1a2 2 0 0 0-1.5.7L5.6 18A2.6 2.6 0 0 1 2.1 15.6l1-5A4.5 4.5 0 0 1 7.5 7z" /><path d="M6.2 10.4v2.4M5 11.6h2.4" /><circle cx="15.4" cy="10.8" r=".8" fill="currentColor" /><circle cx="17.6" cy="12.6" r=".8" fill="currentColor" /></>,
   emuPad: <><rect x="3" y="8" width="18" height="9" rx="4.5" /><path d="M7 10.5v4M5 12.5h4" /><circle cx="16" cy="11" r=".8" fill="currentColor" /><circle cx="18.2" cy="13" r=".8" fill="currentColor" /><circle cx="13.8" cy="13" r=".8" fill="currentColor" /><circle cx="16" cy="15" r=".8" fill="currentColor" /></>,
-  switchCon: <><path stroke="#5AA9E6" d="M9 5.5H6.5A2.5 2.5 0 0 0 4 8v8a2.5 2.5 0 0 0 2.5 2.5H9z" /><circle cx="6.4" cy="8.6" r="1" stroke="#5AA9E6" /><path stroke="#5AA9E6" d="M5.6 14.2h1.6" /><rect x="9" y="5.5" width="6" height="13" rx="0.6" stroke="#CFC6BA" /><path stroke="#E60012" d="M15 5.5h2.5A2.5 2.5 0 0 1 20 8v8a2.5 2.5 0 0 1-2.5 2.5H15z" /><circle cx="17.6" cy="14.4" r="1" stroke="#E60012" /><circle cx="17.6" cy="7.9" r=".55" fill="#E60012" stroke="#E60012" /><circle cx="18.8" cy="9.1" r=".55" fill="#E60012" stroke="#E60012" /><circle cx="16.4" cy="9.1" r=".55" fill="#E60012" stroke="#E60012" /><circle cx="17.6" cy="10.3" r=".55" fill="#E60012" stroke="#E60012" /></>,
+  switchCon: <><path stroke="#5AA9E6" d="M11 4H7.5A3.5 3.5 0 0 0 4 7.5v9A3.5 3.5 0 0 0 7.5 20H11z" /><circle cx="7.5" cy="8.5" r="1.1" stroke="#5AA9E6" /><path stroke="#5AA9E6" d="M6.4 14.6h2.2" /><rect x="11" y="4" width="12" height="16" rx="1.2" stroke="#CFC6BA" /><path stroke="#E60012" d="M23 4h3.5A3.5 3.5 0 0 1 30 7.5v9A3.5 3.5 0 0 1 26.5 20H23z" /><circle cx="26.5" cy="14.6" r="1.1" stroke="#E60012" /><circle cx="26.5" cy="7.6" r=".55" fill="#E60012" stroke="#E60012" /><circle cx="27.9" cy="9" r=".55" fill="#E60012" stroke="#E60012" /><circle cx="25.1" cy="9" r=".55" fill="#E60012" stroke="#E60012" /><circle cx="26.5" cy="10.4" r=".55" fill="#E60012" stroke="#E60012" /></>,
   media: <><rect x="3" y="4" width="18" height="16" rx="3" /><path d="M10 9l5 3-5 3z" fill="currentColor" /></>,
   win: <><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M12 3v18M3 12h18" /></>,
   fontA: <><path d="M5 19l5-13 5 13M7 14h6" /><path d="M17 19V9M17 9c2 0 3 1 3 2s-1 2-3 2" /></>,
@@ -139,8 +139,8 @@ const I = {
   star: <path d="M12 3l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 18.8 6.2 21.8l1.1-6.5L2.6 10.7l6.5-.9z" />,
   pin: <><path d="M9 4h6l-1 7 4 3v2H6v-2l4-3z" /><path d="M12 16v4" /></>,
 };
-const Svg = ({ d, size = 24 }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{d}</svg>
+const Svg = ({ d, size = 24, vw }) => (
+  <svg width={vw ? size * (vw / 24) : size} height={size} viewBox={"0 0 " + (vw || 24) + " 24"} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{d}</svg>
 );
 const ArcBadge = ({ name }) => {
   const ext = (name.split(".").pop() || "").toUpperCase();
@@ -198,7 +198,7 @@ const SYS_FOLDERS = {
   games: { d: I.gamepad, c: "#A4C639" }, gamehub: { d: FI.hub, c: "#6FD3A8" }, emu: { d: I.emuPad, c: "#A4C639" },
   arcade: { d: FI.arcadeCab, c: "#E3B14F" }, mame: { d: mkBadge("MAME", 5), c: "#E3B14F" },
   retroarch: { d: FI.joystick, c: "#7C5CFF" }, winlator: { d: I.win, c: "#5AA9E6" }, windows: { d: I.win, c: "#5AA9E6" },
-  switch: { d: I.switchCon, c: "#5AA9E6" }, "nintendo switch": { d: I.switchCon, c: "#5AA9E6" },
+  switch: { d: I.switchCon, c: "#5AA9E6", w: 34 }, "nintendo switch": { d: I.switchCon, c: "#5AA9E6", w: 34 },
   nes: { d: mkBadge("NES"), c: "#E05252" }, dandy: { d: mkBadge("NES"), c: "#E05252" },
   media: { d: I.media, c: "#E0709A" },
   sega: { d: mkBadge("SEGA", 5.5), c: "#3A7BD5" },
@@ -1106,7 +1106,7 @@ export default function App() {
               const isSel = sel.has(e.name), hid = isHidden(e);
               const isDir = e.type === "directory";
               const sf = isDir ? SYS_FOLDERS[e.name.toLowerCase()] : null;
-              const ic = isDir ? { d: (sf && sf.d) || I.folder, c: (sf && sf.c) || ACC } : fileIcon(e.name);
+              const ic = isDir ? { d: (sf && sf.d) || I.folder, c: (sf && sf.c) || ACC, w: sf && sf.w } : fileIcon(e.name);
               const pinned = meta.pinTop.has(keyOf(e.name)) || meta.pinBot.has(keyOf(e.name));
               return (
                 <div key={e.name} style={{ ...S.row, ...(isDir ? S.rowDir : {}), ...(isSel ? S.rowSel : {}), opacity: hid ? 0.5 : 1 }}
@@ -1118,7 +1118,7 @@ export default function App() {
                           <ThumbIcon uri={e.uri} cached={thumbs[e.uri]} request={requestThumb} release={releaseThumb}
                             fallback={/\.apk$/i.test(e.name) ? <Svg d={ic.d} size={24} /> : isPdf(e.name) ? <Svg d={ic.d} size={24} /> : <Svg d={ic.d} size={24} />} />
                       : (!isDir && EXT.archive.includes((e.name.split(".").pop() || "").toLowerCase())) ? <ArcBadge name={e.name} />
-                      : <Svg d={ic.d} size={24} />}
+                      : <Svg d={ic.d} size={24} vw={ic.w} />}
                     {isDir && !iconDB[keyOf(e.name)] && e.thumb ? <img src={cfs(e.thumb)} alt="" loading="lazy" style={S.folderThumb} /> : null}
                   </span>
                   <span style={S.rowMid}>
