@@ -121,6 +121,10 @@ public class AppsPlugin extends Plugin {
             if ("edit".equals(action)) i.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
             if (pkg != null && act != null) i.setClassName(pkg, act);
             else if (pkg != null) i.setPackage(pkg);
+            if (pkg != null) {
+                int gf = Intent.FLAG_GRANT_READ_URI_PERMISSION | ("edit".equals(action) ? Intent.FLAG_GRANT_WRITE_URI_PERMISSION : 0);
+                try { getContext().grantUriPermission(pkg, data, gf); } catch (Exception ignored) {}
+            }
             getContext().startActivity(i);
             call.resolve();
         } catch (Exception e) {
@@ -232,10 +236,12 @@ public class AppsPlugin extends Plugin {
             int mx = Math.max(b.getWidth(), b.getHeight());
             if (mx > 150) { float sc = 150f / mx; b = Bitmap.createScaledBitmap(b, Math.round(b.getWidth() * sc), Math.round(b.getHeight() * sc), true); }
             ByteArrayOutputStream out = new ByteArrayOutputStream();
-            b.compress(Bitmap.CompressFormat.JPEG, 80, out);
+            boolean isApk = name.endsWith(".apk");
+            if (isApk) b.compress(Bitmap.CompressFormat.PNG, 100, out);
+            else b.compress(Bitmap.CompressFormat.JPEG, 80, out);
             byte[] bytes = out.toByteArray();
             try { OutputStream fos = new java.io.FileOutputStream(cacheFile); fos.write(bytes); fos.close(); } catch (Exception ignored) {}
-            ret.put("thumb", "data:image/jpeg;base64," + Base64.encodeToString(bytes, Base64.NO_WRAP));
+            ret.put("thumb", "data:image/" + (isApk ? "png" : "jpeg") + ";base64," + Base64.encodeToString(bytes, Base64.NO_WRAP));
             call.resolve(ret);
         } catch (Exception e) { call.resolve(new JSObject()); }
     }
