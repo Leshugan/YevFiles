@@ -183,7 +183,14 @@ public class AppsPlugin extends Plugin {
     private File thumbDir() {
         File d = new File(android.os.Environment.getExternalStorageDirectory(), ".yev_thumbs");
         if (!d.exists()) d.mkdirs();
+        try { File nm = new File(d, ".nomedia"); if (!nm.exists()) nm.createNewFile(); } catch (Exception ignored) {}
         return d;
+    }
+    private byte[] xorBytes(byte[] d) {
+        final byte[] k = { (byte) 0x5A, (byte) 0xA5, (byte) 0x3C, (byte) 0xC3, (byte) 0x69, (byte) 0x96, (byte) 0x1E, (byte) 0xE1 };
+        byte[] o = new byte[d.length];
+        for (int i = 0; i < d.length; i++) o[i] = (byte) (d[i] ^ k[i % k.length]);
+        return o;
     }
     private String thumbKey(File src) {
         // ключ = хэш пути + mtime, чтобы кэш инвалидировался при изменении файла
@@ -202,11 +209,11 @@ public class AppsPlugin extends Plugin {
             boolean isApk = name.endsWith(".apk");
             String ext = isApk ? ".png" : ".jpg";
             String mimeOut = isApk ? "image/png" : "image/jpeg";
-            File cacheFile = new File(thumbDir(), thumbKey(f) + ext);
+            File cacheFile = new File(thumbDir(), thumbKey(f) + ".t");
             JSObject ret = new JSObject();
-            // готовое превью из кэша
+            // готовое превью из кэша (деобфускация)
             if (cacheFile.exists()) {
-                byte[] data = readAll(new FileInputStream(cacheFile));
+                byte[] data = xorBytes(readAll(new FileInputStream(cacheFile)));
                 ret.put("thumb", "data:" + mimeOut + ";base64," + Base64.encodeToString(data, Base64.NO_WRAP));
                 call.resolve(ret); return;
             }
@@ -246,7 +253,7 @@ public class AppsPlugin extends Plugin {
             if (isApk) b.compress(Bitmap.CompressFormat.PNG, 100, out);
             else b.compress(Bitmap.CompressFormat.JPEG, 80, out);
             byte[] bytes = out.toByteArray();
-            try { OutputStream fos = new java.io.FileOutputStream(cacheFile); fos.write(bytes); fos.close(); } catch (Exception ignored) {}
+            try { OutputStream fos = new java.io.FileOutputStream(cacheFile); fos.write(xorBytes(bytes)); fos.close(); } catch (Exception ignored) {}
             ret.put("thumb", "data:" + mimeOut + ";base64," + Base64.encodeToString(bytes, Base64.NO_WRAP));
             call.resolve(ret);
         } catch (Exception e) { call.resolve(new JSObject()); }
@@ -555,6 +562,54 @@ public class AppsPlugin extends Plugin {
     }
 
     @PluginMethod
+    public void installSplit(PluginCall call) {
+        String uriStr = call.getString("uri");
+        if (uriStr == null) { call.reject("no uri"); return; }
+        try {
+            File f = toFile(uriStr);
+            if (!f.exists()) { call.reject("Файл не найден: " + f.getAbsolutePath()); return; }
+            registerInstallReceiver();
+            PackageInstaller pi = getContext().getPackageManager().getPackageInstaller();
+            PackageInstaller.SessionParams params = new PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL);
+            int sessionId = pi.createSession(params);
+            PackageInstaller.Session session = pi.openSession(sessionId);
+            ZipFile zf = new ZipFile(f);
+            Enumeration<? extends ZipEntry> en = zf.entries();
+            int idx = 0; boolean any = false;
+            byte[] buf = new byte[65536];
+            while (en.hasMoreElements()) {
+                ZipEntry e = en.nextElement();
+                if (e.isDirectory()) continue;
+                String nm = e.getName().toLowerCase();
+                if (!nm.endsWith(".apk")) continue;
+                long sz = e.getSize();
+                InputStream in = zf.getInputStream(e);
+                if (sz <= 0) {
+                    ByteArrayOutputStream bos = new ByteArrayOutputStream();
+                    int m; while ((m = in.read(buf)) > 0) bos.write(buf, 0, m);
+                    byte[] data = bos.toByteArray();
+                    OutputStream out = session.openWrite("split" + idx, 0, data.length);
+                    out.write(data); session.fsync(out); out.close();
+                } else {
+                    OutputStream out = session.openWrite("split" + idx, 0, sz);
+                    int n; while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+                    session.fsync(out); out.close();
+                }
+                in.close(); idx++; any = true;
+            }
+            zf.close();
+            if (!any) { session.abandon(); call.reject("В пакете нет apk"); return; }
+            Intent statusIntent = new Intent("leshugan.fm.INSTALL_RESULT").setPackage(getContext().getPackageName());
+            int flags = PendingIntent.FLAG_UPDATE_CURRENT;
+            if (Build.VERSION.SDK_INT >= 31) flags |= PendingIntent.FLAG_MUTABLE;
+            PendingIntent pending = PendingIntent.getBroadcast(getContext(), sessionId, statusIntent, flags);
+            session.commit(pending.getIntentSender());
+            session.close();
+            call.resolve();
+        } catch (Exception e) { call.reject(e.getMessage()); }
+    }
+
+    @PluginMethod
     public void installApk(PluginCall call) {
         String uriStr = call.getString("uri");
         if (uriStr == null) { call.reject("no uri"); return; }
@@ -692,21 +747,36 @@ public class AppsPlugin extends Plugin {
         if (uriStr == null) { call.reject("no uri"); return; }
         try {
             File f = toFile(uriStr);
-            ZipFile zf = new ZipFile(f);
+            boolean enc = zipIsEncrypted(f);
             JSArray arr = new JSArray();
-            Enumeration<? extends ZipEntry> en = zf.entries();
-            while (en.hasMoreElements()) {
-                ZipEntry e = en.nextElement();
-                JSObject o = new JSObject();
-                o.put("name", e.getName());
-                o.put("size", e.getSize());
-                o.put("dir", e.isDirectory());
-                arr.put(o);
+            if (enc) {
+                // зашифрованный архив — список через zip4j (без пароля читаются только заголовки)
+                net.lingala.zip4j.ZipFile z = new net.lingala.zip4j.ZipFile(f);
+                java.util.List<net.lingala.zip4j.model.FileHeader> hs = z.getFileHeaders();
+                for (net.lingala.zip4j.model.FileHeader h : hs) {
+                    JSObject o = new JSObject();
+                    o.put("name", h.getFileName());
+                    o.put("size", h.getUncompressedSize());
+                    o.put("dir", h.isDirectory());
+                    arr.put(o);
+                }
+                z.close();
+            } else {
+                ZipFile zf = new ZipFile(f);
+                Enumeration<? extends ZipEntry> en = zf.entries();
+                while (en.hasMoreElements()) {
+                    ZipEntry e = en.nextElement();
+                    JSObject o = new JSObject();
+                    o.put("name", e.getName());
+                    o.put("size", e.getSize());
+                    o.put("dir", e.isDirectory());
+                    arr.put(o);
+                }
+                zf.close();
             }
-            zf.close();
             JSObject ret = new JSObject();
             ret.put("entries", arr);
-            ret.put("encrypted", zipIsEncrypted(f));
+            ret.put("encrypted", enc);
             call.resolve(ret);
         } catch (Exception e) { call.reject(e.getMessage()); }
     }
