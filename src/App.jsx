@@ -1063,8 +1063,10 @@ export default function App() {
        <div style={{ pointerEvents: "auto" }}>
       {selMode ? (
         <nav style={{ ...S.bottom, justifyContent: "flex-start" }}>
-          <div style={S.selCount}>
-            <span key={sel.size} style={{ fontSize: 11, fontWeight: 700, color: "#fff", lineHeight: 1, display: "block", textAlign: "center", animation: "pulse .3s cubic-bezier(.2,.9,.3,1.3)" }}>{sel.size}</span>
+          <div style={{ width: 64, display: "flex", justifyContent: "center", flexShrink: 0 }}>
+            <div style={S.selCount}>
+              <span key={sel.size} style={{ fontSize: 11, fontWeight: 700, color: "#fff", lineHeight: 1, display: "block", textAlign: "center", animation: "pulse .3s cubic-bezier(.2,.9,.3,1.3)" }}>{sel.size}</span>
+            </div>
           </div>
           <div style={{ display: "flex", overflowX: "auto", flex: 1, justifyContent: "flex-start" }}>
             <Btn onClick={exitSel} icon={I.x} label="Отмена" flexNone />
@@ -1794,7 +1796,7 @@ const S = {
   searchClose: { border: "none", background: "transparent", color: SUB, fontSize: 24, width: 40 },
   bottom: { display: "flex", alignItems: "center", background: BAR, flexShrink: 0, borderRadius: 26, margin: "4px 8px calc(8px + env(safe-area-inset-bottom))", boxShadow: "0 1px 0 rgba(255,255,255,.05) inset, 0 4px 16px -6px rgba(0,0,0,.30)" },
   btn: { border: "none", background: "transparent", padding: "6px 6px 7px", display: "flex", flexDirection: "column", alignItems: "center", gap: 2 },
-  selCount: { width: 22, height: 22, marginLeft: 10, marginRight: 16, borderRadius: 11, background: ACC, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0, lineHeight: 0 },
+  selCount: { width: 22, height: 22, borderRadius: 11, background: ACC, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0, lineHeight: 0 },
   btnLabel: { fontSize: 10, color: SUB, whiteSpace: "nowrap" },
   overlay: { position: "fixed", inset: 0, zIndex: 8 },
   menu: { position: "absolute", zIndex: 9, background: BAR, borderRadius: 12, overflow: "hidden", border: "1px solid " + LINE, boxShadow: "0 1px 0 rgba(255,255,255,.07) inset, 0 4px 12px rgba(0,0,0,.4), 0 18px 48px rgba(0,0,0,.62)", minWidth: 200, animation: "dropGrow .2s cubic-bezier(.2,.9,.3,1.2)" },
