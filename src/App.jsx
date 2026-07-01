@@ -9,7 +9,7 @@ const Apps = registerPlugin("Apps");
 const BG = "var(--bg)", BAR = "var(--bar)", ROW2 = "var(--row2)", ACC = "var(--acc)";
 const GOLD = "var(--gold)", RED = "var(--red)", TXT = "var(--txt)", SUB = "var(--sub)", LINE = "var(--line)", INK = "var(--ink)";
 const THEMES = {
-  dark:  { "--bg": "#1C140C", "--bar": "#2A2017", "--row2": "#2E251C", "--acc": "#EF6C00", "--accbg": "rgba(239,108,0,.18)", "--gold": "#F5A623", "--red": "#E05252", "--txt": "#F2EAE0", "--ink": "#E0D5C8", "--sub": "#B0A498", "--line": "#4A3A2A", "--chip": "rgba(255,255,255,.06)", "--hair": "rgba(255,255,255,.08)", "--tgloff": "#4A3A2A" },
+  dark:  { "--bg": "#1A120A", "--bar": "#33271B", "--row2": "#3B2E20", "--acc": "#EF6C00", "--accbg": "rgba(239,108,0,.18)", "--gold": "#F5A623", "--red": "#E05252", "--txt": "#F2EAE0", "--ink": "#E0D5C8", "--sub": "#B0A498", "--line": "#544230", "--chip": "rgba(255,255,255,.06)", "--hair": "rgba(255,255,255,.12)", "--tgloff": "#4A3A2A" },
   light: { "--bg": "#EEF1F4", "--bar": "#FFFFFF", "--row2": "#E4E8EC", "--acc": "#2F80ED", "--accbg": "rgba(47,128,237,.14)", "--gold": "#2F80ED", "--red": "#D14343", "--txt": "#1E2329", "--ink": "#3D4754", "--sub": "#6B7280", "--line": "#D3D8DE", "--chip": "rgba(0,0,0,.05)", "--hair": "rgba(0,0,0,.08)", "--tgloff": "#C2C8D0" },
 };
 const DIR = Directory.ExternalStorage;
@@ -60,7 +60,21 @@ const fmtDate = (ms) => {
 };
 const ago = (ms) => { if (!ms) return "—"; const d = new Date(ms), diff = (Date.now() - ms) / 60000; const rel = diff < 1 ? "только что" : diff < 60 ? Math.floor(diff) + " мин назад" : diff < 1440 ? Math.floor(diff / 60) + " ч назад" : Math.floor(diff / 1440) + " дн назад"; const p = (n) => String(n).padStart(2, "0"); return `${p(d.getHours())}:${p(d.getMinutes())}, ${p(d.getDate())}.${p(d.getMonth() + 1)}.${String(d.getFullYear()).slice(2)} · ${rel}`; };
 
-const MIME = { txt: "text/plain", md: "text/plain", log: "text/plain", ini: "text/plain", cfg: "text/plain", conf: "text/plain", csv: "text/csv", html: "text/html", htm: "text/html", json: "application/json", xml: "text/xml", yml: "text/plain", yaml: "text/plain", java: "text/plain", kt: "text/plain", kts: "text/plain", js: "text/plain", jsx: "text/plain", ts: "text/plain", tsx: "text/plain", py: "text/plain", c: "text/plain", h: "text/plain", cpp: "text/plain", cc: "text/plain", cs: "text/plain", go: "text/plain", rs: "text/plain", rb: "text/plain", php: "text/plain", swift: "text/plain", sh: "text/plain", bat: "text/plain", gradle: "text/plain", properties: "text/plain", css: "text/plain", sql: "text/plain", lua: "text/plain", toml: "text/plain", pdf: "application/pdf", jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", gif: "image/gif", webp: "image/webp", bmp: "image/bmp", svg: "image/svg+xml", mp4: "video/mp4", mkv: "video/x-matroska", avi: "video/x-msvideo", mov: "video/quicktime", webm: "video/webm", "3gp": "video/3gpp", mp3: "audio/mpeg", wav: "audio/wav", ogg: "audio/ogg", flac: "audio/flac", m4a: "audio/mp4", aac: "audio/aac", zip: "application/zip", rar: "application/vnd.rar", "7z": "application/x-7z-compressed", tar: "application/x-tar", gz: "application/gzip", apk: "application/vnd.android.package-archive" };
+const MIME = {
+  txt: "text/plain", md: "text/plain", markdown: "text/plain", log: "text/plain", ini: "text/plain", cfg: "text/plain", conf: "text/plain", csv: "text/csv", tsv: "text/tab-separated-values", html: "text/html", htm: "text/html", xhtml: "application/xhtml+xml", json: "application/json", json5: "application/json", xml: "text/xml", plist: "text/xml", yml: "text/plain", yaml: "text/plain", java: "text/plain", kt: "text/plain", kts: "text/plain", js: "text/plain", mjs: "text/plain", cjs: "text/plain", jsx: "text/plain", ts: "text/plain", tsx: "text/plain", vue: "text/plain", svelte: "text/plain", py: "text/plain", pyw: "text/plain", rb: "text/plain", php: "text/plain", c: "text/plain", h: "text/plain", hpp: "text/plain", cpp: "text/plain", cxx: "text/plain", cc: "text/plain", cs: "text/plain", go: "text/plain", rs: "text/plain", swift: "text/plain", m: "text/plain", mm: "text/plain", scala: "text/plain", dart: "text/plain", lua: "text/plain", pl: "text/plain", r: "text/plain", sh: "text/plain", bash: "text/plain", zsh: "text/plain", bat: "text/plain", cmd: "text/plain", ps1: "text/plain", gradle: "text/plain", properties: "text/plain", css: "text/css", scss: "text/plain", sass: "text/plain", less: "text/plain", sql: "text/plain", toml: "text/plain", env: "text/plain", gitignore: "text/plain", dockerfile: "text/plain", makefile: "text/plain", diff: "text/plain", patch: "text/plain", srt: "text/plain", vtt: "text/plain", ass: "text/plain", tex: "text/plain",
+  pdf: "application/pdf", djvu: "image/vnd.djvu", djv: "image/vnd.djvu",
+  doc: "application/msword", docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", dot: "application/msword", odt: "application/vnd.oasis.opendocument.text", ott: "application/vnd.oasis.opendocument.text", rtf: "application/rtf",
+  xls: "application/vnd.ms-excel", xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", ods: "application/vnd.oasis.opendocument.spreadsheet",
+  ppt: "application/vnd.ms-powerpoint", pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation", odp: "application/vnd.oasis.opendocument.presentation",
+  epub: "application/epub+zip", mobi: "application/x-mobipocket-ebook", azw: "application/vnd.amazon.ebook", azw3: "application/vnd.amazon.ebook", fb2: "application/x-fictionbook+xml",
+  jpg: "image/jpeg", jpeg: "image/jpeg", jpe: "image/jpeg", jfif: "image/jpeg", png: "image/png", apng: "image/apng", gif: "image/gif", webp: "image/webp", bmp: "image/bmp", dib: "image/bmp", svg: "image/svg+xml", svgz: "image/svg+xml", ico: "image/x-icon", cur: "image/x-icon", tif: "image/tiff", tiff: "image/tiff", heic: "image/heic", heif: "image/heif", avif: "image/avif", jxl: "image/jxl", raw: "image/x-panasonic-raw", dng: "image/x-adobe-dng", cr2: "image/x-canon-cr2", nef: "image/x-nikon-nef", arw: "image/x-sony-arw", psd: "image/vnd.adobe.photoshop",
+  mp4: "video/mp4", m4v: "video/x-m4v", mkv: "video/x-matroska", webm: "video/webm", avi: "video/x-msvideo", mov: "video/quicktime", qt: "video/quicktime", wmv: "video/x-ms-wmv", flv: "video/x-flv", f4v: "video/x-f4v", "3gp": "video/3gpp", "3g2": "video/3gpp2", mpg: "video/mpeg", mpeg: "video/mpeg", mpe: "video/mpeg", m2v: "video/mpeg", ts: "video/mp2t", m2ts: "video/mp2t", mts: "video/mp2t", vob: "video/dvd", ogv: "video/ogg", rm: "application/vnd.rn-realmedia", rmvb: "application/vnd.rn-realmedia-vbr", divx: "video/divx", asf: "video/x-ms-asf",
+  mp3: "audio/mpeg", wav: "audio/wav", wave: "audio/wav", flac: "audio/flac", aac: "audio/aac", ogg: "audio/ogg", oga: "audio/ogg", opus: "audio/opus", m4a: "audio/mp4", m4b: "audio/mp4", wma: "audio/x-ms-wma", amr: "audio/amr", aiff: "audio/aiff", aif: "audio/aiff", ape: "audio/x-ape", ac3: "audio/ac3", dts: "audio/vnd.dts", mid: "audio/midi", midi: "audio/midi", mka: "audio/x-matroska", ra: "audio/x-realaudio", au: "audio/basic", weba: "audio/webm",
+  zip: "application/zip", rar: "application/vnd.rar", "7z": "application/x-7z-compressed", tar: "application/x-tar", gz: "application/gzip", tgz: "application/gzip", bz2: "application/x-bzip2", tbz: "application/x-bzip2", tbz2: "application/x-bzip2", xz: "application/x-xz", txz: "application/x-xz", lz: "application/x-lzip", lzma: "application/x-lzma", zst: "application/zstd", z: "application/x-compress", cab: "application/vnd.ms-cab-compressed", arj: "application/x-arj", lha: "application/x-lzh", lzh: "application/x-lzh", ace: "application/x-ace-compressed", iso: "application/x-iso9660-image", img: "application/x-iso9660-image", dmg: "application/x-apple-diskimage", deb: "application/vnd.debian.binary-package", rpm: "application/x-rpm", jar: "application/java-archive", war: "application/java-archive", obb: "application/octet-stream",
+  apk: "application/vnd.android.package-archive", apks: "application/octet-stream", xapk: "application/octet-stream", apkm: "application/octet-stream", aab: "application/octet-stream",
+  ttf: "font/ttf", otf: "font/otf", woff: "font/woff", woff2: "font/woff2", eot: "application/vnd.ms-fontobject",
+  apk_: "application/vnd.android.package-archive",
+};
 const mimeOf = (name) => MIME[(name.split(".").pop() || "").toLowerCase()] || "*/*";
 const TEXT_EXT = new Set(["txt", "md", "log", "ini", "cfg", "conf", "yml", "yaml", "java", "kt", "kts", "js", "jsx", "ts", "tsx", "py", "c", "h", "cpp", "cc", "cs", "go", "rs", "rb", "php", "swift", "sh", "bat", "gradle", "properties", "css", "sql", "lua", "toml", "xml", "json", "html", "htm", "csv"]);
 const defaultOpenAs = (name) => { const e = (name.split(".").pop() || "").toLowerCase(); const m = mimeOf(name); if (TEXT_EXT.has(e)) return "text/plain"; if (m.startsWith("image/")) return "image/*"; if (m.startsWith("video/")) return "video/*"; if (m.startsWith("audio/")) return "audio/*"; if (m === "application/pdf") return "application/pdf"; return "*/*"; };
@@ -153,12 +167,14 @@ const ThumbIcon = ({ uri, cached, request, release, fallback }) => {
   return <span ref={ref} style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "100%", height: "100%" }}>{fallback}</span>;
 };
 const EXT = {
-  img: ["jpg", "jpeg", "png", "gif", "webp", "bmp", "svg", "heic"],
-  video: ["mp4", "mkv", "avi", "mov", "webm", "3gp", "flv"],
-  audio: ["mp3", "wav", "ogg", "flac", "m4a", "aac"],
-  archive: ["zip", "rar", "7z", "tar", "gz", "apk", "obb"],
-  font: ["ttf", "otf", "woff", "woff2"],
-  code: ["js", "jsx", "ts", "json", "html", "css", "xml", "py", "java", "kt", "c", "cpp", "sh"],
+  img: ["jpg", "jpeg", "jpe", "jfif", "png", "apng", "gif", "webp", "bmp", "dib", "svg", "svgz", "ico", "cur", "tif", "tiff", "heic", "heif", "avif", "jxl", "psd", "raw", "dng", "cr2", "nef", "arw"],
+  video: ["mp4", "m4v", "mkv", "webm", "avi", "mov", "qt", "wmv", "flv", "f4v", "3gp", "3g2", "mpg", "mpeg", "mpe", "m2v", "ts", "m2ts", "mts", "vob", "ogv", "rm", "rmvb", "divx", "asf"],
+  audio: ["mp3", "wav", "wave", "flac", "aac", "ogg", "oga", "opus", "m4a", "m4b", "wma", "amr", "aiff", "aif", "ape", "ac3", "dts", "mid", "midi", "mka", "ra", "au", "weba"],
+  archive: ["zip", "rar", "7z", "tar", "gz", "tgz", "bz2", "tbz", "tbz2", "xz", "txz", "lz", "lzma", "zst", "z", "cab", "arj", "lha", "lzh", "ace", "iso", "dmg", "deb", "rpm", "jar", "war", "apk", "obb"],
+  font: ["ttf", "otf", "woff", "woff2", "eot"],
+  doc: ["doc", "docx", "dot", "odt", "ott", "rtf", "xls", "xlsx", "ods", "ppt", "pptx", "odp"],
+  ebook: ["epub", "mobi", "azw", "azw3", "fb2", "djvu", "djv"],
+  code: ["js", "mjs", "cjs", "jsx", "ts", "tsx", "vue", "json", "json5", "html", "htm", "css", "scss", "less", "xml", "py", "java", "kt", "kts", "c", "h", "hpp", "cpp", "cc", "cs", "go", "rs", "rb", "php", "swift", "dart", "lua", "sh", "bash", "bat", "ps1", "sql", "yml", "yaml", "toml", "gradle"],
 };
 const SYS_FOLDERS = {
   download: { d: I.dl, c: "#5AA9E6" }, downloads: { d: I.dl, c: "#5AA9E6" },
@@ -594,13 +610,20 @@ export default function App() {
       hm[om.mime] = [...arr]; saveMap(HIDEKEY, hm); setOpenMenu({ ...om }); return;
     }
     const defs = loadMap(DEFKEY);
+    const openMime = om.asCat ? om.mime : mimeOf(om.file.name);
     if (om.edit) { setOpenMenu(null); try { await Apps.open({ uri: om.file.uri, mime: mimeOf(om.file.name), packageName: app.packageName, activityName: app.activityName, action: "edit" }); } catch (err) { showToast("Не удалось открыть: " + (err?.message || "")); } return; }
     const dkey = defaultOpenAs(om.file.name);
     if (om.useDefault) { defs[dkey] = app.packageName + "|" + app.activityName; saveMap(DEFKEY, defs); }
     else if (defs[dkey]) { delete defs[dkey]; saveMap(DEFKEY, defs); } // разовый выбор — сбросить прежнюю привязку
     setOpenMenu(null);
-    try { await Apps.open({ uri: om.file.uri, mime: mimeOf(om.file.name), packageName: app.packageName, activityName: app.activityName }); }
+    try { await Apps.open({ uri: om.file.uri, mime: openMime, packageName: app.packageName, activityName: app.activityName }); }
     catch (err) { showToast("Не удалось открыть: " + (err?.message || "")); }
+  };
+  const reQueryAs = async (mime) => {
+    const e = openMenu.file;
+    setOpenMenu((m) => (m ? { ...m, mime, asCat: true, apps: null } : m));
+    try { const { apps } = await Apps.query({ uri: e.uri, mime, action: "view" }); setOpenMenu((m) => (m && m.file === e ? { ...m, apps: apps || [] } : m)); }
+    catch { setOpenMenu((m) => (m && m.file === e ? { ...m, apps: [] } : m)); }
   };
   const arcAnchor = useRef(null);
   const absPath = async (rel) => { const u = await Filesystem.getUri({ path: rel, directory: DIR }); let p = u.uri; if (p.startsWith("file://")) p = p.slice(7); try { p = decodeURIComponent(p); } catch {} return p; };
@@ -652,11 +675,10 @@ export default function App() {
   // только СТОКОВЫЕ пункты (приложения — отдельным списком, не сюда)
   const buildStockItems = (om) => {
     const f = om.file; const ext = (f.name.split(".").pop() || "").toLowerCase();
-    const isApkF = /\.apk$/i.test(f.name); const isArc = EXT.archive.includes(ext) && !isApkF; const items = [];
+    const isApkF = /\.apk$/i.test(f.name); const isArc = /\.(zip|jar|war|obb)$/i.test(f.name); const items = [];
     if (isImg(f.name)) items.push({ id: "viewer", label: "Открыть", d: I.img, size: 26, color: GOLD, onClick: () => { const defs = loadMap(DEFKEY); if (om.useDefault) defs[defaultOpenAs(f.name)] = "__viewer__"; else if (defs[defaultOpenAs(f.name)]) delete defs[defaultOpenAs(f.name)]; saveMap(DEFKEY, defs); setOpenMenu(null); openViewer(f); } });
     if (isApkF) {
       items.push({ id: "apk_archive", label: "Открыть как архив", d: I.folder, size: 26, color: GOLD, onClick: () => openArchive(f) });
-      items.push({ id: "apk_install", label: "Установщик пакетов", d: I.plus, size: 28, color: "#6FD3A8", onClick: () => { setOpenMenu(null); Apps.installApk({ uri: f.uri }).catch((er) => showToast("Ошибка: " + (er?.message || ""))); } });
     }
     if (om.split) {
       items.push({ id: "split_install", label: "Установщик пакетов (split)", d: I.plus, size: 28, color: "#6FD3A8", onClick: () => { setOpenMenu(null); showToast("Установка пакета…"); Apps.installSplit({ uri: f.uri }).catch((er) => showToast("Ошибка: " + (er?.message || ""))); } });
@@ -1529,15 +1551,22 @@ export default function App() {
                 <div style={{ ...S.sheetTitle, marginBottom: 0, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{openMenu.file.name}</div>
                 <button style={{ ...S.iconBtn, color: openMenu.editHide ? ACC : SUB }} onClick={() => setOpenMenu({ ...openMenu, editHide: !openMenu.editHide })}><Svg d={I.rename} size={20} /></button>
               </div>
-              {(() => { const isArc = EXT.archive.includes((openMenu.file.name.split(".").pop() || "").toLowerCase()) && !/\.apk$/i.test(openMenu.file.name); return (isArc || isImg(openMenu.file.name) || /\.apk$/i.test(openMenu.file.name) || openMenu.split || openMenu.edit) ? null : (<>
-              <div style={{ fontSize: 12, color: SUB, marginBottom: 6 }}>Открыть как:</div>
-              <div style={{ display: "flex", gap: 6, overflowX: "auto", marginBottom: 14, paddingBottom: 2 }}>
-                {OPEN_AS.map(([m, lbl]) => (
-                  <button key={m} onClick={() => showOpenMenu(openMenu.file, m)}
-                    style={{ ...S.chip, ...(openMenu.mime === m ? S.chipOn : {}) }}>{lbl}</button>
-                ))}
-              </div>
-              </>); })()}
+              {!openMenu.editHide && !openMenu.edit && (
+                <>
+                  <div onClick={() => setOpenMenu({ ...openMenu, showCats: !openMenu.showCats })} style={{ ...S.appRow, color: SUB }}>
+                    <span style={{ width: 38, display: "flex", justifyContent: "center" }}><Svg d={I.chev} size={22} /></span>
+                    <span style={{ flex: 1, fontSize: 15 }}>Открыть как…</span>
+                  </div>
+                  {openMenu.showCats && (
+                    <div style={{ display: "flex", gap: 6, overflowX: "auto", margin: "2px 0 12px", paddingBottom: 2 }}>
+                      {OPEN_AS.map(([m, lbl]) => (
+                        <button key={m} onClick={() => reQueryAs(m)}
+                          style={{ ...S.chip, ...(openMenu.asCat && openMenu.mime === m ? S.chipOn : {}) }}>{lbl}</button>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
               {openMenu.editHide && <div style={{ fontSize: 12, color: GOLD, marginBottom: 10 }}>Глаз — скрыть/показать. Кнопки перетаскиваются (удержание). Тап по приложению — скрыть/показать.</div>}
               <div onTouchMove={menuDragMove} onTouchEnd={() => menuDragEnd(menuCat(openMenu))} onTouchCancel={() => menuDragEnd(menuCat(openMenu))}>
                 {(() => {
@@ -1561,7 +1590,7 @@ export default function App() {
                   });
                 })()}
               </div>
-              {!openMenu.split && !/\.apk$/i.test(openMenu.file.name) && !(EXT.archive.includes((openMenu.file.name.split(".").pop() || "").toLowerCase())) && (
+              {(() => { const fm = mimeOf(openMenu.file.name); return !openMenu.split && ((fm !== "*/*" && fm !== "application/octet-stream") || (openMenu.asCat && openMenu.mime !== "*/*")); })() && (
               <div style={{ maxHeight: "42vh", overflowY: "auto" }}>
                 {openMenu.apps == null && <div style={{ color: SUB, padding: 20, textAlign: "center" }}>Загрузка приложений…</div>}
                 {openMenu.apps && shown.length === 0 && <div style={{ color: SUB, padding: 16, textAlign: "center" }}>Нет приложений</div>}
@@ -1580,14 +1609,14 @@ export default function App() {
               </div>
               )}
               {!openMenu.editHide && !openMenu.edit && !openMenu.split && !/\.apk$/i.test(openMenu.file.name) && (
-                <>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 2px 2px" }}>
                   <div onClick={() => setOpenMenu({ ...openMenu, useDefault: !openMenu.useDefault })}
-                    style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 2px", cursor: "pointer" }}>
+                    style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, cursor: "pointer" }}>
                     <span style={{ ...S.cbox, ...(openMenu.useDefault ? S.cboxOn : {}) }}>{openMenu.useDefault ? "✓" : ""}</span>
                     <span style={{ fontSize: 14 }}>Использовать по умолчанию</span>
                   </div>
-                  <button style={{ ...S.sheetGhost, width: "100%", color: RED, borderColor: LINE }} onClick={resetDefault}>Сбросить привязку</button>
-                </>
+                  <button style={{ ...S.sheetGhost, color: RED, borderColor: LINE, padding: "8px 18px", flexShrink: 0 }} onClick={resetDefault}>Сбросить</button>
+                </div>
               )}
             </div>
           </div>
@@ -1790,7 +1819,7 @@ function Btn({ onClick, icon, text, label, accent, red, flexNone, disabled }) {
 
 const S = {
   app: { position: "relative", display: "flex", flexDirection: "column", height: "100vh", background: BG, color: TXT, fontFamily: "system-ui,-apple-system,Roboto,sans-serif", overflow: "hidden" },
-  tabsbar: { display: "flex", alignItems: "center", background: BAR, flexShrink: 0, height: 50, margin: "8px 8px 6px", borderRadius: 24, boxShadow: "0 1px 0 rgba(255,255,255,.05) inset, 0 6px 14px -4px rgba(0,0,0,.35)" },
+  tabsbar: { display: "flex", alignItems: "center", background: BAR, flexShrink: 0, height: 50, margin: "8px 8px 6px", borderRadius: 24, boxShadow: "0 1px 0 rgba(255,255,255,.09) inset, 0 0 0 1px var(--hair), 0 10px 22px -8px rgba(0,0,0,.55)" },
   tabs: { display: "flex", overflowX: "auto", flex: 1, alignItems: "center", justifyContent: "center", gap: 6, padding: "0 4px", height: "100%" },
   tab: { display: "flex", alignItems: "center", gap: 6, padding: "0 12px", height: 34, borderRadius: 17, fontSize: 13.5, color: SUB, whiteSpace: "nowrap", background: "var(--chip)", flexShrink: 0, border: "1px solid transparent" },
   tabActive: { color: ACC, background: "var(--accbg)", border: "1px solid " + ACC, fontWeight: 600, boxShadow: "0 0 0 1px var(--accbg), 0 2px 8px var(--accbg)" },
@@ -1824,7 +1853,7 @@ const S = {
   searchBar: { display: "flex", alignItems: "center", background: ROW2, padding: 8, gap: 8, flexShrink: 0 },
   searchInput: { flex: 1, padding: "10px 12px", borderRadius: 8, border: "1px solid " + LINE, background: BAR, color: TXT, fontSize: 15, outline: "none" },
   searchClose: { border: "none", background: "transparent", color: SUB, fontSize: 24, width: 40 },
-  bottom: { display: "flex", alignItems: "center", background: BAR, flexShrink: 0, borderRadius: 26, margin: "4px 8px calc(8px + env(safe-area-inset-bottom))", boxShadow: "0 1px 0 rgba(255,255,255,.05) inset, 0 4px 16px -6px rgba(0,0,0,.30)" },
+  bottom: { display: "flex", alignItems: "center", background: BAR, flexShrink: 0, borderRadius: 26, margin: "4px 8px calc(8px + env(safe-area-inset-bottom))", boxShadow: "0 1px 0 rgba(255,255,255,.09) inset, 0 0 0 1px var(--hair), 0 -2px 10px -4px rgba(0,0,0,.3), 0 10px 26px -8px rgba(0,0,0,.55)" },
   btn: { border: "none", background: "transparent", padding: "6px 6px 7px", display: "flex", flexDirection: "column", alignItems: "center", gap: 2 },
   selCount: { width: 22, height: 22, borderRadius: 11, background: ACC, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0, lineHeight: 0 },
   btnLabel: { fontSize: 10, color: SUB, whiteSpace: "nowrap" },
