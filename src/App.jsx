@@ -214,6 +214,7 @@ export default function App() {
   const cancelRef = useRef(false);
   const [query, setQuery] = useState(null);
   const [createOpen, setCreateOpen] = useState(false);
+  const [createSub, setCreateSub] = useState(null);
   const [confirmDel, setConfirmDel] = useState(false);
   const [delInfo, setDelInfo] = useState(null);
   useEffect(() => {
@@ -574,6 +575,20 @@ export default function App() {
   const absPath = async (rel) => { const u = await Filesystem.getUri({ path: rel, directory: DIR }); let p = u.uri; if (p.startsWith("file://")) p = p.slice(7); try { p = decodeURIComponent(p); } catch {} return p; };
   const extractAllTo = async (uri, destRel, names) => {
     const destDir = await absPath(destRel);
+    // проверка конфликтов имён с содержимым папки назначения
+    try {
+      const zl = await Apps.zipList({ uri });
+      const dl = await Filesystem.readdir({ path: destDir }).catch(() => ({ files: [] }));
+      const destNames = new Set((dl.files || []).map((f) => f.name));
+      const wanted = names ? names : (zl.entries || []).map((x) => x.name);
+      const tops = new Set(wanted.map((n) => String(n).split("/")[0]).filter(Boolean));
+      const clash = [...tops].filter((n) => destNames.has(n));
+      if (clash.length) {
+        const action = await askConflict(clash.length === 1 ? clash[0] : clash.length + " объект(ов) совпадают");
+        if (action === "cancel" || action === "skip") { showToast("Отменено"); return; }
+        // overwrite/rename → извлекаем (нативно перезаписывает)
+      }
+    } catch {}
     let sub = null;
     try { sub = await Apps.addListener("opProgress", (ev) => setProgress({ current: ev.done, total: ev.total, name: ev.name, mode: "ext" })); } catch {}
     setProgress({ current: 0, total: (names ? names.length : 1), name: "", mode: "ext" });
@@ -656,6 +671,7 @@ export default function App() {
   const doCreateFolder = async (name) => { setSheet(null); if (!name) return; try { await Filesystem.mkdir({ path: targetUri(name) }); refresh(); } catch (e) { showToast("Ошибка: " + e.message); } };
   const doCreateTxt = async (name) => { setSheet(null); if (!name) return; if (!/\.txt$/i.test(name)) name += ".txt"; try { await Filesystem.writeFile({ path: targetUri(name), data: "", encoding: Encoding.UTF8 }); refresh(); } catch (e) { showToast("Ошибка: " + e.message); } };
   const doCreateNomedia = async () => { try { await Filesystem.writeFile({ path: targetUri(".nomedia"), data: "", encoding: Encoding.UTF8 }); refresh(); showToast("Создан .nomedia"); } catch (e) { showToast("Ошибка: " + e.message); } };
+  const doCreateDotFile = async (nm) => { try { await Filesystem.writeFile({ path: targetUri(nm), data: "", encoding: Encoding.UTF8 }); refresh(); showToast("Создан " + nm); } catch (e) { showToast("Ошибка: " + e.message); } };
   const doRename = async (oldName, newName) => { setSheet(null); if (!newName || newName === oldName) return; const e = byName(oldName); if (!e) return; try { await Filesystem.rename({ from: e.uri, to: targetUri(newName) }); exitSel(); refresh(); } catch (er) { showToast("Ошибка: " + er.message); } };
   const delTree = async (e) => {
     try { const r = await Apps.deletePath({ uri: e.uri }); if (r && r.ok) return; } catch {}
@@ -716,34 +732,41 @@ export default function App() {
   const runQueue = async (queue) => {
     const all = [];
     for (const t of queue) for (const it of t.items) all.push({ it, mode: t.mode });
-    const total = all.length; cancelRef.current = false; conflictAll.current = null; setConflictApplyAll(false);
-    const takenNames = new Set(entries.map((e) => e.name));
+    conflictAll.current = null; setConflictApplyAll(false);
+    const existing = new Set(entries.map((e) => e.name));
+    const takenNames = new Set(existing);
+    // ПРЕ-ПАСС: разрешаем конфликты имён ДО показа прогресса
+    const plan = [];
+    for (const { it, mode } of all) {
+      if (it.type === "directory" && curUri && curUri === it.uri) continue;
+      let destName = it.name, overwrite = false;
+      if (existing.has(it.name) && it.uri !== targetUri(it.name)) {
+        let action = conflictAll.current || await askConflict(it.name);
+        if (action === "cancel") { showToast("Отменено"); return; }
+        if (action === "skip") continue;
+        if (action === "rename") destName = freeName(it.name, takenNames);
+        else overwrite = true; // перезапись
+      }
+      takenNames.add(destName);
+      plan.push({ it, mode, destName, overwrite });
+    }
+    if (!plan.length) { showToast("Нечего вставлять"); return; }
+    const total = plan.length; cancelRef.current = false;
     setProgress({ current: 0, total, name: "", unit: "items" });
-    // подписка на по-файловый прогресс из нативного copyTree
     let sub = null;
     try { sub = await Apps.addListener("opProgress", (ev) => { setProgress((p) => (p ? { ...p, sub: { done: ev.done, total: ev.total, name: ev.name } } : p)); }); } catch {}
-    for (let i = 0; i < all.length; i++) {
+    for (let i = 0; i < plan.length; i++) {
       if (cancelRef.current) break;
-      const { it, mode } = all[i];
+      const { it, mode, destName, overwrite } = plan[i];
       setProgress((p) => ({ ...(p || {}), current: i, total, name: it.name, mode, sub: null }));
-      let destName = it.name;
-      if (takenNames.has(it.name) && it.uri !== targetUri(it.name)) {
-        let action = conflictAll.current || await askConflict(it.name);
-        if (action === "cancel") { cancelRef.current = true; break; }
-        if (action === "skip") { setProgress((p) => ({ ...(p || {}), current: i + 1, total, sub: null })); continue; }
-        if (action === "rename") destName = freeName(it.name, takenNames);
-        // overwrite → оставляем то же имя, ниже удалим существующее
-      }
       const to = targetUri(destName);
-      if (it.type === "directory" && curUri && curUri === it.uri) { continue; }
       if (to && it.uri !== to) {
         try {
-          if (destName === it.name && takenNames.has(it.name)) { try { await Apps.deletePath({ uri: to }); } catch {} } // перезапись
+          if (overwrite) { try { await Apps.deletePath({ uri: to }); } catch {} }
           if (mode === "copy") {
             if (it.type === "directory") await Apps.copyTree({ from: it.uri, to });
             else { await Filesystem.copy({ from: it.uri, to }); Apps.notifyProgress({ title: "Копирование", text: it.name, progress: i + 1, max: total }).catch(() => {}); }
           } else { await Filesystem.rename({ from: it.uri, to }); Apps.notifyProgress({ title: "Перемещение", text: it.name, progress: i + 1, max: total }).catch(() => {}); }
-          takenNames.add(destName);
         } catch (e) { showToast(it.name + ": " + e.message); }
       }
       setProgress((p) => ({ ...(p || {}), current: i + 1, total, sub: null }));
@@ -1001,13 +1024,27 @@ export default function App() {
       {/* МЕНЮ «СОЗДАТЬ» (поверх тулбара) */}
       {createOpen && (
         <>
-          <div style={{ position: "fixed", inset: 0, zIndex: 1190 }} onClick={() => setCreateOpen(false)} />
+          <div style={{ position: "fixed", inset: 0, zIndex: 1190 }} onClick={() => { setCreateOpen(false); setCreateSub(null); }} />
           <div style={{ ...S.menu, position: "fixed", right: 8, bottom: "calc(62px + env(safe-area-inset-bottom))", zIndex: 1200, minWidth: 150, transformOrigin: "bottom right" }}>
-            <div style={S.createItem} onClick={() => { setCreateOpen(false); doCreateNomedia(); }}>.nomedia</div>
-            <div style={{ height: 1, background: LINE }} />
-            <div style={S.createItem} onClick={() => { setCreateOpen(false); setSheet({ kind: "folder", val: "" }); }}>Папка</div>
-            <div style={{ height: 1, background: LINE }} />
-            <div style={S.createItem} onClick={() => { setCreateOpen(false); setSheet({ kind: "txt", val: "" }); }}>TXT</div>
+            {createSub === "dot" ? (
+              <>
+                <div style={S.createItem} onClick={() => { setCreateSub(null); setCreateOpen(false); doCreateDotFile(".nomedia"); }}>.nomedia</div>
+                <div style={{ height: 1, background: LINE }} />
+                <div style={S.createItem} onClick={() => { setCreateSub(null); setCreateOpen(false); doCreateDotFile(".nofolder"); }}>.nofolder</div>
+                <div style={{ height: 1, background: LINE }} />
+                <div style={S.createItem} onClick={() => { setCreateSub(null); setCreateOpen(false); doCreateDotFile(".icon"); }}>.icon</div>
+                <div style={{ height: 1, background: LINE }} />
+                <div style={{ ...S.createItem, color: SUB }} onClick={() => setCreateSub(null)}>‹ Назад</div>
+              </>
+            ) : (
+              <>
+                <div style={S.createItem} onClick={() => setCreateSub("dot")}>.CreateFile ›</div>
+                <div style={{ height: 1, background: LINE }} />
+                <div style={S.createItem} onClick={() => { setCreateOpen(false); setSheet({ kind: "folder", val: "" }); }}>Папка</div>
+                <div style={{ height: 1, background: LINE }} />
+                <div style={S.createItem} onClick={() => { setCreateOpen(false); setSheet({ kind: "txt", val: "" }); }}>TXT</div>
+              </>
+            )}
           </div>
         </>
       )}
@@ -1136,7 +1173,7 @@ export default function App() {
             <div style={{ display: "flex", justifyContent: "space-around", alignItems: "flex-end", padding: "16px 76px 14px 8px" }}>
               {[
                 [I.share, "Поделиться", () => Apps.share({ uri: viewerCur.uri, mime: mimeOf(viewerCur.name) }).catch(() => {}), false],
-                [I.rename, "Изменить", () => showOpenMenu(viewerCur, mimeOf(viewerCur.name), { edit: true }), false],
+                [I.rename, "Изменить", () => { Apps.editImage({ uri: viewerCur.uri, mime: mimeOf(viewerCur.name) }).catch((e) => showToast("Ошибка: " + (e?.message || ""))); }, false],
                 [I.info, "Свойства", () => setProps(viewerCur), false],
                 [I.trash, "Удалить", () => setViewerDel(true), true],
               ].map(([ic, lbl, fn, red], i) => (
@@ -1491,7 +1528,7 @@ export default function App() {
 
       {/* МЕНЮ ЗАДАЧ — конец */}
       {/* ПРОГРЕСС КОПИРОВАНИЯ */}
-      {progress && !progress.bg && (() => {
+      {progress && !progress.bg && !conflict && (() => {
         // процент: если есть по-файловый прогресс внутри элемента — учитываем его
         const sub = progress.sub;
         const pct = progress.total ? Math.round(((progress.current + (sub && sub.total ? sub.done / sub.total : 0)) / progress.total) * 100) : 0;
