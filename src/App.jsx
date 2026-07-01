@@ -1151,7 +1151,8 @@ export default function App() {
               <span key={sel.size} style={{ fontSize: 11, fontWeight: 700, color: "#fff", lineHeight: 1, display: "block", textAlign: "center", animation: "pulse .3s cubic-bezier(.2,.9,.3,1.3)" }}>{sel.size}</span>
             </div>
           </div>
-          <div style={{ display: "flex", overflowX: "auto", flex: 1, justifyContent: "flex-start" }}>
+          <div style={{ flex: 1, overflow: "hidden", display: "flex" }}>
+            <div style={{ display: "flex", overflowX: "auto", overflowY: "hidden", flex: 1, justifyContent: "flex-start", paddingBottom: 20, marginBottom: -20 }}>
             <Btn onClick={exitSel} icon={I.x} label="Отмена" flexNone />
             <Btn onClick={() => setProps(one)} icon={I.info} label="Свойства" flexNone disabled={sel.size !== 1} />
             <Btn onClick={() => grab("cut")} icon={I.cut} label="Вырезать" flexNone />
@@ -1159,6 +1160,7 @@ export default function App() {
             <Btn onClick={(ev) => { const t = ev.currentTarget; const r = t.getBoundingClientRect(); const p = t.previousElementSibling; const cr = p ? p.getBoundingClientRect() : r; setConfirmDel({ cx: cr.left + cr.width / 2, top: r.top }); }} icon={I.trash} label="Удалить" red flexNone />
             <Btn onClick={() => { const e = one; const sp = splitExt(e.name, e.type === "directory"); setSheet({ kind: "rename", old: e.name, base: sp.base, ext: sp.ext, editExt: false }); }} icon={I.rename} label="Имя" flexNone disabled={sel.size !== 1} />
             <Btn onClick={() => setSelMenu((v) => !v)} icon={I.dots} label="Ещё" flexNone />
+          </div>
           </div>
         </nav>
       ) : (
@@ -1772,7 +1774,7 @@ export default function App() {
         @keyframes popCenter{from{opacity:0;transform:translateX(-50%) scale(.9)}to{opacity:1;transform:translateX(-50%) scale(1)}}
         *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none}
         input{-webkit-user-select:text;user-select:text}
-        body{margin:0}::-webkit-scrollbar{width:0}
+        body{margin:0}::-webkit-scrollbar{width:0;height:0}
       `}</style>
     </div>
   );
