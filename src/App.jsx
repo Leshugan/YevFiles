@@ -575,8 +575,9 @@ export default function App() {
   };
   const showOpenMenu = async (e, mime, opts) => {
     const edit = !!(opts && opts.edit);
+    const split = !!(opts && opts.split);
     const cat = OPEN_AS.some(([m]) => m === mime) ? mime : defaultOpenAs(e.name);
-    setOpenMenu({ file: e, mime: cat, apps: null, useDefault: false, editHide: false, edit });
+    setOpenMenu({ file: e, mime: cat, apps: null, useDefault: false, editHide: false, edit, split });
     if (/\.(apk|apks|xapk|apkm|apkx)$/i.test(e.name)) { Apps.apkInfo({ uri: e.uri }).then((info) => setOpenMenu((m) => (m && m.file === e ? { ...m, apkInfo: info } : m))).catch(() => {}); }
     try {
       const { apps } = await Apps.query({ uri: e.uri, mime, action: edit ? "edit" : "view" });
@@ -1444,6 +1445,9 @@ export default function App() {
                   </div>
                   {openMenu.apkInfo.versionName && <div>Версия: <span style={{ color: TXT }}>{openMenu.apkInfo.versionName} ({openMenu.apkInfo.versionCode})</span>{openMenu.apkInfo.installed && openMenu.apkInfo.installedVersionCode != null && Number(openMenu.apkInfo.versionCode) > Number(openMenu.apkInfo.installedVersionCode) && <span style={{ color: "#5FCF80", fontWeight: 700 }}> (новее)</span>}</div>}
                   {openMenu.apkInfo.installed && <div>Установлено: <span style={{ color: GOLD }}>{openMenu.apkInfo.installedVersionName || "—"}</span></div>}
+                  {openMenu.apkInfo.installed && openMenu.apkInfo.sigMatch === true && <div style={{ color: "#5FCF80" }}>Подпись совпадает — установится поверх</div>}
+                  {openMenu.apkInfo.installed && openMenu.apkInfo.sigMatch === false && <div style={{ color: RED, fontWeight: 600 }}>Подпись отличается — поверх НЕ установится</div>}
+                  {!openMenu.apkInfo.installed && openMenu.apkInfo.sig && <div style={{ color: SUB, fontSize: 11, wordBreak: "break-all" }}>Подпись: {openMenu.apkInfo.sig.slice(0, 24)}…</div>}
                   <div>Целевая ОС: <span style={{ color: TXT }}>SDK {openMenu.apkInfo.targetSdk}</span></div>
                   {openMenu.apkInfo.minSdk != null && <div>Минимальная ОС: <span style={{ color: TXT }}>SDK {openMenu.apkInfo.minSdk}</span></div>}
                 </div>
@@ -1480,7 +1484,7 @@ export default function App() {
                   </div>
                 </>
               )}
-              {!openMenu.split && !/\.apk$/i.test(openMenu.file.name) && (
+              {!openMenu.split && !/\.apk$/i.test(openMenu.file.name) && !(EXT.archive.includes((openMenu.file.name.split(".").pop() || "").toLowerCase())) && (
               <div style={{ maxHeight: "42vh", overflowY: "auto" }}>
                 {openMenu.apps == null && <div style={{ color: SUB, padding: 20, textAlign: "center" }}>Загрузка приложений…</div>}
                 {openMenu.apps && shown.length === 0 && <div style={{ color: SUB, padding: 16, textAlign: "center" }}>Нет приложений</div>}
