@@ -184,6 +184,7 @@ const fileIcon = (name) => {
   const ext = (name.split(".").pop() || "").toLowerCase();
   if (ext === "pdf") return { d: I.pdf, c: "#E0574F" };
   if (ext === "apk") return { d: I.apk, c: "#6FD3A8" };
+  if (["apks", "xapk", "apkm", "apkx"].includes(ext)) return { d: I.apk, c: "#A4C639" };
   if (["ttf", "otf", "woff", "woff2"].includes(ext)) return { d: I.txt, c: "#C9A0FF" };
   if (ext === "lnk") return { d: I.lnk, c: GOLD };
   if (["txt", "md", "log", "ini", "cfg"].includes(ext)) return { d: I.txt, c: "#9FD0FF" };
@@ -286,9 +287,14 @@ export default function App() {
   const [iconDB, setIconDB] = useState(() => loadMap(ICONKEY));
   const saveIconDB = (db) => { setIconDB(db); saveMap(ICONKEY, db); };
   const [thumbs, setThumbs] = useState({});
+  const [pwPrompt, setPwPrompt] = useState(null); // { resolve, retry }
+  const [pwVal, setPwVal] = useState("");
+  const askPassword = (retry) => new Promise((resolve) => { setPwVal(""); setPwPrompt({ resolve, retry: !!retry }); });
+  const resolvePassword = (val) => { setPwPrompt((p) => { if (p) p.resolve(val); return null; }); };
   const isImg = (n) => /\.(png|jpg|jpeg|webp|gif|bmp)$/i.test(n);
   const isPdf = (n) => /\.pdf$/i.test(n);
   const isFont = (n) => /\.(ttf|otf|woff2?|woff)$/i.test(n);
+  const isSplitApk = (n) => /\.(apks|xapk|apkm|apkx)$/i.test(n);
   const [fontView, setFontView] = useState(null);
   const [fontText, setFontText] = useState("");
   const openFontViewer = async (e) => {
@@ -516,6 +522,7 @@ export default function App() {
   const backRef = useRef(() => {});
   const backExit = useRef(0);
   backRef.current = () => {
+    if (pwPrompt) { resolvePassword(null); return; }
     if (fontView) { setFontView(null); return; }
     if (conflict) { resolveConflict("cancel", false); return; }
     if (settings) { if (settingsPage) { setSettingsPage(null); return; } setSettings(false); return; }
@@ -611,10 +618,22 @@ export default function App() {
     let sub = null;
     try { sub = await Apps.addListener("opProgress", (ev) => setProgress({ current: ev.done, total: ev.total, name: ev.name, mode: "ext" })); } catch {}
     setProgress({ current: 0, total: (names ? names.length : 1), name: "", mode: "ext" });
+    const doExtract = async (password) => Apps.zipExtractAll({ uri, dest: destDir, entries: names || undefined, password: password || undefined });
     try {
-      await Apps.zipExtractAll({ uri, dest: destDir, entries: names || undefined });
+      await doExtract(null);
       showToast("Извлечено в " + (baseName(destRel) || "Storage"));
-    } catch (e) { showToast("Ошибка: " + (e?.message || "")); }
+    } catch (e) {
+      const enc = e && (e.code === "ENCRYPTED" || e.code === "BADPASS" || /ENCRYPTED|BADPASS|пароль/i.test(e.message || ""));
+      if (enc) {
+        let ok = false;
+        for (let t = 0; t < 3 && !ok; t++) {
+          const pw = await askPassword(t > 0);
+          if (pw == null || pw === "") { break; }
+          try { await doExtract(pw); showToast("Извлечено в " + (baseName(destRel) || "Storage")); ok = true; }
+          catch (e2) { if (t === 2) showToast("Неверный пароль"); }
+        }
+      } else showToast("Ошибка: " + (e?.message || ""));
+    }
     if (sub) try { sub.remove(); } catch {}
     setProgress(null); await refresh();
   };
@@ -650,6 +669,7 @@ export default function App() {
     arcAnchor.current = ev && ev.currentTarget ? ev.currentTarget.getBoundingClientRect().top : null;
     const ext = (e.name.split(".").pop() || "").toLowerCase();
     if (isFont(e.name)) { openFontViewer(e); return; }
+    if (isSplitApk(e.name)) { showOpenMenu(e, "application/octet-stream", { split: true }); return; }
     if (isImg(e.name)) {
       const mime = mimeOf(e.name), cat = defaultOpenAs(e.name), defs = loadMap(DEFKEY), d = defs[cat] || defs[mime];
       if (d === "__viewer__") { openViewer(e); return; }
@@ -1240,6 +1260,22 @@ export default function App() {
         </div>
       )}
 
+      {/* ЗАПРОС ПАРОЛЯ АРХИВА */}
+      {pwPrompt && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 1460, background: "rgba(0,0,0,.55)", display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={() => resolvePassword(null)}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 460, background: BAR, borderTopLeftRadius: 18, borderTopRightRadius: 18, padding: "16px 16px calc(env(safe-area-inset-bottom) + 16px)", boxShadow: "0 -8px 32px rgba(0,0,0,.5)" }}>
+            <div style={{ color: TXT, fontSize: 15, fontWeight: 600, marginBottom: 4 }}>Архив защищён паролем</div>
+            {pwPrompt.retry && <div style={{ color: RED, fontSize: 12, marginBottom: 8 }}>Неверный пароль, попробуйте ещё раз</div>}
+            <input value={pwVal} onChange={(e) => setPwVal(e.target.value)} type="password" autoFocus placeholder="Пароль"
+              style={{ width: "100%", boxSizing: "border-box", background: BG, border: "1px solid " + LINE, borderRadius: 12, color: TXT, fontSize: 15, padding: "12px 14px", marginBottom: 12, outline: "none" }} />
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => resolvePassword(null)} style={{ flex: 1, background: ROW2, border: "1px solid " + LINE, borderRadius: 10, color: SUB, fontSize: 14, padding: "11px 0" }}>Отмена</button>
+              <button onClick={() => resolvePassword(pwVal)} style={{ flex: 1, background: ACC, border: "none", borderRadius: 10, color: "#fff", fontSize: 14, fontWeight: 600, padding: "11px 0" }}>Извлечь</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ВЬЮВЕР ШРИФТОВ */}
       {fontView && (
         <div style={{ position: "fixed", inset: 0, zIndex: 1350, background: BG, display: "flex", flexDirection: "column" }}>
@@ -1251,29 +1287,32 @@ export default function App() {
           {fontView.loading ? (
             <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: SUB }}>Загрузка…</div>
           ) : (
-            <div style={{ flex: 1, overflowY: "auto", padding: 16 }}>
-              <input value={fontText} onChange={(e) => setFontText(e.target.value)} placeholder="Введите свой текст…"
-                style={{ width: "100%", boxSizing: "border-box", background: BAR, border: "1px solid " + LINE, borderRadius: 12, color: TXT, fontSize: 15, padding: "12px 14px", marginBottom: 18, outline: "none" }} />
-              {fontText.trim() && [40, 28, 20].map((sz) => (
-                <div key={"c" + sz} style={{ fontFamily: "'" + fontView.family + "'", fontSize: sz, color: TXT, lineHeight: 1.35, marginBottom: 14, wordBreak: "break-word" }}>{fontText}</div>
-              ))}
-              {[
-                ["Français", "Ça fête où? Règle, hôte, cœur, naïve — été à Noël."],
-                ["Русский", "Съешь же ещё этих мягких французских булок да выпей чаю."],
-                ["English", "The quick brown fox jumps over the lazy dog."],
-                ["123", "0123456789 !?#$%&*()_+-=@"],
-              ].map(([lbl, txt]) => (
-                <div key={lbl} style={{ marginBottom: 20 }}>
-                  <div style={{ color: SUB, fontSize: 11, textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>{lbl}</div>
-                  {[34, 24, 18, 14].map((sz) => (
-                    <div key={lbl + sz} style={{ fontFamily: "'" + fontView.family + "'", fontSize: sz, color: TXT, lineHeight: 1.4, marginBottom: 8, wordBreak: "break-word" }}>{txt}</div>
-                  ))}
-                </div>
-              ))}
-              <div style={{ fontFamily: "'" + fontView.family + "'", fontSize: 26, color: TXT, marginBottom: 8 }}>ABCDEFGHIJKLMNOPQRSTUVWXYZ</div>
-              <div style={{ fontFamily: "'" + fontView.family + "'", fontSize: 26, color: TXT, marginBottom: 8 }}>abcdefghijklmnopqrstuvwxyz</div>
-              <div style={{ fontFamily: "'" + fontView.family + "'", fontSize: 26, color: TXT, marginBottom: 40 }}>АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ</div>
-            </div>
+            <>
+              <div style={{ flex: 1, overflowY: "auto", padding: 16 }}>
+                {fontText.trim() && [40, 28, 20].map((sz) => (
+                  <div key={"c" + sz} style={{ fontFamily: "'" + fontView.family + "'", fontSize: sz, color: TXT, lineHeight: 1.35, marginBottom: 14, wordBreak: "break-word" }}>{fontText}</div>
+                ))}
+                {[
+                  ["Русский", "Съешь же ещё этих мягких французских булок да выпей чаю."],
+                  ["English", "The quick brown fox jumps over the lazy dog."],
+                ].map(([lbl, txt]) => (
+                  <div key={lbl} style={{ marginBottom: 20 }}>
+                    <div style={{ color: SUB, fontSize: 11, textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>{lbl}</div>
+                    {[34, 24, 18, 14].map((sz) => (
+                      <div key={lbl + sz} style={{ fontFamily: "'" + fontView.family + "'", fontSize: sz, color: TXT, lineHeight: 1.4, marginBottom: 8, wordBreak: "break-word" }}>{txt}</div>
+                    ))}
+                  </div>
+                ))}
+                <div style={{ fontFamily: "'" + fontView.family + "'", fontSize: 26, color: TXT, marginBottom: 8 }}>ABCDEFGHIJKLMNOPQRSTUVWXYZ</div>
+                <div style={{ fontFamily: "'" + fontView.family + "'", fontSize: 26, color: TXT, marginBottom: 8 }}>abcdefghijklmnopqrstuvwxyz</div>
+                <div style={{ fontFamily: "'" + fontView.family + "'", fontSize: 26, color: TXT, marginBottom: 8 }}>АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ</div>
+                <div style={{ fontFamily: "'" + fontView.family + "'", fontSize: 26, color: TXT, marginBottom: 20 }}>0123456789</div>
+              </div>
+              <div style={{ padding: "10px 14px calc(env(safe-area-inset-bottom) + 12px)", borderTop: "1px solid " + LINE, background: BAR }}>
+                <input value={fontText} onChange={(e) => setFontText(e.target.value)} placeholder="Введите свой текст…"
+                  style={{ width: "100%", boxSizing: "border-box", background: BG, border: "1px solid " + LINE, borderRadius: 12, color: TXT, fontSize: 15, padding: "12px 14px", outline: "none" }} />
+              </div>
+            </>
           )}
         </div>
       )}
@@ -1399,7 +1438,7 @@ export default function App() {
                 <div style={{ ...S.sheetTitle, marginBottom: 0, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{openMenu.file.name}</div>
                 <button style={{ ...S.iconBtn, color: openMenu.editHide ? ACC : SUB }} onClick={() => setOpenMenu({ ...openMenu, editHide: !openMenu.editHide })}><Svg d={I.rename} size={20} /></button>
               </div>
-              {(() => { const isArc = EXT.archive.includes((openMenu.file.name.split(".").pop() || "").toLowerCase()) && !/\.apk$/i.test(openMenu.file.name); return (isArc || isImg(openMenu.file.name) || /\.apk$/i.test(openMenu.file.name) || openMenu.edit) ? null : (<>
+              {(() => { const isArc = EXT.archive.includes((openMenu.file.name.split(".").pop() || "").toLowerCase()) && !/\.apk$/i.test(openMenu.file.name); return (isArc || isImg(openMenu.file.name) || /\.apk$/i.test(openMenu.file.name) || openMenu.split || openMenu.edit) ? null : (<>
               <div style={{ fontSize: 12, color: SUB, marginBottom: 6 }}>Открыть как:</div>
               <div style={{ display: "flex", gap: 6, overflowX: "auto", marginBottom: 14, paddingBottom: 2 }}>
                 {OPEN_AS.map(([m, lbl]) => (
@@ -1450,6 +1489,19 @@ export default function App() {
                     <span style={{ flex: 1, fontSize: 15 }}>Распаковать здесь</span>
                   </div>
                 </>
+              )}
+              {!openMenu.editHide && openMenu.split && (
+                <div onClick={() => { setOpenMenu(null); showToast("Установка пакета…"); Apps.installSplit({ uri: openMenu.file.uri }).catch((er) => showToast("Ошибка: " + (er?.message || ""))); }}
+                  style={{ ...S.appRow, color: "#6FD3A8" }}>
+                  <span style={{ width: 38, display: "flex", justifyContent: "center" }}><Svg d={I.plus} size={28} /></span>
+                  <span style={{ flex: 1, fontSize: 15 }}>Установить пакет (split)</span>
+                </div>
+              )}
+              {!openMenu.editHide && openMenu.split && (
+                <div onClick={() => openArchive(openMenu.file)} style={{ ...S.appRow, color: GOLD }}>
+                  <span style={{ width: 38, display: "flex", justifyContent: "center" }}><Svg d={I.folder} size={26} /></span>
+                  <span style={{ flex: 1, fontSize: 15 }}>Открыть как архив</span>
+                </div>
               )}
               {!openMenu.editHide && /\.apk$/i.test(openMenu.file.name) && (
                 <div onClick={() => { setOpenMenu(null); Apps.installApk({ uri: openMenu.file.uri }).catch((er) => showToast("Ошибка: " + (er?.message || ""))); }}
