@@ -477,9 +477,12 @@ export default function App() {
     return () => { document.removeEventListener("visibilitychange", onVis); window.removeEventListener("focus", onVis); };
   }, [list]);
   useEffect(() => { ls.set(SORTKEY, sortMode); }, [sortMode]);
+  const [propSize, setPropSize] = useState(null);
   useEffect(() => {
-    if (!props || props.type !== "directory") { setPropCount(null); return; }
+    if (!props || props.type !== "directory") { setPropCount(null); setPropSize(null); return; }
     (async () => { try { const { files } = await Filesystem.readdir({ path: props.uri }); setPropCount({ d: files.filter((f) => f.type === "directory").length, f: files.filter((f) => f.type !== "directory").length }); } catch { setPropCount(null); } })();
+    setPropSize(null);
+    (async () => { try { const r = await Apps.pathSize({ uri: props.uri }); setPropSize(r.bytes || 0); } catch { setPropSize(null); } })();
   }, [props]);
 
   const exitSel = () => { setSel(new Set()); setSelMode(false); setConfirmDel(null); setSelMenu(false); };
@@ -694,10 +697,22 @@ export default function App() {
       } catch (e) { showToast(it.name + ": " + e.message); }
     }
   };
+  const [conflict, setConflict] = useState(null); // { name, resolve }
+  const [conflictApplyAll, setConflictApplyAll] = useState(false);
+  const conflictAll = useRef(null);
+  const askConflict = (name) => new Promise((resolve) => setConflict({ name, resolve }));
+  const resolveConflict = (action, all) => { if (all) conflictAll.current = action; setConflict((c) => { if (c) c.resolve(action); return null; }); };
+  const freeName = (name, taken) => {
+    const dot = name.lastIndexOf("."); const base = dot > 0 ? name.slice(0, dot) : name; const ext = dot > 0 ? name.slice(dot) : "";
+    const names = taken || new Set(entries.map((e) => e.name));
+    let i = 1, cand; do { cand = base + " (" + i + ")" + ext; i++; } while (names.has(cand));
+    return cand;
+  };
   const runQueue = async (queue) => {
     const all = [];
     for (const t of queue) for (const it of t.items) all.push({ it, mode: t.mode });
-    const total = all.length; cancelRef.current = false;
+    const total = all.length; cancelRef.current = false; conflictAll.current = null; setConflictApplyAll(false);
+    const takenNames = new Set(entries.map((e) => e.name));
     setProgress({ current: 0, total, name: "", unit: "items" });
     // подписка на по-файловый прогресс из нативного copyTree
     let sub = null;
@@ -706,14 +721,24 @@ export default function App() {
       if (cancelRef.current) break;
       const { it, mode } = all[i];
       setProgress((p) => ({ ...(p || {}), current: i, total, name: it.name, mode, sub: null }));
-      const to = targetUri(it.name);
+      let destName = it.name;
+      if (takenNames.has(it.name) && it.uri !== targetUri(it.name)) {
+        let action = conflictAll.current || await askConflict(it.name);
+        if (action === "cancel") { cancelRef.current = true; break; }
+        if (action === "skip") { setProgress((p) => ({ ...(p || {}), current: i + 1, total, sub: null })); continue; }
+        if (action === "rename") destName = freeName(it.name, takenNames);
+        // overwrite → оставляем то же имя, ниже удалим существующее
+      }
+      const to = targetUri(destName);
       if (it.type === "directory" && curUri && curUri === it.uri) { continue; }
       if (to && it.uri !== to) {
         try {
+          if (destName === it.name && takenNames.has(it.name)) { try { await Apps.deletePath({ uri: to }); } catch {} } // перезапись
           if (mode === "copy") {
             if (it.type === "directory") await Apps.copyTree({ from: it.uri, to });
             else { await Filesystem.copy({ from: it.uri, to }); Apps.notifyProgress({ title: "Копирование", text: it.name, progress: i + 1, max: total }).catch(() => {}); }
           } else { await Filesystem.rename({ from: it.uri, to }); Apps.notifyProgress({ title: "Перемещение", text: it.name, progress: i + 1, max: total }).catch(() => {}); }
+          takenNames.add(destName);
         } catch (e) { showToast(it.name + ": " + e.message); }
       }
       setProgress((p) => ({ ...(p || {}), current: i + 1, total, sub: null }));
@@ -1157,11 +1182,31 @@ export default function App() {
             <div style={S.sheetTitle}>{props.name}</div>
             <Prop k="Путь (нажмите, чтобы скопировать)" v={path ? "/" + keyOf(props.name) : "/" + props.name} onClick={() => copyPath(props.uri)} link />
             {props.type === "directory" && <Prop k="Содержимое" v={propCount ? propCount.d + " папок, " + propCount.f + " файлов" : "…"} />}
-            <Prop k="Вес" v={props.type === "directory" ? "—" : fmtSize(props.size)} />
+            <Prop k="Вес" v={props.type === "directory" ? (propSize == null ? "подсчёт…" : fmtSize(propSize)) : fmtSize(props.size)} />
             <Prop k="Изменено" v={ago(props.mtime)} />
             <Prop k="Тип" v={props.type === "directory" ? "Папка" : (props.name.includes(".") ? props.name.split(".").pop().toUpperCase() : "Файл")} />
             <Prop k="Скрытый" v={isHidden(props) ? "Да" : "Нет"} />
             <button style={{ ...S.sheetGhost, width: "100%", marginTop: 14 }} onClick={() => setProps(null)}>Закрыть</button>
+          </div>
+        </div>
+      )}
+
+      {/* КОНФЛИКТ ИМЁН ПРИ ВСТАВКЕ */}
+      {conflict && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 1450, background: "rgba(0,0,0,.55)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div style={{ background: BAR, borderRadius: 16, padding: 18, width: "82%", maxWidth: 340, boxShadow: "0 18px 48px rgba(0,0,0,.6)" }}>
+            <div style={{ color: TXT, fontSize: 15, marginBottom: 4 }}>Уже существует</div>
+            <div style={{ color: SUB, fontSize: 13, marginBottom: 16, wordBreak: "break-all" }}>{conflict.name}</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <button onClick={() => resolveConflict("overwrite", conflictApplyAll)} style={{ background: RED, border: "none", borderRadius: 10, color: "#fff", fontSize: 14, fontWeight: 600, padding: "11px 0" }}>Перезаписать</button>
+              <button onClick={() => resolveConflict("rename", conflictApplyAll)} style={{ background: ACC, border: "none", borderRadius: 10, color: "#fff", fontSize: 14, fontWeight: 600, padding: "11px 0" }}>Создать копию (1)</button>
+              <button onClick={() => resolveConflict("skip", conflictApplyAll)} style={{ background: ROW2, border: "1px solid " + LINE, borderRadius: 10, color: TXT, fontSize: 14, padding: "11px 0" }}>Пропустить</button>
+              <button onClick={() => resolveConflict("cancel", false)} style={{ background: "transparent", border: "none", color: SUB, fontSize: 13, padding: "6px 0" }}>Отменить всё</button>
+            </div>
+            <div onClick={() => setConflictApplyAll((v) => !v)} style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, color: SUB, fontSize: 13 }}>
+              <span style={{ ...S.cbox, ...(conflictApplyAll ? S.cboxOn : {}) }}>{conflictApplyAll ? <Svg d={I.check} size={13} /> : null}</span>
+              Применить ко всем
+            </div>
           </div>
         </div>
       )}
