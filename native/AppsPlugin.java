@@ -121,10 +121,13 @@ public class AppsPlugin extends Plugin {
             if ("edit".equals(action)) i.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
             if (pkg != null && act != null) i.setClassName(pkg, act);
             else if (pkg != null) i.setPackage(pkg);
-            if (pkg != null) {
-                int gf = Intent.FLAG_GRANT_READ_URI_PERMISSION | ("edit".equals(action) ? Intent.FLAG_GRANT_WRITE_URI_PERMISSION : 0);
-                try { getContext().grantUriPermission(pkg, data, gf); } catch (Exception ignored) {}
-            }
+            int gf = Intent.FLAG_GRANT_READ_URI_PERMISSION | ("edit".equals(action) ? Intent.FLAG_GRANT_WRITE_URI_PERMISSION : 0);
+            try {
+                if (pkg != null) getContext().grantUriPermission(pkg, data, gf);
+                // грант всем, кто может обработать intent (на случай, если редактор читает файл из другого компонента)
+                java.util.List<android.content.pm.ResolveInfo> ris = getContext().getPackageManager().queryIntentActivities(i, PackageManager.MATCH_DEFAULT_ONLY);
+                for (android.content.pm.ResolveInfo ri : ris) { try { getContext().grantUriPermission(ri.activityInfo.packageName, data, gf); } catch (Exception ignored) {} }
+            } catch (Exception ignored) {}
             getContext().startActivity(i);
             call.resolve();
         } catch (Exception e) {
