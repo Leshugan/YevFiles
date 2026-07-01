@@ -890,19 +890,6 @@ export default function App() {
           <button style={S.accessBtn} onClick={() => Apps.requestAllFiles().catch(() => {})}>Дать доступ</button>
         </div>
       )}
-      {false && shared.length > 0 && (
-        <>
-          <div style={S.savePop}>
-            <Svg d={I.dl} size={20} />
-            <span style={{ flex: 1, fontSize: 13.5, lineHeight: 1.35 }}>{shared.length === 1 ? "«" + shared[0].name + "»" : shared.length + " файл(ов)"} — открыть или сохранить сюда?</span>
-          </div>
-          <div style={S.saveBar}>
-            <button style={S.saveBtnOpen} onClick={openSharedHere}><Svg d={I.folder} size={16} /> Открыть</button>
-            <button style={S.saveBtnSave} onClick={saveSharedHere}><Svg d={I.check} size={16} /> Сохранить</button>
-            <button style={S.saveBtnCancel} onClick={dismissShared}>Отмена</button>
-          </div>
-        </>
-      )}
       {pendingExtract && (
         <>
           <div style={S.savePop}>
@@ -1204,9 +1191,9 @@ export default function App() {
             <div style={{ color: TXT, fontSize: 13, marginBottom: 2 }}>Уже существует:</div>
             <div style={{ color: SUB, fontSize: 12, marginBottom: 10, wordBreak: "break-all" }}>{conflict.name}</div>
             <div style={{ display: "flex", gap: 6 }}>
-              <button onClick={() => resolveConflict("overwrite", conflictApplyAll)} style={{ flex: 1, background: RED, border: "none", borderRadius: 9, color: "#fff", fontSize: 13, fontWeight: 600, padding: "10px 0" }}>Перезаписать</button>
               <button onClick={() => resolveConflict("rename", conflictApplyAll)} style={{ flex: 1, background: ACC, border: "none", borderRadius: 9, color: "#fff", fontSize: 13, fontWeight: 600, padding: "10px 0" }}>Копия (1)</button>
               <button onClick={() => resolveConflict("skip", conflictApplyAll)} style={{ flex: 1, background: ROW2, border: "1px solid " + LINE, borderRadius: 9, color: TXT, fontSize: 13, padding: "10px 0" }}>Пропустить</button>
+              <button onClick={() => resolveConflict("overwrite", conflictApplyAll)} style={{ flex: 1, background: RED, border: "none", borderRadius: 9, color: "#fff", fontSize: 13, fontWeight: 600, padding: "10px 0" }}>Перезаписать</button>
             </div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 8 }}>
               <div onClick={() => setConflictApplyAll((v) => !v)} style={{ display: "flex", alignItems: "center", gap: 7, color: SUB, fontSize: 12 }}>
