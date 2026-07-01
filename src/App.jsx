@@ -1142,7 +1142,7 @@ export default function App() {
       )}
 
       {/* НИЖНЯЯ ПАНЕЛЬ (плавает над списком — контент уходит под неё) */}
-      <div ref={navRef} style={{ position: "absolute", left: 0, right: 0, bottom: 0, zIndex: 60, pointerEvents: "none" }}>
+      <div ref={navRef} style={{ position: "absolute", left: 0, right: 0, bottom: 0, zIndex: 60, pointerEvents: "none", background: arcView ? BG : "transparent" }}>
        <div style={{ pointerEvents: "auto" }}>
       {selMode ? (
         <nav style={{ ...S.bottom, justifyContent: "flex-start" }}>
@@ -1484,7 +1484,7 @@ export default function App() {
           {arcView.entries == null ? (
             <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: SUB }}>Открываю архив…</div>
           ) : (
-          <div ref={arcListRef} style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", paddingBottom: "calc(24px + env(safe-area-inset-bottom))" }}>
+          <div ref={arcListRef} style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column" }}>
             <div ref={arcSpacerRef} style={{ height: 0 }} />
             <div>
               {arcView.entries.map((it, i) => {
@@ -1834,7 +1834,7 @@ const S = {
   arcSelBar: { position: "absolute", left: "50%", transform: "translateX(-50%)", bottom: 10, display: "flex", alignItems: "center", gap: 8, padding: "6px 8px 6px 14px", background: BAR, borderRadius: 22, boxShadow: "0 1px 0 rgba(255,255,255,.07) inset, 0 4px 12px rgba(0,0,0,.4), 0 18px 48px rgba(0,0,0,.62)", animation: "popCenter .2s cubic-bezier(.2,.9,.3,1.1)" },
   arcSelCancel: { background: "transparent", border: "none", borderRadius: 14, color: SUB, fontSize: 13, padding: "7px 12px" },
   arcSelGo: { display: "inline-flex", alignItems: "center", gap: 5, background: ACC, border: "none", borderRadius: 14, color: "#fff", fontWeight: 700, fontSize: 13, padding: "7px 14px" },
-  arcScreen: { position: "fixed", top: 62, left: 0, right: 0, bottom: 0, zIndex: 1250, background: BG, display: "flex", flexDirection: "column" },
+  arcScreen: { position: "fixed", top: 62, left: 0, right: 0, bottom: "calc(70px + env(safe-area-inset-bottom))", zIndex: 1250, background: BG, display: "flex", flexDirection: "column" },
   settingsScreen: { position: "fixed", inset: 0, zIndex: 1600, background: BG, display: "flex", flexDirection: "column", paddingTop: "env(safe-area-inset-top)" },
   cnt: { background: "var(--accbg)", color: GOLD, fontSize: 12, fontWeight: 700, padding: "2px 9px", borderRadius: 10, flexShrink: 0 },
   rowSel: { background: "var(--accbg)" },
