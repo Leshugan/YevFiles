@@ -68,7 +68,7 @@ public class AppsPlugin extends Plugin {
         if (uriStr != null) {
             try {
                 try { StrictMode.setVmPolicy(new StrictMode.VmPolicy.Builder().build()); } catch (Exception ignored) {}
-                intent.setDataAndType(Uri.fromFile(toFile(uriStr)), mime);
+                intent.setDataAndType(contentUriFor(toFile(uriStr)), mime);
                 dataSet = true;
             } catch (Exception ignored) {}
         }
@@ -114,11 +114,11 @@ public class AppsPlugin extends Plugin {
             if (!f.exists()) { call.reject("Файл не найден: " + f.getAbsolutePath()); return; }
             if (f.isDirectory()) { call.reject("Это папка: " + f.getAbsolutePath()); return; }
             try { StrictMode.setVmPolicy(new StrictMode.VmPolicy.Builder().build()); } catch (Exception ignored) {}
-            Uri data = Uri.fromFile(f);
+            Uri data = contentUriFor(f);
             Intent i = new Intent("edit".equals(action) ? Intent.ACTION_EDIT : Intent.ACTION_VIEW);
             i.setDataAndType(data, mime);
-            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            if ("edit".equals(action)) i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            if ("edit".equals(action)) i.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
             if (pkg != null && act != null) i.setClassName(pkg, act);
             else if (pkg != null) i.setPackage(pkg);
             getContext().startActivity(i);
@@ -400,10 +400,12 @@ public class AppsPlugin extends Plugin {
                 ret.put("targetSdk", pi.applicationInfo.targetSdkVersion);
                 if (android.os.Build.VERSION.SDK_INT >= 24) ret.put("minSdk", pi.applicationInfo.minSdkVersion);
                 try { ret.put("label", pm.getApplicationLabel(pi.applicationInfo).toString()); } catch (Exception ignored) {}
+                try { Drawable ic = pm.getApplicationIcon(pi.applicationInfo); ret.put("icon", "data:image/png;base64," + drawableToBase64(ic)); } catch (Exception ignored) {}
                 // установлена ли уже + версия установленной
                 try {
                     android.content.pm.PackageInfo inst = pm.getPackageInfo(pi.packageName, 0);
                     ret.put("installedVersionName", inst.versionName);
+                    ret.put("installedVersionCode", android.os.Build.VERSION.SDK_INT >= 28 ? inst.getLongVersionCode() : inst.versionCode);
                     ret.put("installed", true);
                 } catch (Exception e) { ret.put("installed", false); }
             }
@@ -736,6 +738,56 @@ public class AppsPlugin extends Plugin {
     }
 
     @PluginMethod
+    public void pathSize(final PluginCall call) {
+        String uriStr = call.getString("uri");
+        if (uriStr == null) { call.reject("no uri"); return; }
+        final File root = toFile(uriStr);
+        new Thread(new Runnable() {
+            public void run() {
+                final long[] acc = { 0L, 0L };
+                sizeRecursive(root, acc);
+                try { getActivity().runOnUiThread(new Runnable() { public void run() {
+                    JSObject r = new JSObject(); r.put("bytes", acc[0]); r.put("count", acc[1]); call.resolve(r);
+                } }); } catch (Exception e) { JSObject r = new JSObject(); r.put("bytes", acc[0]); r.put("count", acc[1]); call.resolve(r); }
+            }
+        }).start();
+    }
+
+    private void sizeRecursive(File f, long[] acc) {
+        try {
+            if (f.isDirectory()) {
+                File[] kids = f.listFiles();
+                if (kids != null) for (File k : kids) sizeRecursive(k, acc);
+            } else { acc[0] += f.length(); acc[1]++; }
+        } catch (Exception ignored) {}
+    }
+
+    @PluginMethod
+    public void deletePath(final PluginCall call) {
+        String uriStr = call.getString("uri");
+        if (uriStr == null) { call.reject("no uri"); return; }
+        final File root = toFile(uriStr);
+        new Thread(new Runnable() {
+            public void run() {
+                final boolean ok = deleteRecursive(root);
+                try { getActivity().runOnUiThread(new Runnable() { public void run() {
+                    JSObject r = new JSObject(); r.put("ok", ok); call.resolve(r);
+                } }); } catch (Exception e) { JSObject r = new JSObject(); r.put("ok", ok); call.resolve(r); }
+            }
+        }).start();
+    }
+
+    private boolean deleteRecursive(File f) {
+        try {
+            if (f.isDirectory()) {
+                File[] kids = f.listFiles();
+                if (kids != null) for (File k : kids) deleteRecursive(k);
+            }
+            return f.delete();
+        } catch (Exception e) { return false; }
+    }
+
+    @PluginMethod
     public void share(PluginCall call) {
         String uriStr = call.getString("uri");
         String mime = call.getString("mime", "*/*");
@@ -746,7 +798,7 @@ public class AppsPlugin extends Plugin {
             try { StrictMode.setVmPolicy(new StrictMode.VmPolicy.Builder().build()); } catch (Exception ignored) {}
             Intent i = new Intent(Intent.ACTION_SEND);
             i.setType(mime);
-            i.putExtra(Intent.EXTRA_STREAM, Uri.fromFile(f));
+            i.putExtra(Intent.EXTRA_STREAM, contentUriFor(f));
             i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
             Intent ch = Intent.createChooser(i, "Поделиться");
             ch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
@@ -765,7 +817,7 @@ public class AppsPlugin extends Plugin {
             if (!f.exists()) { call.reject("Файл не найден"); return; }
             try { StrictMode.setVmPolicy(new StrictMode.VmPolicy.Builder().build()); } catch (Exception ignored) {}
             Intent i = new Intent(Intent.ACTION_EDIT);
-            i.setDataAndType(Uri.fromFile(f), mime);
+            i.setDataAndType(contentUriFor(f), mime);
             i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
             Intent ch = Intent.createChooser(i, "Изменить через");
             ch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
@@ -821,6 +873,11 @@ public class AppsPlugin extends Plugin {
         if (p.startsWith("file://")) p = p.substring(7);
         if (p.indexOf('%') >= 0) { try { p = java.net.URLDecoder.decode(p, "UTF-8"); } catch (Exception ignored) {} }
         return new File(p);
+    }
+
+    private Uri contentUriFor(File f) {
+        try { return FileProvider.getUriForFile(getContext(), getContext().getPackageName() + ".appsfp", f); }
+        catch (Exception e) { return Uri.fromFile(f); }
     }
 
     private String drawableToBase64(Drawable d) {
