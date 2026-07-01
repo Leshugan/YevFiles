@@ -117,6 +117,7 @@ public class AppsPlugin extends Plugin {
             Uri data = contentUriFor(f);
             Intent i = new Intent("edit".equals(action) ? Intent.ACTION_EDIT : Intent.ACTION_VIEW);
             i.setDataAndType(data, mime);
+            i.setClipData(android.content.ClipData.newRawUri("", data));
             i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_GRANT_READ_URI_PERMISSION);
             if ("edit".equals(action)) i.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
             if (pkg != null && act != null) i.setClassName(pkg, act);
@@ -197,18 +198,21 @@ public class AppsPlugin extends Plugin {
         try {
             File f = toFile(uriStr);
             if (!f.exists()) { call.resolve(new JSObject()); return; }
-            File cacheFile = new File(thumbDir(), thumbKey(f) + ".jpg");
+            String name = f.getName().toLowerCase();
+            boolean isApk = name.endsWith(".apk");
+            String ext = isApk ? ".png" : ".jpg";
+            String mimeOut = isApk ? "image/png" : "image/jpeg";
+            File cacheFile = new File(thumbDir(), thumbKey(f) + ext);
             JSObject ret = new JSObject();
             // готовое превью из кэша
             if (cacheFile.exists()) {
                 byte[] data = readAll(new FileInputStream(cacheFile));
-                ret.put("thumb", "data:image/jpeg;base64," + Base64.encodeToString(data, Base64.NO_WRAP));
+                ret.put("thumb", "data:" + mimeOut + ";base64," + Base64.encodeToString(data, Base64.NO_WRAP));
                 call.resolve(ret); return;
             }
             // удалить устаревшие кэши этого же файла (другой mtime)
             String prefix = Integer.toHexString((f.getAbsolutePath() + "|").hashCode());
             File[] stale = thumbDir().listFiles();
-            String name = f.getName().toLowerCase();
             Bitmap b = null;
             if (name.matches(".*\\.(jpg|jpeg|png|webp|gif|bmp)$")) {
                 android.graphics.BitmapFactory.Options o = new android.graphics.BitmapFactory.Options();
@@ -239,12 +243,11 @@ public class AppsPlugin extends Plugin {
             int mx = Math.max(b.getWidth(), b.getHeight());
             if (mx > 150) { float sc = 150f / mx; b = Bitmap.createScaledBitmap(b, Math.round(b.getWidth() * sc), Math.round(b.getHeight() * sc), true); }
             ByteArrayOutputStream out = new ByteArrayOutputStream();
-            boolean isApk = name.endsWith(".apk");
             if (isApk) b.compress(Bitmap.CompressFormat.PNG, 100, out);
             else b.compress(Bitmap.CompressFormat.JPEG, 80, out);
             byte[] bytes = out.toByteArray();
             try { OutputStream fos = new java.io.FileOutputStream(cacheFile); fos.write(bytes); fos.close(); } catch (Exception ignored) {}
-            ret.put("thumb", "data:image/" + (isApk ? "png" : "jpeg") + ";base64," + Base64.encodeToString(bytes, Base64.NO_WRAP));
+            ret.put("thumb", "data:" + mimeOut + ";base64," + Base64.encodeToString(bytes, Base64.NO_WRAP));
             call.resolve(ret);
         } catch (Exception e) { call.resolve(new JSObject()); }
     }
@@ -270,7 +273,10 @@ public class AppsPlugin extends Plugin {
     }
 
     private Bitmap drawableToBitmap(Drawable d) {
-        int w = Math.max(1, d.getIntrinsicWidth()), h = Math.max(1, d.getIntrinsicHeight());
+        if (d == null) return null;
+        try { if (d instanceof android.graphics.drawable.BitmapDrawable) { Bitmap bm = ((android.graphics.drawable.BitmapDrawable) d).getBitmap(); if (bm != null) return bm; } } catch (Exception ignored) {}
+        int w = d.getIntrinsicWidth(), h = d.getIntrinsicHeight();
+        if (w <= 0 || h <= 0) { w = 144; h = 144; }
         Bitmap b = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
         android.graphics.Canvas c = new android.graphics.Canvas(b);
         d.setBounds(0, 0, w, h); d.draw(c);
@@ -409,7 +415,7 @@ public class AppsPlugin extends Plugin {
                 ret.put("targetSdk", pi.applicationInfo.targetSdkVersion);
                 if (android.os.Build.VERSION.SDK_INT >= 24) ret.put("minSdk", pi.applicationInfo.minSdkVersion);
                 try { ret.put("label", pm.getApplicationLabel(pi.applicationInfo).toString()); } catch (Exception ignored) {}
-                try { Drawable ic = pm.getApplicationIcon(pi.applicationInfo); ret.put("icon", "data:image/png;base64," + drawableToBase64(ic)); } catch (Exception ignored) {}
+                try { Drawable ic = pm.getApplicationIcon(pi.applicationInfo); ret.put("icon", drawableToBase64(ic)); } catch (Exception ignored) {}
                 // установлена ли уже + версия установленной
                 try {
                     android.content.pm.PackageInfo inst = pm.getPackageInfo(pi.packageName, 0);
@@ -816,7 +822,9 @@ public class AppsPlugin extends Plugin {
             if (!f.exists()) { call.reject("Файл не найден"); return; }
             try { StrictMode.setVmPolicy(new StrictMode.VmPolicy.Builder().build()); } catch (Exception ignored) {}
             Intent i = new Intent(Intent.ACTION_EDIT);
-            i.setDataAndType(contentUriFor(f), mime);
+            Uri u = contentUriFor(f);
+            i.setDataAndType(u, mime);
+            i.setClipData(android.content.ClipData.newRawUri("", u));
             i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
             Intent ch = Intent.createChooser(i, "Изменить через");
             ch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
@@ -880,13 +888,10 @@ public class AppsPlugin extends Plugin {
     }
 
     private String drawableToBase64(Drawable d) {
-        int w = d.getIntrinsicWidth(), h = d.getIntrinsicHeight();
-        if (w <= 0) w = 96; if (h <= 0) h = 96;
-        w = Math.min(w, 144); h = Math.min(h, 144);
-        Bitmap b = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
-        Canvas c = new Canvas(b);
-        d.setBounds(0, 0, w, h);
-        d.draw(c);
+        Bitmap b = drawableToBitmap(d);
+        if (b == null) return null;
+        int mx = Math.max(b.getWidth(), b.getHeight());
+        if (mx > 144) { float sc = 144f / mx; b = Bitmap.createScaledBitmap(b, Math.max(1, Math.round(b.getWidth() * sc)), Math.max(1, Math.round(b.getHeight() * sc)), true); }
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         b.compress(Bitmap.CompressFormat.PNG, 100, out);
         return "data:image/png;base64," + Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP);
