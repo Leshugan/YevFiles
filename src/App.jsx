@@ -176,15 +176,6 @@ const EXT = {
   ebook: ["epub", "mobi", "azw", "azw3", "fb2", "djvu", "djv"],
   code: ["js", "mjs", "cjs", "jsx", "ts", "tsx", "vue", "json", "json5", "html", "htm", "css", "scss", "less", "xml", "py", "java", "kt", "kts", "c", "h", "hpp", "cpp", "cc", "cs", "go", "rs", "rb", "php", "swift", "dart", "lua", "sh", "bash", "bat", "ps1", "sql", "yml", "yaml", "toml", "gradle"],
 };
-const mkBadge = (t, fs) => (<><rect x="2.5" y="6" width="19" height="12" rx="2.5" /><text x="12" y="15" textAnchor="middle" fontSize={fs || 7} fontWeight="800" fill="currentColor" stroke="none" fontFamily="system-ui,-apple-system,sans-serif">{t}</text></>);
-const FI = {
-  arcadeCab: <><rect x="5" y="3" width="14" height="18" rx="2" /><rect x="7.3" y="5.5" width="9.4" height="5" rx="1" /><circle cx="10" cy="15.4" r="1.1" fill="currentColor" stroke="none" /><path d="M14 14.9v1.4M13.3 15.6h1.4" /></>,
-  joystick: <><circle cx="12" cy="16.5" r="3.6" /><path d="M12 13V6" /><circle cx="12" cy="5" r="2" fill="currentColor" stroke="none" /></>,
-  banner: <><path d="M7 3h10v17l-5-3-5 3z" /></>,
-  box3: <><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z" /><path d="M4 7.5l8 4.5 8-4.5M12 12v9" /></>,
-  database: <><ellipse cx="12" cy="6" rx="7" ry="3" /><path d="M5 6v12c0 1.6 3.1 3 7 3s7-1.4 7-3V6" /><path d="M5 12c0 1.6 3.1 3 7 3s7-1.4 7-3" /></>,
-  hub: <><circle cx="12" cy="12" r="2.4" /><circle cx="12" cy="4.5" r="1.8" /><circle cx="5.5" cy="17" r="1.8" /><circle cx="18.5" cy="17" r="1.8" /><path d="M12 9.6V6.3M10.3 13.4l-3.4 2.2M13.7 13.4l3.4 2.2" /></>,
-};
 const SYS_FOLDERS = {
   download: { d: I.dl, c: "#5AA9E6" }, downloads: { d: I.dl, c: "#5AA9E6" },
   music: { d: I.audio, c: "#E36FB0" }, ringtones: { d: I.ring, c: "#E3B14F" }, notifications: { d: I.bell, c: "#E3B14F" }, alarms: { d: I.alarm, c: "#E36F6F" },
@@ -192,20 +183,16 @@ const SYS_FOLDERS = {
   movies: { d: I.video, c: "#A98BE0" }, video: { d: I.video, c: "#A98BE0" }, videos: { d: I.video, c: "#A98BE0" },
   podcasts: { d: I.mic, c: "#E3B14F" }, recordings: { d: I.mic, c: "#E3B14F" },
   documents: { d: I.doc2, c: "#5AA9E6" },
-  android: { d: I.android, c: "#A4C639" }, data: { d: FI.database, c: "#8FB84A" }, obb: { d: FI.box3, c: "#E3B14F" },
-  apk: { d: I.apk, c: "#A4C639" }, apkeditor: { d: mkBadge("APK", 6.5), c: "#6FD3A8" },
-  bannerhub: { d: FI.banner, c: "#E36FB0" }, fonts: { d: I.fontA, c: "#C9A227" }, books: { d: I.bookOpen, c: "#C98A4B" },
-  games: { d: I.gamepad, c: "#A4C639" }, gamehub: { d: FI.hub, c: "#6FD3A8" }, emu: { d: I.emuPad, c: "#A4C639" },
-  arcade: { d: FI.arcadeCab, c: "#E3B14F" }, mame: { d: mkBadge("MAME", 5), c: "#E3B14F" },
-  retroarch: { d: FI.joystick, c: "#7C5CFF" }, winlator: { d: I.win, c: "#5AA9E6" }, windows: { d: I.win, c: "#5AA9E6" },
-  switch: { d: I.switchCon, c: "#5AA9E6", w: 34 }, "nintendo switch": { d: I.switchCon, c: "#5AA9E6", w: 34 },
-  nes: { d: mkBadge("NES"), c: "#E05252" }, dandy: { d: mkBadge("NES"), c: "#E05252" },
+  android: { d: I.android, c: "#A4C639" }, data: { d: I.android, c: "#A4C639" }, obb: { d: I.android, c: "#A4C639" },
+  apk: { d: I.apk, c: "#A4C639" },
+  bannerhub: { d: I.img, c: "#E36FB0" }, fonts: { d: I.fontA, c: "#C9A227" }, books: { d: I.bookOpen, c: "#C98A4B" },
+  games: { d: I.gamepad, c: "#A4C639" }, gamehub: { d: I.gamepad, c: "#A4C639" }, emu: { d: I.emuPad, c: "#A4C639" }, arcade: { d: I.emuPad, c: "#A4C639" }, mame: { d: I.emuPad, c: "#A4C639" },
+  retroarch: { d: I.gamepad, c: "#7C5CFF" }, winlator: { d: I.win, c: "#5AA9E6" }, windows: { d: I.win, c: "#5AA9E6" },
+  switch: { d: I.switchCon, c: "#5AA9E6", w: 34 }, "nintendo switch": { d: I.switchCon, c: "#5AA9E6", w: 34 }, nes: { d: I.gamepad, c: "#E05252" }, dandy: { d: I.gamepad, c: "#E05252" },
   media: { d: I.media, c: "#E0709A" },
-  sega: { d: mkBadge("SEGA", 5.5), c: "#3A7BD5" },
-  ps1: { d: mkBadge("PS1"), c: "#5AA9E6" }, ps2: { d: mkBadge("PS2"), c: "#B8B8C4" }, ps3: { d: mkBadge("PS3"), c: "#5AA9E6" }, psp: { d: mkBadge("PSP"), c: "#A98BE0" }, vita3k: { d: mkBadge("PSV"), c: "#6FD3A8" }, psvita: { d: mkBadge("PSV"), c: "#6FD3A8" },
-  mt2: { d: mkBadge("MT", 8.5), c: "#E3B14F" }, "mt manager": { d: mkBadge("MT", 8.5), c: "#E3B14F" }, mtmanager: { d: mkBadge("MT", 8.5), c: "#E3B14F" },
-  nanok: { d: mkBadge("nK", 8.5), c: "#6FD3A8" },
-  "smart launcher": { d: I.launcher, c: "#5AA9E6" }, smartlauncher: { d: I.launcher, c: "#5AA9E6" }, "mx player": { d: I.media, c: "#3A7BD5" }, mxplayer: { d: I.media, c: "#3A7BD5" },
+  sega: { d: I.gamepad, c: "#3A7BD5" }, ps1: { d: I.gamepad, c: "#5AA9E6" }, ps2: { d: I.gamepad, c: "#5AA9E6" }, ps3: { d: I.gamepad, c: "#5AA9E6" }, psp: { d: I.gamepad, c: "#5AA9E6" }, vita3k: { d: I.gamepad, c: "#5AA9E6" },
+  mt2: { d: I.tool, c: "#E3B14F" }, "mt manager": { d: I.tool, c: "#E3B14F" }, apkeditor: { d: I.tool, c: "#6FD3A8" },
+  "smart launcher": { d: I.launcher, c: "#5AA9E6" }, smartlauncher: { d: I.launcher, c: "#5AA9E6" }, "mx player": { d: I.video, c: "#3A7BD5" }, mxplayer: { d: I.video, c: "#3A7BD5" },
 };
 // Настоящие системные папки — ТОЛЬКО для сортировки «сверху» (НЕ приложения)
 const REAL_SYS = new Set(["android","alarms","audiobooks","dcim","documents","download","downloads","movies","music","notifications","pictures","podcasts","recordings","ringtones","screenshots","screenrecord","screenrecords","bluetooth","fonts","camera","data","media","obb","coloros","oppo","oneplus","heytap","realme","samsung","smartswitch","miui","xiaomi","huawei","vivo"]);
