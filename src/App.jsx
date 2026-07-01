@@ -962,14 +962,15 @@ export default function App() {
     // 1) закреплённые сверху/снизу
     const ra = rank(a), rb = rank(b);
     if (ra !== rb) return ra - rb;
-    // 2) системные папки сверху (если включено) — всегда A-Z, чтобы не конфликтовать с активной сортировкой
+    const ad = a.type === "directory", bd = b.type === "directory";
+    // 2) системные папки сверху → весь список по алфавиту (не конфликтует с активной сортировкой)
     if (sysTop) {
       const sa = isSysFolder(a) ? 0 : 1, sb = isSysFolder(b) ? 0 : 1;
       if (sa !== sb) return sa - sb;
-      if (sa === 0) return a.name.localeCompare(b.name, "ru");
+      if (ad !== bd) return ad ? -1 : 1;
+      return a.name.localeCompare(b.name, "ru");
     }
     // 3) папки выше файлов
-    const ad = a.type === "directory", bd = b.type === "directory";
     if (ad !== bd) return ad ? -1 : 1;
     // 4) обычная сортировка
     return cmp(a, b);
