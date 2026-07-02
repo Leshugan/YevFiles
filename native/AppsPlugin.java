@@ -181,9 +181,10 @@ public class AppsPlugin extends Plugin {
     }
 
     private File thumbDir() {
-        File d = new File(android.os.Environment.getExternalStorageDirectory(), ".yev_thumbs");
+        File base = getContext().getExternalCacheDir();
+        if (base == null) base = getContext().getCacheDir();
+        File d = new File(base, "yev_thumbs");
         if (!d.exists()) d.mkdirs();
-        try { File nm = new File(d, ".nomedia"); if (!nm.exists()) nm.createNewFile(); } catch (Exception ignored) {}
         return d;
     }
     private byte[] xorBytes(byte[] d) {
