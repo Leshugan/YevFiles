@@ -196,6 +196,8 @@ const SYS_FOLDERS = {
 };
 // Настоящие системные папки — ТОЛЬКО для сортировки «сверху» (НЕ приложения)
 const REAL_SYS = new Set(["android","alarms","audiobooks","dcim","documents","download","downloads","movies","music","notifications","pictures","podcasts","recordings","ringtones","screenshots","screenrecord","screenrecords","bluetooth","fonts","camera","data","media","obb","coloros","oppo","oneplus","heytap","realme","samsung","smartswitch","miui","xiaomi","huawei","vivo"]);
+const COLL = new Intl.Collator("ru", { numeric: true, sensitivity: "base" });
+const nameCmp = (a, b) => COLL.compare(a || "", b || "");
 const ARCH_COLORS = { zip: "#E3B14F", rar: "#9B59B6", "7z": "#5AA9E6", tar: "#6FD3A8", gz: "#6FD3A8", xz: "#6FD3A8", bz2: "#6FD3A8", jar: "#E0574F" };
 const fileIcon = (name) => {
   const ext = (name.split(".").pop() || "").toLowerCase();
@@ -946,8 +948,8 @@ export default function App() {
 
   /* отображаемый список: фильтр скрытых -> поиск -> сортировка -> папки сверху -> пины */
   const cmp = (a, b) => {
-    if (sortMode === "az") return a.name.localeCompare(b.name, "ru");
-    if (sortMode === "za") return b.name.localeCompare(a.name, "ru");
+    if (sortMode === "az") return nameCmp(a.name, b.name);
+    if (sortMode === "za") return nameCmp(b.name, a.name);
     if (sortMode === "sizeA") return (a.size || 0) - (b.size || 0);
     if (sortMode === "sizeD") return (b.size || 0) - (a.size || 0);
     if (sortMode === "dateN") return (b.mtime || 0) - (a.mtime || 0);
@@ -968,7 +970,7 @@ export default function App() {
       const sa = isSysFolder(a) ? 0 : 1, sb = isSysFolder(b) ? 0 : 1;
       if (sa !== sb) return sa - sb;
       if (ad !== bd) return ad ? -1 : 1;
-      return a.name.localeCompare(b.name, "ru");
+      return nameCmp(a.name, b.name);
     }
     // 3) папки выше файлов
     if (ad !== bd) return ad ? -1 : 1;
