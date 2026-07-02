@@ -958,7 +958,7 @@ export default function App() {
   };
   let visible = entries.filter((e) => showHidden || !isHidden(e));
   if (query) visible = visible.filter((e) => e.name.toLowerCase().includes(query.toLowerCase()));
-  const isSysFolder = (e) => e.type === "directory" && REAL_SYS.has(e.name.toLowerCase());
+  const isSysFolder = (e) => path === "" && e.type === "directory" && REAL_SYS.has(e.name.toLowerCase());
   const rank = (e) => (meta.pinTop.has(keyOf(e.name)) ? -1 : meta.pinBot.has(keyOf(e.name)) ? 1 : 0);
   visible = [...visible].sort((a, b) => {
     // 1) закреплённые сверху/снизу
