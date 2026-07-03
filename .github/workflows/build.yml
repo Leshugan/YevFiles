@@ -79,7 +79,7 @@ jobs:
           fi
           # Один пункт "Открыть с помощью" (YevFiles) — попап Открыть/Сохранить показывается в приложении
           if ! grep -q 'android:scheme="content"' "$MAN"; then
-            sed -i 's#</activity>#<intent-filter><action android:name="android.intent.action.VIEW" /><action android:name="android.intent.action.EDIT" /><category android:name="android.intent.category.DEFAULT" /><data android:scheme="content" /><data android:mimeType="*/*" /></intent-filter></activity>#' "$MAN"
+            sed -i 's#</activity>#<intent-filter android:label="Сохранить/Открыть"><action android:name="android.intent.action.VIEW" /><action android:name="android.intent.action.EDIT" /><category android:name="android.intent.category.DEFAULT" /><data android:scheme="content" /><data android:mimeType="*/*" /></intent-filter></activity>#' "$MAN"
           fi
           echo "----- manifest -----"
           grep -E "uses-permission|requestLegacy|appsfp|YevDocuments|action.SEND|yevview" "$MAN" || true
