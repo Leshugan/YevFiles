@@ -379,6 +379,7 @@ export default function App() {
   }, [arcView && arcView.entries]);
   const [shared, setShared] = useState([]);
   const [sharedMenu, setSharedMenu] = useState(false);
+  const [saveMode, setSaveMode] = useState(false);
   const checkShared = async () => {
     try {
       const r = await Apps.getShared();
@@ -395,7 +396,7 @@ export default function App() {
   };
   useEffect(() => { checkShared(); const h = CapApp.addListener("resume", checkShared); return () => { h.then((x) => x.remove()).catch(() => {}); }; }, []);
   const saveSharedHere = async () => {
-    try { const u = await Filesystem.getUri({ path, directory: DIR }); const r = await Apps.saveShared({ dir: u.uri }); showToast("Сохранено: " + (r.saved || 0) + " в " + (baseName(path) || "Storage")); setShared([]); refresh(); }
+    try { const u = await Filesystem.getUri({ path, directory: DIR }); const r = await Apps.saveShared({ dir: u.uri }); showToast("Сохранено: " + (r.saved || 0) + " в " + (baseName(path) || "Storage")); setShared([]); setSaveMode(false); refresh(); }
     catch (e) { showToast("Ошибка сохранения: " + (e?.message || "")); }
   };
   const dismissShared = async () => { try { await Apps.clearShared(); } catch {} setShared([]); };
@@ -599,7 +600,7 @@ export default function App() {
     const split = !!(opts && opts.split);
     const cat = OPEN_AS.some(([m]) => m === mime) ? mime : defaultOpenAs(e.name);
     let apps = [];
-    if (!split) { try { const r = await Apps.query({ uri: e.uri, mime, action: edit ? "edit" : "view" }); apps = r.apps || []; } catch {} }
+    if (!split) { try { const r = await Apps.query({ uri: e.uri, mime, action: edit ? "edit" : "view" }); apps = (r.apps || []).filter((a) => a.packageName !== "leshugan.fm"); } catch {} }
     setOpenMenu({ file: e, mime: cat, apps, useDefault: false, editHide: false, edit, split });
     if (/\.(apk|apks|xapk|apkm|apkx)$/i.test(e.name)) { Apps.apkInfo({ uri: e.uri }).then((info) => setOpenMenu((m) => (m && m.file === e ? { ...m, apkInfo: info } : m))).catch(() => {}); }
   };
@@ -624,7 +625,7 @@ export default function App() {
   const reQueryAs = async (mime) => {
     const e = openMenu.file;
     setOpenMenu((m) => (m ? { ...m, mime, asCat: true, apps: null } : m));
-    try { const { apps } = await Apps.query({ uri: e.uri, mime, action: "view" }); setOpenMenu((m) => (m && m.file === e ? { ...m, apps: apps || [] } : m)); }
+    try { const { apps } = await Apps.query({ uri: e.uri, mime, action: "view" }); const fa = (apps || []).filter((a) => a.packageName !== "leshugan.fm"); setOpenMenu((m) => (m && m.file === e ? { ...m, apps: fa } : m)); }
     catch { setOpenMenu((m) => (m && m.file === e ? { ...m, apps: [] } : m)); }
   };
   const arcAnchor = useRef(null);
@@ -1070,8 +1071,8 @@ export default function App() {
             <button style={S.accessBtn} onClick={() => setSharedMenu((v) => !v)}>Открыть/Сохранить</button>
             {sharedMenu && (
               <div style={{ position: "absolute", right: 0, top: "calc(100% + 6px)", zIndex: 60, background: BAR, border: "1px solid " + LINE, borderRadius: 12, overflow: "hidden", minWidth: 190, boxShadow: "0 8px 24px rgba(0,0,0,.4)" }}>
+                <div style={S.menuItem} onClick={() => { setSharedMenu(false); setShared([]); setSaveMode(true); }}><span style={{ color: ACC, display: "flex" }}><Svg d={I.dl} size={20} /></span>Сохранить</div>
                 <div style={S.menuItem} onClick={() => { setSharedMenu(false); openSharedHere(); }}><span style={{ color: ACC, display: "flex" }}><Svg d={I.folder} size={20} /></span>Открыть</div>
-                <div style={S.menuItem} onClick={() => { setSharedMenu(false); saveSharedHere(); }}><span style={{ color: ACC, display: "flex" }}><Svg d={I.dl} size={20} /></span>Сохранить здесь</div>
               </div>
             )}
           </div>
@@ -1187,9 +1188,9 @@ export default function App() {
       ) : (
         <nav style={S.bottom}>
           <Zone><Btn onClick={() => setQuery(query === null ? "" : null)} icon={I.search} label="Поиск" /></Zone>
-          <Zone>{clip && clip.length > 0 ? <Btn onClick={() => setClip(null)} icon={I.x} label="Отмена" red /> : null}</Zone>
+          <Zone>{clip && clip.length > 0 ? <Btn onClick={() => setClip(null)} icon={I.x} label="Отмена" red /> : saveMode ? <Btn onClick={() => { setSaveMode(false); dismissShared(); }} icon={I.x} label="Отмена" red /> : null}</Zone>
           <Zone><Btn onClick={selectAll} icon={I.selectAll} label="Все" /></Zone>
-          <Zone>{clip && clip.length > 0 ? <Btn onClick={() => (clip.length === 1 ? pasteAll() : setPasteMenu((v) => !v))} icon={I.paste} label={"Вставить (" + clip.length + ")"} /> : null}</Zone>
+          <Zone>{clip && clip.length > 0 ? <Btn onClick={() => (clip.length === 1 ? pasteAll() : setPasteMenu((v) => !v))} icon={I.paste} label={"Вставить (" + clip.length + ")"} /> : saveMode ? <Btn onClick={saveSharedHere} icon={I.paste} label="Вставить" /> : null}</Zone>
           <Zone><Btn onClick={() => setCreateOpen((v) => !v)} icon={I.plus} label="Создать" /></Zone>
         </nav>
       )}
