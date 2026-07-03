@@ -38,7 +38,11 @@ public class MainActivity extends BridgeActivity {
             if (list != null && !list.isEmpty()) { pendingShared.clear(); pendingShared.addAll(list); pendingMode = "save"; }
         } else if (Intent.ACTION_VIEW.equals(action) || Intent.ACTION_EDIT.equals(action)) {
             Uri u = intent.getData();
-            if (u != null && "content".equals(u.getScheme())) { pendingShared.clear(); pendingShared.add(u); pendingMode = "open"; }
+            if (u != null && "content".equals(u.getScheme())) {
+                pendingShared.clear(); pendingShared.add(u);
+                String cn = getComponentName() != null ? getComponentName().getClassName() : "";
+                pendingMode = cn.contains("SaveWith") ? "save" : "open";
+            }
         }
     }
 }
