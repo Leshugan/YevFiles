@@ -1066,10 +1066,10 @@ export default function App() {
       </div>
 
       {shared.length > 0 && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 1300, background: "rgba(0,0,0,.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }} onClick={dismissShared}>
-          <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 340, background: BAR, borderRadius: 18, padding: "18px 16px 12px", boxShadow: "0 12px 40px rgba(0,0,0,.5)" }}>
+        <div style={{ position: "fixed", inset: 0, zIndex: 1300, background: "rgba(0,0,0,.5)", display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={dismissShared}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", background: BAR, borderRadius: "20px 20px 0 0", padding: "16px 16px calc(14px + env(safe-area-inset-bottom))", boxShadow: "0 -8px 30px rgba(0,0,0,.5)", animation: "dropGrow .2s cubic-bezier(.2,.9,.3,1.1)" }}>
             <div style={{ fontSize: 15, color: TXT, fontWeight: 600, marginBottom: 3 }}>Файл из другого приложения{shared.length > 1 ? " (" + shared.length + ")" : ""}</div>
-            <div style={{ fontSize: 13, color: SUB, marginBottom: 14 }}>Что сделать с файлом?</div>
+            <div style={{ fontSize: 13, color: SUB, marginBottom: 12 }}>Что сделать с файлом?</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               <button onClick={() => { setShared([]); setSaveMode(true); }} style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", borderRadius: 12, border: "1px solid " + LINE, background: ROW2, color: TXT, fontSize: 15 }}><span style={{ color: ACC, display: "flex" }}><Svg d={I.dl} size={20} /></span>Сохранить</button>
               <button onClick={openSharedHere} style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", borderRadius: 12, border: "1px solid " + LINE, background: ROW2, color: TXT, fontSize: 15 }}><span style={{ color: ACC, display: "flex" }}><Svg d={I.folder} size={20} /></span>Открыть</button>
