@@ -607,8 +607,10 @@ export default function App() {
   }, []);
 
   const toggle = (name) => { const n = new Set(sel); n.has(name) ? n.delete(name) : n.add(name); setSel(n); setSelMode(n.size > 0); };
+  const selAllWant = useRef(false);
   const selectAll = () => {
     if (arcView && arcView.entries) { setArcSel(new Set(arcView.entries.map((e) => e.name))); return; }
+    if (loading) { selAllWant.current = true; setSelMode(true); return; }
     if (!visible.length) { showToast("Папка пуста"); return; }
     setSelMode(true); setSel(new Set(visible.map((e) => e.name)));
   };
@@ -712,6 +714,7 @@ export default function App() {
     const showApps = !om.split && ((fm !== "*/*" && fm !== "application/octet-stream") || (om.asCat && om.mime !== "*/*"));
     if (showApps) (om.apps || []).forEach((a) => items.push({ id: "app|" + a.packageName + "|" + a.activityName, label: a.label, icon: a.icon, color: TXT, onClick: () => pickApp(a) }));
     if (isImg(f.name)) items.push({ id: "viewer", label: "Открыть (просмотр)", d: I.img, size: 26, color: GOLD, onClick: () => { const defs = loadMap(DEFKEY); if (om.useDefault) defs[defaultOpenAs(f.name)] = "__viewer__"; else if (defs[defaultOpenAs(f.name)]) delete defs[defaultOpenAs(f.name)]; saveMap(DEFKEY, defs); setOpenMenu(null); openViewer(f); } });
+    if (isPdf(f.name)) items.push({ id: "pdfview", label: "PDF Читалка", d: I.pdf, size: 26, color: "#E0574F", onClick: () => { const defs = loadMap(DEFKEY); if (om.useDefault) defs[defaultOpenAs(f.name)] = "__pdf__"; else if (defs[defaultOpenAs(f.name)]) delete defs[defaultOpenAs(f.name)]; saveMap(DEFKEY, defs); setOpenMenu(null); openPdf(f); } });
     if (isApkF) {
       items.push({ id: "apk_archive", label: "Открыть как архив", d: I.folder, size: 26, color: GOLD, onClick: () => openArchive(f) });
     }
@@ -819,7 +822,12 @@ export default function App() {
       if (d) { const [pkg, act] = d.split("|"); Apps.open({ uri: e.uri, mime, packageName: pkg, activityName: act }).catch(() => showOpenMenu(e, mime)); return; }
       showOpenMenu(e, mime); return;
     }
-    if (isPdf(e.name)) { openPdf(e); return; }
+    if (isPdf(e.name)) {
+      const mime = mimeOf(e.name), cat = defaultOpenAs(e.name), defs = loadMap(DEFKEY), d = defs[cat] || defs[mime];
+      if (d === "__pdf__") { openPdf(e); return; }
+      if (d) { const [pkg, act] = d.split("|"); Apps.open({ uri: e.uri, mime, packageName: pkg, activityName: act }).catch(() => showOpenMenu(e, mime)); return; }
+      showOpenMenu(e, mime); return;
+    }
     if (EXT.archive.includes(ext)) { showOpenMenu(e, mimeOf(e.name)); return; }
     openExternal(e);
   };
@@ -1009,6 +1017,14 @@ export default function App() {
     // 4) обычная сортировка
     return cmp(a, b);
   });
+
+  useEffect(() => {
+    if (selAllWant.current && !loading) {
+      selAllWant.current = false;
+      if (visible.length) { setSelMode(true); setSel(new Set(visible.map((e) => e.name))); }
+      else setSelMode(false);
+    }
+  }, [loading, entries]);
 
   const lpTimer = useRef(), lpFired = useRef(false), moved = useRef(false), pX = useRef(0), pY = useRef(0);
   const rDown = (ev, e) => { lpFired.current = false; moved.current = false; pX.current = ev.clientX; pY.current = ev.clientY; lpTimer.current = setTimeout(() => { lpFired.current = true; buzz(15); toggle(e.name); }, 450); };
@@ -1334,8 +1350,7 @@ export default function App() {
       {/* ПРОСМОТРЩИК ИЗОБРАЖЕНИЙ */}
       {pdf && (
         <div style={{ position: "fixed", inset: 0, zIndex: 1400, background: "#111", display: "flex", flexDirection: "column" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "calc(8px + env(safe-area-inset-top)) 10px 8px", background: "rgba(0,0,0,.65)" }}>
-            <button onClick={closePdf} aria-label="Закрыть" style={{ background: "none", border: "none", color: "#fff", display: "flex", padding: 4 }}><Svg d={I.x} size={24} /></button>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "calc(8px + env(safe-area-inset-top)) 12px 8px", background: "rgba(0,0,0,.65)" }}>
             <span style={{ flex: 1, minWidth: 0, color: "#fff", fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{pdf.name}</span>
             <span style={{ color: "rgba(255,255,255,.7)", fontSize: 13, flexShrink: 0 }}>{pdfN ? pdfArr.length + "/" + pdfN : "…"}</span>
           </div>
@@ -1344,6 +1359,9 @@ export default function App() {
               {pdfArr.map((src, i) => <img key={i} src={src} alt={"p" + i} style={{ width: "100%", display: "block", background: "#fff" }} />)}
               {(pdfN === 0 || pdfArr.length < pdfN) && <div style={{ color: "#bbb", fontSize: 13, padding: 20 }}>{pdfN === 0 ? "Открываю PDF…" : "Загрузка " + pdfArr.length + "/" + pdfN}</div>}
             </div>
+          </div>
+          <div style={{ display: "flex", justifyContent: "center", padding: "10px 12px calc(10px + env(safe-area-inset-bottom))", background: "rgba(0,0,0,.65)" }}>
+            <button onClick={closePdf} style={{ display: "flex", alignItems: "center", gap: 8, padding: "11px 26px", borderRadius: 24, border: "1px solid rgba(255,255,255,.15)", background: "rgba(255,255,255,.08)", color: "#fff", fontSize: 15 }}><Svg d={I.x} size={20} />Закрыть</button>
           </div>
         </div>
       )}
