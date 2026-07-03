@@ -299,6 +299,40 @@ public class AppsPlugin extends Plugin {
     }
 
     @PluginMethod
+    public void pdfPage(PluginCall call) {
+        String uriStr = call.getString("uri");
+        int page = call.getInt("page", 0);
+        int width = call.getInt("width", 1080);
+        if (uriStr == null) { call.reject("no uri"); return; }
+        try {
+            File f = toFile(uriStr);
+            android.os.ParcelFileDescriptor pfd = android.os.ParcelFileDescriptor.open(f, android.os.ParcelFileDescriptor.MODE_READ_ONLY);
+            android.graphics.pdf.PdfRenderer r = new android.graphics.pdf.PdfRenderer(pfd);
+            int pages = r.getPageCount();
+            JSObject ret = new JSObject();
+            ret.put("pages", pages);
+            if (page >= 0 && page < pages) {
+                android.graphics.pdf.PdfRenderer.Page pg = r.openPage(page);
+                int w = width < 1 ? 1080 : width;
+                int h = (int) ((long) w * pg.getHeight() / Math.max(1, pg.getWidth()));
+                if (h <= 0) h = w;
+                if ((long) w * h > 12000000L) { h = (int) (12000000L / w); }
+                Bitmap b = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+                b.eraseColor(0xFFFFFFFF);
+                pg.render(b, null, null, android.graphics.pdf.PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY);
+                pg.close();
+                ByteArrayOutputStream out = new ByteArrayOutputStream();
+                b.compress(Bitmap.CompressFormat.JPEG, 80, out);
+                b.recycle();
+                ret.put("data", "data:image/jpeg;base64," + Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP));
+                ret.put("w", w); ret.put("h", h);
+            }
+            r.close(); pfd.close();
+            call.resolve(ret);
+        } catch (Exception e) { call.reject(e.getMessage()); }
+    }
+
+    @PluginMethod
     public void pdfThumb(PluginCall call) {
         String uriStr = call.getString("uri");
         if (uriStr == null) { call.reject("no uri"); return; }
