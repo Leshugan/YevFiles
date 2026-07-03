@@ -378,6 +378,7 @@ export default function App() {
     el.scrollTop = contentH >= ch ? pt : el.scrollHeight - ch;
   }, [arcView && arcView.entries]);
   const [shared, setShared] = useState([]);
+  const [sharedMenu, setSharedMenu] = useState(false);
   const checkShared = async () => {
     try {
       const r = await Apps.getShared();
@@ -1061,6 +1062,22 @@ export default function App() {
         )}
       </div>
 
+      {shared.length > 0 && (
+        <div style={S.savePop}>
+          <Svg d={I.share} size={20} />
+          <span style={{ flex: 1, fontSize: 13.5, lineHeight: 1.35 }}>Получен файл{shared.length > 1 ? " (" + shared.length + ")" : ""} из другого приложения</span>
+          <div style={{ position: "relative" }}>
+            <button style={S.accessBtn} onClick={() => setSharedMenu((v) => !v)}>Открыть/Сохранить</button>
+            {sharedMenu && (
+              <div style={{ position: "absolute", right: 0, top: "calc(100% + 6px)", zIndex: 60, background: BAR, border: "1px solid " + LINE, borderRadius: 12, overflow: "hidden", minWidth: 190, boxShadow: "0 8px 24px rgba(0,0,0,.4)" }}>
+                <div style={S.menuItem} onClick={() => { setSharedMenu(false); openSharedHere(); }}><span style={{ color: ACC, display: "flex" }}><Svg d={I.folder} size={20} /></span>Открыть</div>
+                <div style={S.menuItem} onClick={() => { setSharedMenu(false); saveSharedHere(); }}><span style={{ color: ACC, display: "flex" }}><Svg d={I.dl} size={20} /></span>Сохранить здесь</div>
+              </div>
+            )}
+          </div>
+          <button onClick={() => { setSharedMenu(false); dismissShared(); }} aria-label="Отклонить" style={{ background: "none", border: "none", color: SUB, padding: 4, lineHeight: 0 }}><Svg d={I.x} size={18} /></button>
+        </div>
+      )}
       {!allFiles && (
         <div style={S.accessBar}>
           <div style={{ flex: 1, fontSize: 13, lineHeight: 1.4 }}>Нет доступа ко всем файлам — архивы, PDF и APK не видны.</div>
