@@ -346,6 +346,32 @@ export default function App() {
   const [dragging, setDragging] = useState(false);
   const [viewerDel, setViewerDel] = useState(false);
   const vTouch = useRef(null);
+  const [pdf, setPdf] = useState(null);       // { uri, name }
+  const [pdfArr, setPdfArr] = useState([]);   // dataURL по страницам
+  const [pdfN, setPdfN] = useState(0);
+  const [pdfZoom, setPdfZoom] = useState(1);
+  const pdfTok = useRef(0);
+  const pdfPinch = useRef({ d0: 0, z0: 1 });
+  const pdfDist = (t) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+  const closePdf = () => { pdfTok.current++; setPdf(null); setPdfArr([]); setPdfN(0); setPdfZoom(1); };
+  const openPdf = async (entry) => {
+    const tok = ++pdfTok.current;
+    setPdf({ uri: entry.uri, name: entry.name }); setPdfArr([]); setPdfN(0); setPdfZoom(1);
+    const W = Math.min(Math.round((window.innerWidth || 400) * (window.devicePixelRatio || 2)), 1600);
+    try {
+      const first = await Apps.pdfPage({ uri: entry.uri, page: 0, width: W });
+      if (pdfTok.current !== tok) return;
+      const n = first.pages || 0; setPdfN(n);
+      if (first.data) setPdfArr([first.data]);
+      for (let p = 1; p < n; p++) {
+        const r = await Apps.pdfPage({ uri: entry.uri, page: p, width: W });
+        if (pdfTok.current !== tok) return;
+        setPdfArr((a) => [...a, r.data]);
+      }
+    } catch (e) { if (pdfTok.current === tok) { showToast("Не удалось открыть PDF: " + (e?.message || "")); setPdf(null); } }
+  };
+  const pdfTouchStart = (e) => { if (e.touches.length === 2) { pdfPinch.current.d0 = pdfDist(e.touches); pdfPinch.current.z0 = pdfZoom; } };
+  const pdfTouchMove = (e) => { if (e.touches.length === 2 && pdfPinch.current.d0 > 0) { e.preventDefault(); let z = pdfPinch.current.z0 * (pdfDist(e.touches) / pdfPinch.current.d0); z = Math.max(1, Math.min(4, z)); setPdfZoom(z); } };
   const openViewer = (entry) => {
     const items = entries.filter((e) => e.type !== "directory" && isImg(e.name));
     const idx = items.findIndex((e) => e.name === entry.name);
@@ -558,6 +584,7 @@ export default function App() {
     if (pasteMenu) { setPasteMenu(false); return; }
     if (openMenu) { setOpenMenu(null); return; }
     if (props) { setProps(null); return; }
+    if (pdf) { closePdf(); return; }
     if (viewerDel) { setViewerDel(false); return; }
     if (viewer) { setViewer(null); return; }
     if (sheet) { setSheet(null); return; }
@@ -792,6 +819,7 @@ export default function App() {
       if (d) { const [pkg, act] = d.split("|"); Apps.open({ uri: e.uri, mime, packageName: pkg, activityName: act }).catch(() => showOpenMenu(e, mime)); return; }
       showOpenMenu(e, mime); return;
     }
+    if (isPdf(e.name)) { openPdf(e); return; }
     if (EXT.archive.includes(ext)) { showOpenMenu(e, mimeOf(e.name)); return; }
     openExternal(e);
   };
@@ -1304,6 +1332,21 @@ export default function App() {
 
       {/* СВОЙСТВА */}
       {/* ПРОСМОТРЩИК ИЗОБРАЖЕНИЙ */}
+      {pdf && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 1400, background: "#111", display: "flex", flexDirection: "column" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "calc(8px + env(safe-area-inset-top)) 10px 8px", background: "rgba(0,0,0,.65)" }}>
+            <button onClick={closePdf} aria-label="Закрыть" style={{ background: "none", border: "none", color: "#fff", display: "flex", padding: 4 }}><Svg d={I.x} size={24} /></button>
+            <span style={{ flex: 1, minWidth: 0, color: "#fff", fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{pdf.name}</span>
+            <span style={{ color: "rgba(255,255,255,.7)", fontSize: 13, flexShrink: 0 }}>{pdfN ? pdfArr.length + "/" + pdfN : "…"}</span>
+          </div>
+          <div onTouchStart={pdfTouchStart} onTouchMove={pdfTouchMove} style={{ flex: 1, overflow: "auto", background: "#2b2b2b", WebkitOverflowScrolling: "touch", touchAction: "pan-x pan-y" }}>
+            <div style={{ width: (pdfZoom * 100) + "%", margin: "0 auto", padding: "10px 0 24px", display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
+              {pdfArr.map((src, i) => <img key={i} src={src} alt={"p" + i} style={{ width: "100%", display: "block", background: "#fff" }} />)}
+              {(pdfN === 0 || pdfArr.length < pdfN) && <div style={{ color: "#bbb", fontSize: 13, padding: 20 }}>{pdfN === 0 ? "Открываю PDF…" : "Загрузка " + pdfArr.length + "/" + pdfN}</div>}
+            </div>
+          </div>
+        </div>
+      )}
       {viewer && viewerCur && (
         <div style={{ position: "fixed", inset: 0, zIndex: 1300, background: "#000", display: "flex", flexDirection: "column", touchAction: "none", overflow: "hidden" }}>
           <div style={{ flex: 1, position: "relative", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" }}
