@@ -378,13 +378,15 @@ export default function App() {
     el.scrollTop = contentH >= ch ? pt : el.scrollHeight - ch;
   }, [arcView && arcView.entries]);
   const [shared, setShared] = useState([]);
-  const [sharedMenu, setSharedMenu] = useState(false);
   const [saveMode, setSaveMode] = useState(false);
   const checkShared = async () => {
     try {
       const r = await Apps.getShared();
       const files = r.files || [];
-      setShared(files);
+      if (files.length === 0) { setShared([]); return; }
+      if (r.mode === "open") { setShared([]); openSharedHere(); }
+      else if (r.mode === "save") { setShared([]); setSaveMode(true); }
+      else setShared(files);
     } catch {}
   };
   const openSharedHere = async () => {
@@ -1064,19 +1066,16 @@ export default function App() {
       </div>
 
       {shared.length > 0 && (
-        <div style={S.savePop}>
-          <Svg d={I.share} size={20} />
-          <span style={{ flex: 1, fontSize: 13.5, lineHeight: 1.35 }}>Получен файл{shared.length > 1 ? " (" + shared.length + ")" : ""} из другого приложения</span>
-          <div style={{ position: "relative" }}>
-            <button style={S.accessBtn} onClick={() => setSharedMenu((v) => !v)}>Открыть/Сохранить</button>
-            {sharedMenu && (
-              <div style={{ position: "absolute", right: 0, top: "calc(100% + 6px)", zIndex: 60, background: BAR, border: "1px solid " + LINE, borderRadius: 12, overflow: "hidden", minWidth: 190, boxShadow: "0 8px 24px rgba(0,0,0,.4)" }}>
-                <div style={S.menuItem} onClick={() => { setSharedMenu(false); setShared([]); setSaveMode(true); }}><span style={{ color: ACC, display: "flex" }}><Svg d={I.dl} size={20} /></span>Сохранить</div>
-                <div style={S.menuItem} onClick={() => { setSharedMenu(false); openSharedHere(); }}><span style={{ color: ACC, display: "flex" }}><Svg d={I.folder} size={20} /></span>Открыть</div>
-              </div>
-            )}
+        <div style={{ position: "fixed", inset: 0, zIndex: 1300, background: "rgba(0,0,0,.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }} onClick={dismissShared}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 340, background: BAR, borderRadius: 18, padding: "18px 16px 12px", boxShadow: "0 12px 40px rgba(0,0,0,.5)" }}>
+            <div style={{ fontSize: 15, color: TXT, fontWeight: 600, marginBottom: 3 }}>Файл из другого приложения{shared.length > 1 ? " (" + shared.length + ")" : ""}</div>
+            <div style={{ fontSize: 13, color: SUB, marginBottom: 14 }}>Что сделать с файлом?</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <button onClick={() => { setShared([]); setSaveMode(true); }} style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", borderRadius: 12, border: "1px solid " + LINE, background: ROW2, color: TXT, fontSize: 15 }}><span style={{ color: ACC, display: "flex" }}><Svg d={I.dl} size={20} /></span>Сохранить</button>
+              <button onClick={openSharedHere} style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", borderRadius: 12, border: "1px solid " + LINE, background: ROW2, color: TXT, fontSize: 15 }}><span style={{ color: ACC, display: "flex" }}><Svg d={I.folder} size={20} /></span>Открыть</button>
+              <button onClick={dismissShared} style={{ padding: "10px 14px", borderRadius: 12, border: "none", background: "none", color: SUB, fontSize: 14 }}>Отмена</button>
+            </div>
           </div>
-          <button onClick={() => { setSharedMenu(false); dismissShared(); }} aria-label="Отклонить" style={{ background: "none", border: "none", color: SUB, padding: 4, lineHeight: 0 }}><Svg d={I.x} size={18} /></button>
         </div>
       )}
       {!allFiles && (
