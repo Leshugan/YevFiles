@@ -1058,6 +1058,36 @@ public class AppsPlugin extends Plugin {
     }
 
     @PluginMethod
+    public void zipCreate(final PluginCall call) {
+        final String dir = call.getString("dir");
+        final String name = call.getString("name");
+        final com.getcapacitor.JSArray uris = call.getArray("uris");
+        if (dir == null || name == null || uris == null) { call.reject("no args"); return; }
+        new Thread(() -> {
+            try {
+                File out = new File(toFile(dir), name);
+                if (out.exists()) out.delete();
+                net.lingala.zip4j.ZipFile z = new net.lingala.zip4j.ZipFile(out);
+                net.lingala.zip4j.model.ZipParameters pp = new net.lingala.zip4j.model.ZipParameters();
+                java.util.List<Object> list = uris.toList();
+                int i = 0, total = list.size();
+                for (Object o : list) {
+                    File f = toFile(String.valueOf(o));
+                    if (f != null && f.exists()) {
+                        if (f.isDirectory()) z.addFolder(f, pp); else z.addFile(f, pp);
+                    }
+                    i++;
+                    postProgressNotif("Архивирование", name, i, total);
+                }
+                z.close();
+                try { NotificationManager nm = (NotificationManager) getContext().getSystemService(Context.NOTIFICATION_SERVICE); nm.cancel(777); } catch (Exception ignored) {}
+                JSObject r = new JSObject(); r.put("ok", true); r.put("dest", out.getAbsolutePath());
+                call.resolve(r);
+            } catch (Exception e) { try { NotificationManager nm = (NotificationManager) getContext().getSystemService(Context.NOTIFICATION_SERVICE); nm.cancel(777); } catch (Exception ignored) {} call.reject(e.getMessage()); }
+        }).start();
+    }
+
+    @PluginMethod
     public void pathSize(final PluginCall call) {
         String uriStr = call.getString("uri");
         if (uriStr == null) { call.reject("no uri"); return; }
