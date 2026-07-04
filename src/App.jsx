@@ -1981,7 +1981,7 @@ const S = {
   sep: { height: 1, background: "var(--hair)", margin: "4px 0" },
   iconWrap: { width: 44, height: 44, borderRadius: 13, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
   iconImg: { width: "100%", height: "100%", objectFit: "cover", borderRadius: 13 },
-  folderThumb: { position: "absolute", right: 1, bottom: 1, width: 26, height: 26, borderRadius: 7, objectFit: "cover", border: "2px solid " + BG, opacity: 0.82 },
+  folderThumb: { position: "absolute", right: 1, bottom: 1, width: 26, height: 26, borderRadius: 7, objectFit: "cover", border: "2px solid " + BG, opacity: 0.7 },
   cbk: { width: 22, height: 22, borderRadius: 6, background: ACC, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", animation: "cbPop .26s cubic-bezier(.2,.9,.3,1.3)" },
   cbkOff: { width: 22, height: 22, borderRadius: 6, border: "2px solid " + ACC, background: "transparent" },
   rowMid: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 },
