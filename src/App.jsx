@@ -618,6 +618,7 @@ export default function App() {
     if (openMenu) { setOpenMenu(null); return; }
     if (props) { setProps(null); return; }
     if (pdf) { closePdf(); return; }
+    if (player) { playerClose(); return; }
     if (viewerDel) { setViewerDel(false); return; }
     if (viewer) { setViewer(null); return; }
     if (sheet) { setSheet(null); return; }
@@ -1389,26 +1390,26 @@ export default function App() {
       {/* СВОЙСТВА */}
       {/* ПРОСМОТРЩИК ИЗОБРАЖЕНИЙ */}
       {player && (
-        <div style={{ position: "fixed", left: 8, right: 8, bottom: "calc(78px + env(safe-area-inset-bottom))", zIndex: 70, background: BAR, borderRadius: 16, padding: "9px 12px 6px", boxShadow: "0 8px 24px rgba(0,0,0,.5)", border: "1px solid " + LINE }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-            <span style={{ flex: 1, minWidth: 0, color: TXT, fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{player.name}</span>
+        <div style={{ position: "fixed", left: 8, right: 8, bottom: "calc(78px + env(safe-area-inset-bottom))", zIndex: 70, background: BAR, borderRadius: 20, padding: "10px 12px 10px", boxShadow: "0 8px 28px rgba(0,0,0,.55)", border: "1px solid " + LINE }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+            <span style={{ flex: 1, minWidth: 0, color: TXT, fontSize: 13.5, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{player.name}</span>
             <div style={{ position: "relative", flexShrink: 0 }}>
-              <button onClick={() => setPlayerMenu((v) => !v)} aria-label="Меню" style={{ background: "none", border: "none", color: SUB, display: "flex", padding: 2 }}><Svg d={I.dots} size={20} /></button>
+              <button onClick={() => setPlayerMenu((v) => !v)} aria-label="Меню" style={{ background: ROW2, border: "1px solid " + LINE, borderRadius: 13, color: ACC, display: "flex", alignItems: "center", justifyContent: "center", width: 44, height: 36 }}><Svg d={I.dots} size={28} /></button>
               {playerMenu && (
-                <div style={{ position: "absolute", right: 0, bottom: "calc(100% + 6px)", background: BAR, border: "1px solid " + LINE, borderRadius: 12, overflow: "hidden", minWidth: 210, boxShadow: "0 8px 24px rgba(0,0,0,.5)", zIndex: 5 }}>
+                <div style={{ position: "absolute", right: 0, bottom: "calc(100% + 6px)", background: BAR, border: "1px solid " + LINE, borderRadius: 14, overflow: "hidden", minWidth: 210, boxShadow: "0 8px 24px rgba(0,0,0,.5)", zIndex: 5 }}>
                   <div style={S.menuItem} onClick={() => playerSetAs("alarm")}><span style={{ color: ACC, display: "flex" }}><Svg d={I.alarm} size={20} /></span>Установить будильник</div>
                   <div style={S.menuItem} onClick={() => playerSetAs("ringtone")}><span style={{ color: ACC, display: "flex" }}><Svg d={I.bell} size={20} /></span>Установить на звонок</div>
                 </div>
               )}
             </div>
+            <button onClick={playerClose} aria-label="Закрыть" style={{ background: ROW2, border: "1px solid " + LINE, borderRadius: 13, color: RED, display: "flex", alignItems: "center", justifyContent: "center", width: 36, height: 36, flexShrink: 0 }}><Svg d={I.x} size={20} /></button>
           </div>
-          <input type="range" min={0} max={player.dur || 0} value={Math.min(player.pos || 0, player.dur || 0)} onChange={(e) => playerSeek(Number(e.target.value))} style={{ width: "100%", accentColor: ACC, height: 4, margin: 0 }} />
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: SUB, marginTop: 1 }}><span>{fmtTime(player.pos)}</span><span>{fmtTime(player.dur)}</span></div>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 28, marginTop: 2, position: "relative" }}>
-            <button onClick={playerPrev} aria-label="Назад" style={{ background: "none", border: "none", color: TXT, display: "flex", padding: 4 }}><Svg d={I.prev} size={26} /></button>
-            <button onClick={playerToggle} aria-label="Плей/Пауза" style={{ background: ACC, border: "none", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", width: 46, height: 46, borderRadius: 24 }}><Svg d={player.playing ? I.pause : I.play} size={24} /></button>
-            <button onClick={playerNext} aria-label="Вперёд" style={{ background: "none", border: "none", color: TXT, display: "flex", padding: 4 }}><Svg d={I.next} size={26} /></button>
-            <button onClick={playerClose} aria-label="Закрыть" style={{ position: "absolute", right: -4, bottom: -2, background: ROW2, border: "1px solid " + LINE, color: RED, display: "flex", alignItems: "center", justifyContent: "center", width: 30, height: 30, borderRadius: 15 }}><Svg d={I.x} size={18} /></button>
+          <input type="range" min={0} max={player.dur || 0} value={Math.min(player.pos || 0, player.dur || 0)} onChange={(e) => playerSeek(Number(e.target.value))} style={{ width: "100%", accentColor: ACC, height: 7, borderRadius: 4, margin: 0 }} />
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: SUB, marginTop: 3 }}><span>{fmtTime(player.pos)}</span><span>{fmtTime(player.dur)}</span></div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 30, marginTop: 4 }}>
+            <button onClick={playerPrev} aria-label="Назад" style={{ background: ROW2, border: "1px solid " + LINE, borderRadius: 16, color: TXT, display: "flex", alignItems: "center", justifyContent: "center", width: 50, height: 44 }}><Svg d={I.prev} size={26} /></button>
+            <button onClick={playerToggle} aria-label="Плей/Пауза" style={{ background: ACC, border: "none", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", width: 56, height: 56, borderRadius: 28 }}><Svg d={player.playing ? I.pause : I.play} size={27} /></button>
+            <button onClick={playerNext} aria-label="Вперёд" style={{ background: ROW2, border: "1px solid " + LINE, borderRadius: 16, color: TXT, display: "flex", alignItems: "center", justifyContent: "center", width: 50, height: 44 }}><Svg d={I.next} size={26} /></button>
           </div>
         </div>
       )}
