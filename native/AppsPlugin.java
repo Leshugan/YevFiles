@@ -1348,17 +1348,24 @@ public class AppsPlugin extends Plugin {
             }
             File f = toFile(uri);
             boolean alarm = "alarm".equals(type);
+            android.net.Uri base = android.provider.MediaStore.Audio.Media.getContentUriForPath(f.getAbsolutePath());
+            android.net.Uri newUri = null;
+            try {
+                android.database.Cursor c = getContext().getContentResolver().query(base, new String[]{ android.provider.MediaStore.MediaColumns._ID }, android.provider.MediaStore.MediaColumns.DATA + "=?", new String[]{ f.getAbsolutePath() }, null);
+                if (c != null) { if (c.moveToFirst()) newUri = android.net.Uri.withAppendedPath(base, c.getString(0)); c.close(); }
+            } catch (Exception ignored) {}
             android.content.ContentValues cv = new android.content.ContentValues();
-            cv.put(android.provider.MediaStore.MediaColumns.DATA, f.getAbsolutePath());
-            cv.put(android.provider.MediaStore.MediaColumns.TITLE, f.getName());
-            cv.put(android.provider.MediaStore.MediaColumns.MIME_TYPE, "audio/mpeg");
             cv.put(android.provider.MediaStore.Audio.Media.IS_RINGTONE, !alarm);
             cv.put(android.provider.MediaStore.Audio.Media.IS_ALARM, alarm);
             cv.put(android.provider.MediaStore.Audio.Media.IS_NOTIFICATION, false);
-            cv.put(android.provider.MediaStore.Audio.Media.IS_MUSIC, false);
-            android.net.Uri base = android.provider.MediaStore.Audio.Media.getContentUriForPath(f.getAbsolutePath());
-            getContext().getContentResolver().delete(base, android.provider.MediaStore.MediaColumns.DATA + "=?", new String[]{ f.getAbsolutePath() });
-            android.net.Uri newUri = getContext().getContentResolver().insert(base, cv);
+            if (newUri != null) {
+                getContext().getContentResolver().update(newUri, cv, null, null);
+            } else {
+                cv.put(android.provider.MediaStore.MediaColumns.DATA, f.getAbsolutePath());
+                cv.put(android.provider.MediaStore.MediaColumns.TITLE, f.getName());
+                cv.put(android.provider.MediaStore.MediaColumns.MIME_TYPE, "audio/mpeg");
+                newUri = getContext().getContentResolver().insert(base, cv);
+            }
             android.media.RingtoneManager.setActualDefaultRingtoneUri(getContext(), alarm ? android.media.RingtoneManager.TYPE_ALARM : android.media.RingtoneManager.TYPE_RINGTONE, newUri);
             JSObject o = new JSObject(); o.put("ok", true); call.resolve(o);
         } catch (Exception e) { call.reject(e.getMessage()); }
