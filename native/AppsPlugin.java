@@ -1206,4 +1206,161 @@ public class AppsPlugin extends Plugin {
         b.compress(Bitmap.CompressFormat.PNG, 100, out);
         return "data:image/png;base64," + Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP);
     }
+
+    // ===== АУДИОПЛЕЕР =====
+    private android.media.MediaPlayer amp;
+    private final java.util.List<String> plUris = new java.util.ArrayList<>();
+    private final java.util.List<String> plNames = new java.util.ArrayList<>();
+    private int plIdx = 0;
+    private boolean autoNext = false;
+    private android.media.session.MediaSession aSession;
+    private BroadcastReceiver aRcv;
+    private static final int A_NOTIF = 47110;
+    private static final String A_ACT = "leshugan.fm.AUDIO_CMD";
+
+    private void aEnsureReceiver() {
+        if (aRcv != null) return;
+        aRcv = new BroadcastReceiver() {
+            public void onReceive(android.content.Context c, Intent i) {
+                String cmd = i.getStringExtra("cmd");
+                if ("toggle".equals(cmd)) aToggleInternal();
+                else if ("next".equals(cmd)) aPlayIndex(plIdx + 1);
+                else if ("prev".equals(cmd)) aPlayIndex(plIdx - 1);
+                else if ("close".equals(cmd)) aStopInternal();
+            }
+        };
+        android.content.IntentFilter f = new android.content.IntentFilter(A_ACT);
+        if (android.os.Build.VERSION.SDK_INT >= 33) getContext().registerReceiver(aRcv, f, android.content.Context.RECEIVER_NOT_EXPORTED);
+        else getContext().registerReceiver(aRcv, f);
+    }
+
+    private android.app.PendingIntent aPI(String cmd) {
+        Intent i = new Intent(A_ACT).setPackage(getContext().getPackageName());
+        i.putExtra("cmd", cmd);
+        int fl = android.app.PendingIntent.FLAG_UPDATE_CURRENT | (android.os.Build.VERSION.SDK_INT >= 23 ? android.app.PendingIntent.FLAG_IMMUTABLE : 0);
+        return android.app.PendingIntent.getBroadcast(getContext(), cmd.hashCode(), i, fl);
+    }
+
+    private void aNotify() {
+        try {
+            android.app.NotificationManager nm = (android.app.NotificationManager) getContext().getSystemService(android.content.Context.NOTIFICATION_SERVICE);
+            if (android.os.Build.VERSION.SDK_INT >= 26 && nm.getNotificationChannel("audio") == null) {
+                android.app.NotificationChannel ch = new android.app.NotificationChannel("audio", "Плеер", android.app.NotificationManager.IMPORTANCE_LOW);
+                ch.setShowBadge(false); nm.createNotificationChannel(ch);
+            }
+            boolean playing = amp != null && amp.isPlaying();
+            String name = plIdx >= 0 && plIdx < plNames.size() ? plNames.get(plIdx) : "";
+            if (aSession == null) aSession = new android.media.session.MediaSession(getContext(), "yevfm");
+            Intent open = getContext().getPackageManager().getLaunchIntentForPackage(getContext().getPackageName());
+            android.app.PendingIntent contentPI = android.app.PendingIntent.getActivity(getContext(), 0, open, android.os.Build.VERSION.SDK_INT >= 23 ? android.app.PendingIntent.FLAG_IMMUTABLE : 0);
+            android.app.Notification.Builder b = android.os.Build.VERSION.SDK_INT >= 26 ? new android.app.Notification.Builder(getContext(), "audio") : new android.app.Notification.Builder(getContext());
+            b.setSmallIcon(android.R.drawable.ic_media_play).setContentTitle(name).setContentText("YevFiles").setContentIntent(contentPI).setOngoing(playing).setVisibility(android.app.Notification.VISIBILITY_PUBLIC);
+            b.addAction(new android.app.Notification.Action.Builder(android.graphics.drawable.Icon.createWithResource(getContext(), android.R.drawable.ic_media_previous), "prev", aPI("prev")).build());
+            b.addAction(new android.app.Notification.Action.Builder(android.graphics.drawable.Icon.createWithResource(getContext(), playing ? android.R.drawable.ic_media_pause : android.R.drawable.ic_media_play), "toggle", aPI("toggle")).build());
+            b.addAction(new android.app.Notification.Action.Builder(android.graphics.drawable.Icon.createWithResource(getContext(), android.R.drawable.ic_media_next), "next", aPI("next")).build());
+            b.addAction(new android.app.Notification.Action.Builder(android.graphics.drawable.Icon.createWithResource(getContext(), android.R.drawable.ic_menu_close_clear_cancel), "close", aPI("close")).build());
+            android.app.Notification.MediaStyle st = new android.app.Notification.MediaStyle().setShowActionsInCompactView(0, 1, 2);
+            st.setMediaSession(aSession.getSessionToken());
+            b.setStyle(st);
+            nm.notify(A_NOTIF, b.build());
+        } catch (Exception ignored) {}
+    }
+
+    private void aPlayIndex(int idx) {
+        if (idx < 0) return;
+        if (idx >= plUris.size()) { aStopInternal(); return; }
+        plIdx = idx;
+        try {
+            if (amp == null) amp = new android.media.MediaPlayer();
+            else amp.reset();
+            String uri = plUris.get(idx);
+            if (uri.startsWith("content://")) amp.setDataSource(getContext(), android.net.Uri.parse(uri));
+            else amp.setDataSource(toFile(uri).getAbsolutePath());
+            amp.setOnCompletionListener(new android.media.MediaPlayer.OnCompletionListener() {
+                public void onCompletion(android.media.MediaPlayer m) { if (autoNext) aPlayIndex(plIdx + 1); else aNotify(); }
+            });
+            amp.prepare();
+            amp.start();
+            aEnsureReceiver();
+            aNotify();
+        } catch (Exception e) {}
+    }
+
+    private void aToggleInternal() {
+        if (amp == null) return;
+        try { if (amp.isPlaying()) amp.pause(); else amp.start(); } catch (Exception e) {}
+        aNotify();
+    }
+
+    private void aStopInternal() {
+        try { if (amp != null) { amp.stop(); amp.release(); } } catch (Exception e) {}
+        amp = null;
+        try { ((android.app.NotificationManager) getContext().getSystemService(android.content.Context.NOTIFICATION_SERVICE)).cancel(A_NOTIF); } catch (Exception e) {}
+    }
+
+    @PluginMethod
+    public void audioOpen(PluginCall call) {
+        try {
+            plUris.clear(); plNames.clear();
+            JSArray us = call.getArray("uris"), ns = call.getArray("names");
+            for (int i = 0; i < us.length(); i++) plUris.add(us.getString(i));
+            for (int i = 0; i < ns.length(); i++) plNames.add(ns.getString(i));
+            autoNext = call.getBoolean("autoNext", false);
+            aPlayIndex(call.getInt("index", 0));
+            call.resolve();
+        } catch (Exception e) { call.reject(e.getMessage()); }
+    }
+
+    @PluginMethod public void audioToggle(PluginCall call) { aToggleInternal(); call.resolve(); }
+    @PluginMethod public void audioNext(PluginCall call) { aPlayIndex(plIdx + 1); call.resolve(); }
+    @PluginMethod public void audioPrev(PluginCall call) { aPlayIndex(plIdx - 1); call.resolve(); }
+    @PluginMethod public void audioSeek(PluginCall call) { try { if (amp != null) amp.seekTo(call.getInt("ms", 0)); } catch (Exception e) {} call.resolve(); }
+    @PluginMethod public void audioClose(PluginCall call) { aStopInternal(); call.resolve(); }
+    @PluginMethod public void audioConfig(PluginCall call) { autoNext = call.getBoolean("autoNext", autoNext); call.resolve(); }
+
+    @PluginMethod
+    public void audioState(PluginCall call) {
+        JSObject o = new JSObject();
+        try {
+            o.put("playing", amp != null && amp.isPlaying());
+            o.put("pos", amp != null ? amp.getCurrentPosition() : 0);
+            o.put("dur", amp != null ? amp.getDuration() : 0);
+            o.put("idx", plIdx);
+            o.put("count", plUris.size());
+            o.put("name", plIdx >= 0 && plIdx < plNames.size() ? plNames.get(plIdx) : "");
+            o.put("alive", amp != null);
+        } catch (Exception e) { o.put("alive", amp != null); }
+        call.resolve(o);
+    }
+
+    @PluginMethod
+    public void audioSetAs(PluginCall call) {
+        try {
+            String uri = call.getString("uri");
+            String type = call.getString("type", "ringtone");
+            if (android.os.Build.VERSION.SDK_INT >= 23 && !android.provider.Settings.System.canWrite(getContext())) {
+                Intent i = new Intent(android.provider.Settings.ACTION_MANAGE_WRITE_SETTINGS);
+                i.setData(android.net.Uri.parse("package:" + getContext().getPackageName()));
+                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                getContext().startActivity(i);
+                call.reject("need_write_settings");
+                return;
+            }
+            File f = toFile(uri);
+            boolean alarm = "alarm".equals(type);
+            android.content.ContentValues cv = new android.content.ContentValues();
+            cv.put(android.provider.MediaStore.MediaColumns.DATA, f.getAbsolutePath());
+            cv.put(android.provider.MediaStore.MediaColumns.TITLE, f.getName());
+            cv.put(android.provider.MediaStore.MediaColumns.MIME_TYPE, "audio/mpeg");
+            cv.put(android.provider.MediaStore.Audio.Media.IS_RINGTONE, !alarm);
+            cv.put(android.provider.MediaStore.Audio.Media.IS_ALARM, alarm);
+            cv.put(android.provider.MediaStore.Audio.Media.IS_NOTIFICATION, false);
+            cv.put(android.provider.MediaStore.Audio.Media.IS_MUSIC, false);
+            android.net.Uri base = android.provider.MediaStore.Audio.Media.getContentUriForPath(f.getAbsolutePath());
+            getContext().getContentResolver().delete(base, android.provider.MediaStore.MediaColumns.DATA + "=?", new String[]{ f.getAbsolutePath() });
+            android.net.Uri newUri = getContext().getContentResolver().insert(base, cv);
+            android.media.RingtoneManager.setActualDefaultRingtoneUri(getContext(), alarm ? android.media.RingtoneManager.TYPE_ALARM : android.media.RingtoneManager.TYPE_RINGTONE, newUri);
+            JSObject o = new JSObject(); o.put("ok", true); call.resolve(o);
+        } catch (Exception e) { call.reject(e.getMessage()); }
+    }
 }
