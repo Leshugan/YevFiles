@@ -1394,7 +1394,7 @@ export default function App() {
           <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
             <span style={{ flex: 1, minWidth: 0, color: TXT, fontSize: 13.5, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{player.name}</span>
             <div style={{ position: "relative", flexShrink: 0 }}>
-              <button onClick={() => setPlayerMenu((v) => !v)} aria-label="Меню" style={{ background: ROW2, border: "1px solid " + LINE, borderRadius: 13, color: ACC, display: "flex", alignItems: "center", justifyContent: "center", width: 44, height: 36 }}><Svg d={I.dots} size={28} /></button>
+              <button onClick={() => setPlayerMenu((v) => !v)} aria-label="Меню" style={{ background: ROW2, border: "1px solid " + LINE, borderRadius: 11, color: ACC, display: "flex", alignItems: "center", justifyContent: "center", width: 32, height: 32 }}><Svg d={I.dots} size={20} /></button>
               {playerMenu && (
                 <div style={{ position: "absolute", right: 0, bottom: "calc(100% + 6px)", background: BAR, border: "1px solid " + LINE, borderRadius: 14, overflow: "hidden", minWidth: 210, boxShadow: "0 8px 24px rgba(0,0,0,.5)", zIndex: 5 }}>
                   <div style={S.menuItem} onClick={() => playerSetAs("alarm")}><span style={{ color: ACC, display: "flex" }}><Svg d={I.alarm} size={20} /></span>Установить будильник</div>
@@ -1402,7 +1402,7 @@ export default function App() {
                 </div>
               )}
             </div>
-            <button onClick={playerClose} aria-label="Закрыть" style={{ background: ROW2, border: "1px solid " + LINE, borderRadius: 13, color: RED, display: "flex", alignItems: "center", justifyContent: "center", width: 36, height: 36, flexShrink: 0 }}><Svg d={I.x} size={20} /></button>
+            <button onClick={playerClose} aria-label="Закрыть" style={{ background: ROW2, border: "1px solid " + LINE, borderRadius: 14, color: RED, display: "flex", alignItems: "center", justifyContent: "center", width: 46, height: 42, flexShrink: 0 }}><Svg d={I.x} size={26} /></button>
           </div>
           <input type="range" min={0} max={player.dur || 0} value={Math.min(player.pos || 0, player.dur || 0)} onChange={(e) => playerSeek(Number(e.target.value))} style={{ width: "100%", accentColor: ACC, height: 7, borderRadius: 4, margin: 0 }} />
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: SUB, marginTop: 3 }}><span>{fmtTime(player.pos)}</span><span>{fmtTime(player.dur)}</span></div>
