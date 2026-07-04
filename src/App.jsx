@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback, useLayoutEffect, useDeferredValue } from "react";
 import { Filesystem, Directory, Encoding } from "@capacitor/filesystem";
 import { App as CapApp } from "@capacitor/app";
 import { registerPlugin, Capacitor } from "@capacitor/core";
@@ -203,6 +203,7 @@ const SYS_FOLDERS = {
 const REAL_SYS = new Set(["android","alarms","audiobooks","dcim","documents","download","downloads","movies","music","notifications","pictures","podcasts","recordings","ringtones","screenshots","screenrecord","screenrecords","bluetooth","fonts","camera","data","media","obb","coloros","oppo","oneplus","heytap","realme","samsung","smartswitch","miui","xiaomi","huawei","vivo"]);
 const COLL = new Intl.Collator("ru", { numeric: true, sensitivity: "base" });
 const nameCmp = (a, b) => COLL.compare(a || "", b || "");
+const sizeCache = new Map();
 const ARCH_COLORS = { zip: "#E3B14F", rar: "#9B59B6", "7z": "#5AA9E6", tar: "#6FD3A8", gz: "#6FD3A8", xz: "#6FD3A8", bz2: "#6FD3A8", jar: "#E0574F" };
 const fileIcon = (name) => {
   const ext = (name.split(".").pop() || "").toLowerCase();
@@ -263,6 +264,8 @@ export default function App() {
   const [slide, setSlide] = useState(0);
   const [meta, setMeta] = useState(loadMeta);
   const [showHidden, setShowHidden] = useState(false);
+  const VIEWKEY = "fm_view_v1";
+  const [viewMode, setViewMode] = useState(() => ls.get(VIEWKEY) || "list");
   const [sortMode, setSortMode] = useState(() => ls.get(SORTKEY) || "az");
   const [sysTop, setSysTop] = useState(() => ls.get("fm_systop_v2") === "1");
   const [theme, setTheme] = useState(() => ls.get("fm_theme_v1") || "dark");
@@ -597,7 +600,7 @@ export default function App() {
     if (!props || props.type !== "directory") { setPropCount(null); setPropSize(null); return; }
     (async () => { try { const { files } = await Filesystem.readdir({ path: props.uri }); setPropCount({ d: files.filter((f) => f.type === "directory").length, f: files.filter((f) => f.type !== "directory").length }); } catch { setPropCount(null); } })();
     setPropSize(null);
-    (async () => { try { const r = await Apps.pathSize({ uri: props.uri }); setPropSize(r.bytes || 0); } catch { setPropSize(null); } })();
+    (async () => { try { const c = sizeCache.get(props.uri); if (c && Date.now() - c.t < 60000) { setPropSize(c.bytes); return; } const r = await Apps.pathSize({ uri: props.uri }); sizeCache.set(props.uri, { bytes: r.bytes || 0, t: Date.now() }); setPropSize(r.bytes || 0); } catch { setPropSize(null); } })();
   }, [props]);
 
   const exitSel = () => { setSel(new Set()); setSelMode(false); setConfirmDel(null); setSelMenu(false); };
@@ -906,6 +909,7 @@ export default function App() {
   const doCreateNomedia = async () => { try { await Filesystem.writeFile({ path: targetUri(".nomedia"), data: "", encoding: Encoding.UTF8 }); refresh(); showToast("Создан .nomedia"); } catch (e) { showToast("Ошибка: " + e.message); } };
   const doCreateDotFile = async (nm) => { try { await Filesystem.writeFile({ path: targetUri(nm), data: "", encoding: Encoding.UTF8 }); refresh(); showToast("Создан " + nm); } catch (e) { showToast("Ошибка: " + e.message); } };
   const doRename = async (oldName, newName) => { setSheet(null); if (!newName || newName === oldName) return; const e = byName(oldName); if (!e) return; try { await Filesystem.rename({ from: e.uri, to: targetUri(newName) }); exitSel(); refresh(); } catch (er) { showToast("Ошибка: " + er.message); } };
+  const doArchive = async (base) => { setSheet(null); const nm = (base || "archive").trim().replace(/\.zip$/i, "") + ".zip"; const uris = [...sel].map((n) => (byName(n) || {}).uri).filter(Boolean); if (!uris.length) return; showToast("Архивирование…"); try { await Apps.zipCreate({ dir: curUri, name: nm, uris }); showToast("Готово: " + nm); exitSel(); refresh(); } catch (e) { showToast("Ошибка: " + (e?.message || "")); } };
   const delTree = async (e) => {
     try { const r = await Apps.deletePath({ uri: e.uri }); if (r && r.ok) return; } catch {}
     try { const r = await Apps.delete({ uri: e.uri }); if (r && r.deleted) return; } catch {}
@@ -1038,7 +1042,8 @@ export default function App() {
     return 0;
   };
   let visible = entries.filter((e) => showHidden || !isHidden(e));
-  if (query) visible = visible.filter((e) => e.name.toLowerCase().includes(query.toLowerCase()));
+  const dq = useDeferredValue((query || "").toLowerCase());
+  if (dq) visible = visible.filter((e) => e.name.toLowerCase().includes(dq));
   const isSysFolder = (e) => path === "" && e.type === "directory" && REAL_SYS.has(e.name.toLowerCase());
   const rank = (e) => (meta.pinTop.has(keyOf(e.name)) ? -1 : meta.pinBot.has(keyOf(e.name)) ? 1 : 0);
   visible = [...visible].sort((a, b) => {
@@ -1119,6 +1124,10 @@ export default function App() {
                 <div style={{ height: 1, background: LINE }} />
                 <div style={S.menuItem} onClick={() => { setHeadMenu(false); setSheet({ kind: "sort" }); }}>
                   <span style={{ color: ACC, display: "flex" }}><Svg d={I.sort} size={20} /></span>Сортировка
+                </div>
+                <div style={{ height: 1, background: LINE }} />
+                <div style={S.menuItem} onClick={() => { setHeadMenu(false); setSheet({ kind: "view" }); }}>
+                  <span style={{ color: ACC, display: "flex" }}><Svg d={I.img} size={20} /></span>Вид
                 </div>
                 <div style={{ height: 1, background: LINE }} />
                 <div style={S.menuItem} onClick={() => { setShowHidden((v) => !v); setHeadMenu(false); refresh(); }}>
@@ -1227,9 +1236,33 @@ export default function App() {
                 </div>
               );
             };
+            const renderCell = (e) => {
+              const isSel = sel.has(e.name), hid = isHidden(e);
+              const isDir = e.type === "directory";
+              const sf = isDir ? SYS_FOLDERS[e.name.toLowerCase()] : null;
+              const ic = isDir ? { d: (sf && sf.d) || I.folder, c: (sf && sf.c) || ACC, w: sf && sf.w } : fileIcon(e.name);
+              const thumb = !isDir && (isImg(e.name) || isPdf(e.name) || /\.apk$/i.test(e.name));
+              return (
+                <div key={e.name} onPointerDown={(ev) => rDown(ev, e)} onPointerMove={rMove} onPointerUp={(ev) => rUp(e, ev)} onPointerCancel={() => clearTimeout(lpTimer.current)}
+                  style={{ display: "flex", flexDirection: "column", gap: 5, padding: 6, borderRadius: 12, background: isSel ? "var(--accbg)" : "transparent", opacity: hid ? 0.5 : 1, contentVisibility: "auto", containIntrinsicSize: "0 132px" }}>
+                  <div style={{ position: "relative", width: "100%", aspectRatio: "1 / 1", borderRadius: 10, overflow: "hidden", background: "var(--chip)", display: "flex", alignItems: "center", justifyContent: "center", color: ic.c }}>
+                    {(isDir && iconDB[keyOf(e.name)]) ? <img src={iconDB[keyOf(e.name)]} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                      : thumb ? <ThumbIcon uri={e.uri} cached={thumbs[e.uri]} request={requestThumb} release={releaseThumb} fallback={<Svg d={ic.d} size={42} />} />
+                      : isDir && e.thumb ? <img src={cfs(e.thumb)} alt="" loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover", opacity: 0.9 }} />
+                      : <Svg d={ic.d} size={42} vw={ic.w} />}
+                  </div>
+                  <div style={{ fontSize: 11.5, color: TXT, lineHeight: 1.25, maxHeight: 29, overflow: "hidden", wordBreak: "break-word", textAlign: "center", fontWeight: isDir ? 600 : 400 }}>{e.name}</div>
+                </div>
+              );
+            };
             const firstFile = visible.findIndex((e) => e.type !== "directory");
             const startupPath = (tabs.find((t) => t.startup) || {}).startupPath;
             visLen.current = visible.length;
+            if (viewMode === "gallery") return (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6, padding: "8px 10px 20px" }}>
+                {visible.map((e) => renderCell(e))}
+              </div>
+            );
             return visible.map((e, i) => (
               <React.Fragment key={e.name}>
                 {renderRow(e)}
@@ -1351,16 +1384,17 @@ export default function App() {
                 <div style={S.menuItem} onClick={() => { setSelMenu(false); Apps.uninstall({ uri: one.uri }).catch((er) => showToast("Ошибка: " + (er?.message || ""))); }}><span style={{ color: RED, display: "flex" }}><Svg d={I.trash} size={20} /></span>Деинсталлировать</div>
               </>
             )}
+            <div style={{ height: 1, background: LINE }} />
+            <div style={S.menuItem} onClick={() => { setSelMenu(false); const b = sel.size === 1 ? splitExt([...sel][0], (byName([...sel][0]) || {}).type === "directory").base : "archive"; setSheet({ kind: "archive", val: b }); }}><span style={{ color: GOLD, display: "flex" }}><Svg d={I.dl} size={20} /></span>Архивировать (.zip)</div>
           </div>
         </>
       )}
-
-      {/* НИЖНИЕ ПОПАПЫ */}
       {sheet && (
         <div style={S.backdrop} onClick={() => setSheet(null)}>
           <div style={S.sheet} onClick={(e) => e.stopPropagation()}>
             {sheet.kind === "folder" && <SheetInput title="Новая папка" value={sheet.val} placeholder="Имя папки" onChange={(v) => setSheet({ ...sheet, val: v })} onCancel={() => setSheet(null)} onOk={() => doCreateFolder(sheet.val.trim())} okText="Создать" />}
             {sheet.kind === "txt" && <SheetInput title="Новый TXT-файл" value={sheet.val} placeholder="Имя файла" onChange={(v) => setSheet({ ...sheet, val: v })} onCancel={() => setSheet(null)} onOk={() => doCreateTxt(sheet.val.trim())} okText="Создать" />}
+            {sheet.kind === "archive" && <SheetInput title="Архивировать в .zip" value={sheet.val} placeholder="Имя архива" onChange={(v) => setSheet({ ...sheet, val: v })} onCancel={() => setSheet(null)} onOk={() => doArchive(sheet.val.trim())} okText="Создать" />}
             {sheet.kind === "rename" && (
               <>
                 <div style={S.sheetTitle}>Переименовать</div>
@@ -1371,6 +1405,16 @@ export default function App() {
                   <button style={S.sheetGhost} onClick={() => setSheet(null)}>Отмена</button>
                   <button style={S.sheetOk} onClick={() => { const nn = sheet.base.trim() + (sheet.ext.trim() ? "." + sheet.ext.trim() : ""); doRename(sheet.old, nn); }}>ОК</button>
                 </div>
+              </>
+            )}
+            {sheet.kind === "view" && (
+              <>
+                <div style={S.sheetTitle}>Вид</div>
+                {[["list", "Подробная сетка"], ["gallery", "Галерея"]].map(([k, lbl]) => (
+                  <div key={k} style={{ ...S.sortRow, ...(viewMode === k ? { color: ACC } : {}) }} onClick={() => { setViewMode(k); ls.set(VIEWKEY, k); setSheet(null); }}>
+                    {lbl}{viewMode === k && <span style={{ marginLeft: "auto" }}>✓</span>}
+                  </div>
+                ))}
               </>
             )}
             {sheet.kind === "sort" && (
@@ -1976,7 +2020,7 @@ const S = {
   list: { flex: 1, overflowY: "auto", overflowX: "hidden", display: "flex", flexDirection: "column" },
   slideWrap: { display: "flex", flexDirection: "column" },
   note: { color: SUB, textAlign: "center", padding: "60px 24px", lineHeight: 1.6 },
-  row: { display: "flex", alignItems: "center", gap: 14, padding: "10px 14px", touchAction: "pan-y", position: "relative" },
+  row: { display: "flex", alignItems: "center", gap: 14, padding: "10px 14px", touchAction: "pan-y", position: "relative", contentVisibility: "auto", containIntrinsicSize: "0 68px" },
   rowLine: { position: "absolute", left: 72, right: 0, bottom: 0, height: 1, background: "var(--hair)" },
   sep: { height: 1, background: "var(--hair)", margin: "4px 0" },
   iconWrap: { width: 44, height: 44, borderRadius: 13, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
