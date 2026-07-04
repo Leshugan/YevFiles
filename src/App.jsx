@@ -748,7 +748,7 @@ export default function App() {
     if (showApps) (om.apps || []).forEach((a) => items.push({ id: "app|" + a.packageName + "|" + a.activityName, label: a.label, icon: a.icon, color: TXT, onClick: () => pickApp(a) }));
     if (isImg(f.name)) items.push({ id: "viewer", label: "Открыть (просмотр)", d: I.img, size: 26, color: GOLD, onClick: () => { const defs = loadMap(DEFKEY); if (om.useDefault) defs[defaultOpenAs(f.name)] = "__viewer__"; else if (defs[defaultOpenAs(f.name)]) delete defs[defaultOpenAs(f.name)]; saveMap(DEFKEY, defs); setOpenMenu(null); openViewer(f); } });
     if (isPdf(f.name)) items.push({ id: "pdfview", label: "PDF Читалка", d: I.pdf, size: 26, color: "#E0574F", onClick: () => { const defs = loadMap(DEFKEY); if (om.useDefault) defs[defaultOpenAs(f.name)] = "__pdf__"; else if (defs[defaultOpenAs(f.name)]) delete defs[defaultOpenAs(f.name)]; saveMap(DEFKEY, defs); setOpenMenu(null); openPdf(f); } });
-    if (isAudio(f.name)) items.push({ id: "player", label: "Плеер", d: I.audio, size: 26, color: "#E36FB0", onClick: () => { const defs = loadMap(DEFKEY); if (om.useDefault) defs[defaultOpenAs(f.name)] = "__player__"; else if (defs[defaultOpenAs(f.name)]) delete defs[defaultOpenAs(f.name)]; saveMap(DEFKEY, defs); setOpenMenu(null); openAudio(f); } });
+    if (isAudio(f.name)) items.push({ id: "player", label: "Воспроизвести", d: I.audio, size: 26, color: "#E36FB0", onClick: () => { const defs = loadMap(DEFKEY); if (om.useDefault) defs[defaultOpenAs(f.name)] = "__player__"; else if (defs[defaultOpenAs(f.name)]) delete defs[defaultOpenAs(f.name)]; saveMap(DEFKEY, defs); setOpenMenu(null); openAudio(f); } });
     if (isApkF) {
       items.push({ id: "apk_archive", label: "Открыть как архив", d: I.folder, size: 26, color: GOLD, onClick: () => openArchive(f) });
     }
@@ -1188,7 +1188,7 @@ export default function App() {
             <button style={S.accessBtn} onClick={() => Apps.requestAllFiles().catch(() => {})}>Дать доступ</button>
           </div>
         )}
-        <div key={active + "|" + path} style={{ ...S.slideWrap, marginTop: 0, willChange: "transform", pointerEvents: slide ? "none" : "auto", animation: slide ? `fm-in-${slide > 0 ? "r" : "l"} .28s cubic-bezier(.22,.61,.36,1)` : "none" }}>
+        <div key={active + "|" + path} style={{ ...S.slideWrap, marginTop: 0, pointerEvents: slide ? "none" : "auto", animation: slide ? `fm-in-${slide > 0 ? "r" : "l"} .28s cubic-bezier(.22,.61,.36,1)` : "none" }}>
           {loading && null}
           {error && <div style={{ ...S.note, color: RED }}>{error}<br /><span style={{ fontSize: 12 }}>Разрешите «Доступ ко всем файлам» в настройках приложения.</span></div>}
           {!loading && !error && visible.length === 0 && <div style={S.note}>Пусто</div>}
@@ -1408,7 +1408,7 @@ export default function App() {
             <button onClick={playerPrev} aria-label="Назад" style={{ background: "none", border: "none", color: TXT, display: "flex", padding: 4 }}><Svg d={I.prev} size={26} /></button>
             <button onClick={playerToggle} aria-label="Плей/Пауза" style={{ background: ACC, border: "none", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", width: 46, height: 46, borderRadius: 24 }}><Svg d={player.playing ? I.pause : I.play} size={24} /></button>
             <button onClick={playerNext} aria-label="Вперёд" style={{ background: "none", border: "none", color: TXT, display: "flex", padding: 4 }}><Svg d={I.next} size={26} /></button>
-            <button onClick={playerClose} aria-label="Закрыть" style={{ position: "absolute", right: -2, bottom: 0, background: "none", border: "none", color: SUB, padding: 4 }}><Svg d={I.x} size={18} /></button>
+            <button onClick={playerClose} aria-label="Закрыть" style={{ position: "absolute", right: -4, bottom: -2, background: ROW2, border: "1px solid " + LINE, color: RED, display: "flex", alignItems: "center", justifyContent: "center", width: 30, height: 30, borderRadius: 15 }}><Svg d={I.x} size={18} /></button>
           </div>
         </div>
       )}
