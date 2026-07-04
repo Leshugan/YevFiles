@@ -47,6 +47,7 @@ const splitExt = (name, isDir) => {
   return { base: name.slice(0, i), ext: name.slice(i + 1) };
 };
 const fmtSize = (b) => { if (b == null) return "—"; const u = ["Б", "КБ", "МБ", "ГБ"]; let i = 0, n = b; while (n >= 1024 && i < 3) { n /= 1024; i++; } return (i ? n.toFixed(1) : n) + " " + u[i] + (i ? " (" + b.toLocaleString("ru") + " Б)" : ""); };
+const fmtTime = (ms) => { if (!ms || ms < 0) return "0:00"; const s = Math.floor(ms / 1000); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); };
 const fmtShort = (b) => { if (b == null) return ""; const u = ["Б", "КБ", "МБ", "ГБ"]; let i = 0, n = b; while (n >= 1024 && i < 3) { n /= 1024; i++; } return (i ? n.toFixed(1) : n) + " " + u[i]; };
 const fmtSizeShort = (b) => { if (b == null) return ""; const u = ["Б", "КБ", "МБ", "ГБ"]; let i = 0, n = b; while (n >= 1024 && i < 3) { n /= 1024; i++; } return (i ? n.toFixed(1) : n) + " " + u[i]; };
 const plural = (n, a, b, c) => { const m10 = n % 10, m100 = n % 100; if (m10 === 1 && m100 !== 11) return a; if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return b; return c; };
@@ -134,6 +135,10 @@ const I = {
   img: <><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><path d="M21 15l-5-5L5 21" /></>,
   video: <><rect x="2" y="5" width="14" height="14" rx="2" /><path d="M16 10l6-3v10l-6-3z" /></>,
   audio: <><path d="M9 18V5l10-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="16" cy="16" r="3" /></>,
+  play: <><path d="M8 5v14l11-7z" fill="currentColor" stroke="none" /></>,
+  pause: <><rect x="6" y="5" width="4" height="14" rx="1" fill="currentColor" stroke="none" /><rect x="14" y="5" width="4" height="14" rx="1" fill="currentColor" stroke="none" /></>,
+  prev: <><path d="M18 5v14l-9-7z" fill="currentColor" stroke="none" /><rect x="5" y="5" width="2.4" height="14" rx="1" fill="currentColor" stroke="none" /></>,
+  next: <><path d="M6 5v14l9-7z" fill="currentColor" stroke="none" /><rect x="16.6" y="5" width="2.4" height="14" rx="1" fill="currentColor" stroke="none" /></>,
   archive: <><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M12 3v18M9 7h6M9 11h6" /></>,
   code: <><path d="M8 9l-4 3 4 3" /><path d="M16 9l4 3-4 3" /></>,
   star: <path d="M12 3l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 18.8 6.2 21.8l1.1-6.5L2.6 10.7l6.5-.9z" />,
@@ -315,6 +320,7 @@ export default function App() {
   const resolvePassword = (val) => { setPwPrompt((p) => { if (p) p.resolve(val); return null; }); };
   const isImg = (n) => /\.(png|jpg|jpeg|webp|gif|bmp)$/i.test(n);
   const isPdf = (n) => /\.pdf$/i.test(n);
+  const isAudio = (n) => EXT.audio.includes((n.split(".").pop() || "").toLowerCase());
   const isFont = (n) => /\.(ttf|otf|woff2?|woff)$/i.test(n);
   const isSplitApk = (n) => /\.(apks|xapk|apkm|apkx)$/i.test(n);
   const isGzTar = (n) => /\.(tgz|tar|gz)$/i.test(n);
@@ -372,6 +378,33 @@ export default function App() {
   };
   const pdfTouchStart = (e) => { if (e.touches.length === 2) { pdfPinch.current.d0 = pdfDist(e.touches); pdfPinch.current.z0 = pdfZoom; } };
   const pdfTouchMove = (e) => { if (e.touches.length === 2 && pdfPinch.current.d0 > 0) { e.preventDefault(); let z = pdfPinch.current.z0 * (pdfDist(e.touches) / pdfPinch.current.d0); z = Math.max(1, Math.min(4, z)); setPdfZoom(z); } };
+
+  const AUTONEXTKEY = "fm_audio_autonext_v1";
+  const [audioAuto, setAudioAuto] = useState(() => ls.get(AUTONEXTKEY) === "1");
+  const [player, setPlayer] = useState(null);   // { idx, count, name, playing, pos, dur }
+  const [playerMenu, setPlayerMenu] = useState(false);
+  const playerList = useRef({ uris: [], names: [] });
+  const openAudio = (entry) => {
+    const list = entries.filter((e) => e.type !== "directory" && isAudio(e.name));
+    const idx = Math.max(0, list.findIndex((e) => e.name === entry.name));
+    playerList.current = { uris: list.map((e) => e.uri), names: list.map((e) => e.name) };
+    Apps.audioOpen({ uris: playerList.current.uris, names: playerList.current.names, index: idx, autoNext: audioAuto }).catch((e) => showToast("Плеер: " + (e?.message || "")));
+    setPlayer({ idx, count: list.length, name: entry.name, playing: true, pos: 0, dur: 0 }); setPlayerMenu(false);
+  };
+  const playerToggle = () => { Apps.audioToggle().catch(() => {}); setPlayer((p) => (p ? { ...p, playing: !p.playing } : p)); };
+  const playerNext = () => { Apps.audioNext().catch(() => {}); };
+  const playerPrev = () => { Apps.audioPrev().catch(() => {}); };
+  const playerSeek = (ms) => { Apps.audioSeek({ ms }).catch(() => {}); setPlayer((p) => (p ? { ...p, pos: ms } : p)); };
+  const playerClose = () => { Apps.audioClose().catch(() => {}); setPlayer(null); setPlayerMenu(false); };
+  const playerSetAs = (type) => { const uri = playerList.current.uris[player ? player.idx : 0]; if (!uri) return; Apps.audioSetAs({ uri, type }).then(() => showToast(type === "alarm" ? "Установлено на будильник" : "Установлено на звонок")).catch((e) => { if ((e?.message || "").includes("write_settings")) showToast("Разрешите изменение системных настроек и повторите"); else showToast("Не удалось: " + (e?.message || "")); }); setPlayerMenu(false); };
+  useEffect(() => {
+    if (!player) return;
+    let stop = false;
+    const tick = async () => { try { const s = await Apps.audioState(); if (stop) return; if (!s.alive) { setPlayer(null); return; } setPlayer((p) => (p ? { ...p, idx: s.idx, count: s.count, name: s.name, playing: s.playing, pos: s.pos, dur: s.dur } : p)); } catch {} };
+    const iv = setInterval(tick, 500); tick();
+    return () => { stop = true; clearInterval(iv); };
+  }, [!!player]);
+
   const openViewer = (entry) => {
     const items = entries.filter((e) => e.type !== "directory" && isImg(e.name));
     const idx = items.findIndex((e) => e.name === entry.name);
@@ -451,7 +484,7 @@ export default function App() {
       setEntries(files || []);
       if ((files || []).some((f) => f.name === ".icon" && f.type === "directory")) scanIconFolder(path);
     } catch (e) { setError(e.message || "Нет доступа к хранилищу"); setEntries([]); }
-    setLoading(false);
+    setLoading(false); switchingRef.current = false;
   }, [path]);
   const scanIconFolder = async (folderPath) => {
     try {
@@ -545,7 +578,7 @@ export default function App() {
     return () => { clearTimeout(t); h && h.remove(); };
   }, [silentRefresh]);
   useEffect(() => { if (curUri) Apps.watch({ uri: curUri }).catch(() => {}); }, [curUri]);
-  useEffect(() => { list(); exitSel(); setQuery(null); /* eslint-disable-next-line */ }, [active, path]);
+  useEffect(() => { switchingRef.current = true; list(); exitSel(); setQuery(null); /* eslint-disable-next-line */ }, [active, path]);
   useEffect(() => { let h; CapApp.addListener("resume", () => list()).then((l) => (h = l)); return () => h && h.remove(); }, [list]);
   useEffect(() => {
     const onVis = () => { if (document.visibilityState === "visible") { checkAccess(); list(); } };
@@ -608,11 +641,11 @@ export default function App() {
 
   const toggle = (name) => { const n = new Set(sel); n.has(name) ? n.delete(name) : n.add(name); setSel(n); setSelMode(n.size > 0); };
   const selAllWant = useRef(false);
+  const switchingRef = useRef(false);
   const selectAll = () => {
     if (arcView && arcView.entries) { setArcSel(new Set(arcView.entries.map((e) => e.name))); return; }
-    if (loading) { selAllWant.current = true; setSelMode(true); return; }
-    if (!visible.length) { showToast("Папка пуста"); return; }
-    setSelMode(true); setSel(new Set(visible.map((e) => e.name)));
+    if (!loading && !switchingRef.current) { if (!visible.length) { showToast("Папка пуста"); return; } selAllWant.current = false; setSelMode(true); setSel(new Set(visible.map((e) => e.name))); return; }
+    selAllWant.current = true; setSelMode(true);
   };
 
   const openExternal = async (e) => {
@@ -715,6 +748,7 @@ export default function App() {
     if (showApps) (om.apps || []).forEach((a) => items.push({ id: "app|" + a.packageName + "|" + a.activityName, label: a.label, icon: a.icon, color: TXT, onClick: () => pickApp(a) }));
     if (isImg(f.name)) items.push({ id: "viewer", label: "Открыть (просмотр)", d: I.img, size: 26, color: GOLD, onClick: () => { const defs = loadMap(DEFKEY); if (om.useDefault) defs[defaultOpenAs(f.name)] = "__viewer__"; else if (defs[defaultOpenAs(f.name)]) delete defs[defaultOpenAs(f.name)]; saveMap(DEFKEY, defs); setOpenMenu(null); openViewer(f); } });
     if (isPdf(f.name)) items.push({ id: "pdfview", label: "PDF Читалка", d: I.pdf, size: 26, color: "#E0574F", onClick: () => { const defs = loadMap(DEFKEY); if (om.useDefault) defs[defaultOpenAs(f.name)] = "__pdf__"; else if (defs[defaultOpenAs(f.name)]) delete defs[defaultOpenAs(f.name)]; saveMap(DEFKEY, defs); setOpenMenu(null); openPdf(f); } });
+    if (isAudio(f.name)) items.push({ id: "player", label: "Плеер", d: I.audio, size: 26, color: "#E36FB0", onClick: () => { const defs = loadMap(DEFKEY); if (om.useDefault) defs[defaultOpenAs(f.name)] = "__player__"; else if (defs[defaultOpenAs(f.name)]) delete defs[defaultOpenAs(f.name)]; saveMap(DEFKEY, defs); setOpenMenu(null); openAudio(f); } });
     if (isApkF) {
       items.push({ id: "apk_archive", label: "Открыть как архив", d: I.folder, size: 26, color: GOLD, onClick: () => openArchive(f) });
     }
@@ -828,6 +862,12 @@ export default function App() {
       if (d) { const [pkg, act] = d.split("|"); Apps.open({ uri: e.uri, mime, packageName: pkg, activityName: act }).catch(() => showOpenMenu(e, mime)); return; }
       showOpenMenu(e, mime); return;
     }
+    if (isAudio(e.name)) {
+      const mime = mimeOf(e.name), cat = defaultOpenAs(e.name), defs = loadMap(DEFKEY), d = defs[cat] || defs[mime];
+      if (d === "__player__") { openAudio(e); return; }
+      if (d) { const [pkg, act] = d.split("|"); Apps.open({ uri: e.uri, mime, packageName: pkg, activityName: act }).catch(() => showOpenMenu(e, mime)); return; }
+      showOpenMenu(e, mime); return;
+    }
     if (EXT.archive.includes(ext)) { showOpenMenu(e, mimeOf(e.name)); return; }
     openExternal(e);
   };
@@ -932,7 +972,7 @@ export default function App() {
     for (const { it, mode } of all) {
       if (it.type === "directory" && curUri && curUri === it.uri) continue;
       let destName = it.name, overwrite = false;
-      if (existing.has(it.name) && it.uri !== targetUri(it.name)) {
+      if (existing.has(it.name)) {
         let action = conflictAll.current || await askConflict(it.name);
         if (action === "cancel") { showToast("Отменено"); return; }
         if (action === "skip") continue;
@@ -1148,7 +1188,7 @@ export default function App() {
             <button style={S.accessBtn} onClick={() => Apps.requestAllFiles().catch(() => {})}>Дать доступ</button>
           </div>
         )}
-        <div key={active + "|" + path} style={{ ...S.slideWrap, marginTop: 0, willChange: "transform", animation: slide ? `fm-in-${slide > 0 ? "r" : "l"} .28s cubic-bezier(.22,.61,.36,1)` : "none" }}>
+        <div key={active + "|" + path} style={{ ...S.slideWrap, marginTop: 0, willChange: "transform", pointerEvents: slide ? "none" : "auto", animation: slide ? `fm-in-${slide > 0 ? "r" : "l"} .28s cubic-bezier(.22,.61,.36,1)` : "none" }}>
           {loading && null}
           {error && <div style={{ ...S.note, color: RED }}>{error}<br /><span style={{ fontSize: 12 }}>Разрешите «Доступ ко всем файлам» в настройках приложения.</span></div>}
           {!loading && !error && visible.length === 0 && <div style={S.note}>Пусто</div>}
@@ -1207,7 +1247,7 @@ export default function App() {
       )}
 
       {/* НИЖНЯЯ ПАНЕЛЬ (плавает над списком — контент уходит под неё) */}
-      <div ref={navRef} style={{ position: "absolute", left: 0, right: 0, bottom: 0, zIndex: 60, pointerEvents: "none", background: arcView ? BG : "transparent" }}>
+      <div ref={navRef} style={{ position: "absolute", left: 0, right: 0, bottom: 0, zIndex: 60, pointerEvents: "none", transform: "translateZ(0)", background: arcView ? BG : "transparent" }}>
        <div style={{ pointerEvents: "auto" }}>
       {selMode ? (
         <nav style={{ ...S.bottom, justifyContent: "flex-start" }}>
@@ -1348,20 +1388,42 @@ export default function App() {
 
       {/* СВОЙСТВА */}
       {/* ПРОСМОТРЩИК ИЗОБРАЖЕНИЙ */}
+      {player && (
+        <div style={{ position: "fixed", left: 8, right: 8, bottom: "calc(78px + env(safe-area-inset-bottom))", zIndex: 70, background: BAR, borderRadius: 16, padding: "9px 12px 6px", boxShadow: "0 8px 24px rgba(0,0,0,.5)", border: "1px solid " + LINE }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+            <span style={{ flex: 1, minWidth: 0, color: TXT, fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{player.name}</span>
+            <div style={{ position: "relative", flexShrink: 0 }}>
+              <button onClick={() => setPlayerMenu((v) => !v)} aria-label="Меню" style={{ background: "none", border: "none", color: SUB, display: "flex", padding: 2 }}><Svg d={I.dots} size={20} /></button>
+              {playerMenu && (
+                <div style={{ position: "absolute", right: 0, bottom: "calc(100% + 6px)", background: BAR, border: "1px solid " + LINE, borderRadius: 12, overflow: "hidden", minWidth: 210, boxShadow: "0 8px 24px rgba(0,0,0,.5)", zIndex: 5 }}>
+                  <div style={S.menuItem} onClick={() => playerSetAs("alarm")}><span style={{ color: ACC, display: "flex" }}><Svg d={I.alarm} size={20} /></span>Установить будильник</div>
+                  <div style={S.menuItem} onClick={() => playerSetAs("ringtone")}><span style={{ color: ACC, display: "flex" }}><Svg d={I.bell} size={20} /></span>Установить на звонок</div>
+                </div>
+              )}
+            </div>
+          </div>
+          <input type="range" min={0} max={player.dur || 0} value={Math.min(player.pos || 0, player.dur || 0)} onChange={(e) => playerSeek(Number(e.target.value))} style={{ width: "100%", accentColor: ACC, height: 4, margin: 0 }} />
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: SUB, marginTop: 1 }}><span>{fmtTime(player.pos)}</span><span>{fmtTime(player.dur)}</span></div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 28, marginTop: 2, position: "relative" }}>
+            <button onClick={playerPrev} aria-label="Назад" style={{ background: "none", border: "none", color: TXT, display: "flex", padding: 4 }}><Svg d={I.prev} size={26} /></button>
+            <button onClick={playerToggle} aria-label="Плей/Пауза" style={{ background: ACC, border: "none", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", width: 46, height: 46, borderRadius: 24 }}><Svg d={player.playing ? I.pause : I.play} size={24} /></button>
+            <button onClick={playerNext} aria-label="Вперёд" style={{ background: "none", border: "none", color: TXT, display: "flex", padding: 4 }}><Svg d={I.next} size={26} /></button>
+            <button onClick={playerClose} aria-label="Закрыть" style={{ position: "absolute", right: -2, bottom: 0, background: "none", border: "none", color: SUB, padding: 4 }}><Svg d={I.x} size={18} /></button>
+          </div>
+        </div>
+      )}
       {pdf && (
         <div style={{ position: "fixed", inset: 0, zIndex: 1400, background: "#111", display: "flex", flexDirection: "column" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "calc(8px + env(safe-area-inset-top)) 12px 8px", background: "rgba(0,0,0,.65)" }}>
-            <span style={{ flex: 1, minWidth: 0, color: "#fff", fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{pdf.name}</span>
-            <span style={{ color: "rgba(255,255,255,.7)", fontSize: 13, flexShrink: 0 }}>{pdfN ? pdfArr.length + "/" + pdfN : "…"}</span>
-          </div>
-          <div onTouchStart={pdfTouchStart} onTouchMove={pdfTouchMove} style={{ flex: 1, overflow: "auto", background: "#2b2b2b", WebkitOverflowScrolling: "touch", touchAction: "pan-x pan-y" }}>
+          <div onTouchStart={pdfTouchStart} onTouchMove={pdfTouchMove} style={{ flex: 1, overflow: "auto", background: "#2b2b2b", WebkitOverflowScrolling: "touch", touchAction: "pan-x pan-y", paddingTop: "env(safe-area-inset-top)" }}>
             <div style={{ width: (pdfZoom * 100) + "%", margin: "0 auto", padding: "10px 0 24px", display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
               {pdfArr.map((src, i) => <img key={i} src={src} alt={"p" + i} style={{ width: "100%", display: "block", background: "#fff" }} />)}
               {(pdfN === 0 || pdfArr.length < pdfN) && <div style={{ color: "#bbb", fontSize: 13, padding: 20 }}>{pdfN === 0 ? "Открываю PDF…" : "Загрузка " + pdfArr.length + "/" + pdfN}</div>}
             </div>
           </div>
-          <div style={{ display: "flex", justifyContent: "center", padding: "10px 12px calc(10px + env(safe-area-inset-bottom))", background: "rgba(0,0,0,.65)" }}>
-            <button onClick={closePdf} style={{ display: "flex", alignItems: "center", gap: 8, padding: "11px 26px", borderRadius: 24, border: "1px solid rgba(255,255,255,.15)", background: "rgba(255,255,255,.08)", color: "#fff", fontSize: 15 }}><Svg d={I.x} size={20} />Закрыть</button>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 8px calc(8px + env(safe-area-inset-bottom)) 14px", background: "rgba(0,0,0,.65)" }}>
+            <span style={{ flex: 1, minWidth: 0, color: "#fff", fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{pdf.name}</span>
+            <span style={{ color: "rgba(255,255,255,.7)", fontSize: 13, flexShrink: 0 }}>{pdfN ? pdfArr.length + "/" + pdfN : "…"}</span>
+            <button onClick={closePdf} aria-label="Закрыть" style={{ background: "none", border: "none", color: "#fff", display: "flex", padding: 6, flexShrink: 0 }}><Svg d={I.x} size={24} /></button>
           </div>
         </div>
       )}
@@ -1702,13 +1764,13 @@ export default function App() {
         <div style={S.settingsScreen}>
           <div style={S.crumb}>
             <span onClick={() => { if (settingsPage) setSettingsPage(null); else setSettings(false); }} style={{ display: "inline-flex", alignItems: "center", gap: 6, color: ACC }}>
-              <Svg d={I.back} size={18} /> {settingsPage === "theme" ? "Тема" : settingsPage === "fonts" ? "Шрифты" : settingsPage === "sort" ? "Сортировка" : settingsPage === "icons" ? "Иконки папок" : "Настройки"}
+              <Svg d={I.back} size={18} /> {settingsPage === "theme" ? "Тема" : settingsPage === "fonts" ? "Шрифты" : settingsPage === "sort" ? "Сортировка" : settingsPage === "icons" ? "Иконки папок" : settingsPage === "player" ? "Плеер" : "Настройки"}
             </span>
           </div>
           <div style={{ flex: 1, overflowY: "auto", padding: "8px 14px calc(20px + env(safe-area-inset-bottom))" }}>
             {settingsPage === null && (
               <>
-                {[["theme", I.sun, "Тема"], ["fonts", I.rename, "Шрифты"], ["sort", I.sort, "Сортировка"], ["icons", I.folder, "Иконки папок"]].map(([pg, ic, lbl]) => (
+                {[["theme", I.sun, "Тема"], ["fonts", I.rename, "Шрифты"], ["sort", I.sort, "Сортировка"], ["icons", I.folder, "Иконки папок"], ["player", I.audio, "Плеер"]].map(([pg, ic, lbl]) => (
                   <div key={pg} style={S.menuItem} onClick={() => setSettingsPage(pg)}>
                     <span style={{ color: ACC, display: "flex" }}><Svg d={ic} size={20} /></span>
                     <span style={{ flex: 1 }}>{lbl}</span>
@@ -1757,6 +1819,16 @@ export default function App() {
                 Системные папки всегда сверху
                 <span style={{ marginLeft: "auto", ...S.tgl, ...(sysTop ? S.tglOn : {}) }}><span style={{ ...S.knob, ...(sysTop ? S.knobOn : {}) }} /></span>
               </div>
+            )}
+            {settingsPage === "player" && (
+              <>
+                <div style={S.menuItem} onClick={() => { const v = !audioAuto; setAudioAuto(v); ls.set(AUTONEXTKEY, v ? "1" : "0"); Apps.audioConfig({ autoNext: v }).catch(() => {}); }}>
+                  <span style={{ color: audioAuto ? ACC : SUB, display: "flex" }}><Svg d={I.next} size={20} /></span>
+                  Автопереход к следующему треку
+                  <span style={{ marginLeft: "auto", ...S.tgl, ...(audioAuto ? S.tglOn : {}) }}><span style={{ ...S.knob, ...(audioAuto ? S.knobOn : {}) }} /></span>
+                </div>
+                <div style={{ color: SUB, fontSize: 12, lineHeight: 1.5, marginTop: 10 }}>Зацикливания нет. При выключенной опции после трека воспроизведение останавливается.</div>
+              </>
             )}
             {settingsPage === "icons" && (
               <>
