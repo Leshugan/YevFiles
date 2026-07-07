@@ -1165,6 +1165,99 @@ public class AppsPlugin extends Plugin {
         } catch (Exception e) { call.reject(e.getMessage()); }
     }
 
+    // ===== Google Drive (OAuth PKCE, токен в приватном getFilesDir) =====
+    private static final String GD_CID = "589335091963-6n9ss077f7htshue4vd288eb2t2jduhb.apps.googleusercontent.com";
+    private static final String GD_REDIR = "com.googleusercontent.apps.589335091963-6n9ss077f7htshue4vd288eb2t2jduhb:/oauth";
+    private String gdToken, gdRefresh; private long gdExp;
+    private File gdFile() { return new File(getContext().getFilesDir(), "gdrive.json"); }
+    private void gdLoad() {
+        if (gdRefresh != null) return;
+        try { File f = gdFile(); if (f.exists()) { org.json.JSONObject o = new org.json.JSONObject(new String(readAll(new java.io.FileInputStream(f)), "UTF-8")); gdToken = o.optString("access", null); gdRefresh = o.optString("refresh", null); gdExp = o.optLong("exp", 0); } } catch (Exception e) {}
+    }
+    private void gdSave() { try { org.json.JSONObject o = new org.json.JSONObject(); o.put("access", gdToken); o.put("refresh", gdRefresh); o.put("exp", gdExp); java.io.FileOutputStream fo = new java.io.FileOutputStream(gdFile()); fo.write(o.toString().getBytes("UTF-8")); fo.close(); } catch (Exception e) {} }
+    private String httpPostForm(String url, String body) throws Exception {
+        java.net.HttpURLConnection c = (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
+        c.setRequestMethod("POST"); c.setDoOutput(true); c.setRequestProperty("Content-Type", "application/x-www-form-urlencoded"); c.setConnectTimeout(15000); c.setReadTimeout(20000);
+        c.getOutputStream().write(body.getBytes("UTF-8")); c.getOutputStream().close();
+        int code = c.getResponseCode();
+        String r = new String(readAll(code >= 400 ? c.getErrorStream() : c.getInputStream()), "UTF-8");
+        if (code >= 400) throw new Exception(r);
+        return r;
+    }
+    private void gdEnsure() throws Exception {
+        gdLoad();
+        if (gdToken != null && System.currentTimeMillis() < gdExp - 60000) return;
+        if (gdRefresh == null) throw new Exception("not_authed");
+        String body = "client_id=" + java.net.URLEncoder.encode(GD_CID, "UTF-8") + "&grant_type=refresh_token&refresh_token=" + java.net.URLEncoder.encode(gdRefresh, "UTF-8");
+        org.json.JSONObject o = new org.json.JSONObject(httpPostForm("https://oauth2.googleapis.com/token", body));
+        gdToken = o.getString("access_token"); gdExp = System.currentTimeMillis() + o.optLong("expires_in", 3600) * 1000; gdSave();
+    }
+    private String httpGetAuth(String url) throws Exception {
+        gdEnsure();
+        java.net.HttpURLConnection c = (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
+        c.setRequestProperty("Authorization", "Bearer " + gdToken); c.setConnectTimeout(15000); c.setReadTimeout(20000);
+        int code = c.getResponseCode();
+        String r = new String(readAll(code >= 400 ? c.getErrorStream() : c.getInputStream()), "UTF-8");
+        if (code >= 400) throw new Exception(r);
+        return r;
+    }
+    @PluginMethod
+    public void openExternalUrl(PluginCall call) {
+        try { Intent i = new Intent(Intent.ACTION_VIEW, Uri.parse(call.getString("url"))); i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); getContext().startActivity(i); call.resolve(); } catch (Exception e) { call.reject(e.getMessage()); }
+    }
+    @PluginMethod
+    public void oauthConsume(PluginCall call) { JSObject o = new JSObject(); o.put("code", MainActivity.oauthCode); MainActivity.oauthCode = null; call.resolve(o); }
+    @PluginMethod
+    public void gdriveToken(PluginCall call) {
+        try {
+            String code = call.getString("code"), verifier = call.getString("verifier");
+            String body = "client_id=" + java.net.URLEncoder.encode(GD_CID, "UTF-8") + "&code=" + java.net.URLEncoder.encode(code, "UTF-8") + "&code_verifier=" + java.net.URLEncoder.encode(verifier, "UTF-8") + "&grant_type=authorization_code&redirect_uri=" + java.net.URLEncoder.encode(GD_REDIR, "UTF-8");
+            org.json.JSONObject o = new org.json.JSONObject(httpPostForm("https://oauth2.googleapis.com/token", body));
+            gdToken = o.getString("access_token"); gdRefresh = o.optString("refresh_token", gdRefresh); gdExp = System.currentTimeMillis() + o.optLong("expires_in", 3600) * 1000; gdSave();
+            JSObject r = new JSObject(); r.put("ok", true); call.resolve(r);
+        } catch (Exception e) { call.reject(e.getMessage()); }
+    }
+    @PluginMethod
+    public void gdriveLoggedIn(PluginCall call) { gdLoad(); JSObject o = new JSObject(); o.put("yes", gdRefresh != null); call.resolve(o); }
+    @PluginMethod
+    public void gdriveLogout(PluginCall call) { gdToken = null; gdRefresh = null; gdExp = 0; try { gdFile().delete(); } catch (Exception e) {} call.resolve(); }
+    @PluginMethod
+    public void gdriveList(PluginCall call) {
+        try {
+            String folder = call.getString("folder", "root");
+            String q = java.net.URLEncoder.encode("'" + folder + "' in parents and trashed=false", "UTF-8");
+            String url = "https://www.googleapis.com/drive/v3/files?q=" + q + "&fields=" + java.net.URLEncoder.encode("files(id,name,mimeType,size)", "UTF-8") + "&pageSize=1000&orderBy=folder,name";
+            org.json.JSONObject o = new org.json.JSONObject(httpGetAuth(url));
+            org.json.JSONArray files = o.optJSONArray("files");
+            com.getcapacitor.JSArray arr = new com.getcapacitor.JSArray();
+            if (files != null) for (int i = 0; i < files.length(); i++) {
+                org.json.JSONObject f = files.getJSONObject(i);
+                boolean dir = "application/vnd.google-apps.folder".equals(f.optString("mimeType"));
+                JSObject e = new JSObject();
+                e.put("id", f.getString("id")); e.put("name", f.optString("name")); e.put("type", dir ? "directory" : "file"); e.put("size", f.optLong("size", 0)); e.put("mime", f.optString("mimeType"));
+                arr.put(e);
+            }
+            JSObject r = new JSObject(); r.put("files", arr); call.resolve(r);
+        } catch (Exception e) { call.reject(e.getMessage()); }
+    }
+    @PluginMethod
+    public void gdriveGet(PluginCall call) {
+        try {
+            gdEnsure();
+            String id = call.getString("id"), name = call.getString("name", "file"), mime = call.getString("mime", "");
+            boolean gdoc = mime.startsWith("application/vnd.google-apps");
+            String url = gdoc ? "https://www.googleapis.com/drive/v3/files/" + id + "/export?mimeType=application%2Fpdf" : "https://www.googleapis.com/drive/v3/files/" + id + "?alt=media";
+            java.net.HttpURLConnection c = (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
+            c.setRequestProperty("Authorization", "Bearer " + gdToken); c.setConnectTimeout(15000); c.setReadTimeout(60000);
+            int code = c.getResponseCode(); if (code >= 400) { call.reject("HTTP " + code); return; }
+            if (gdoc && !name.toLowerCase().endsWith(".pdf")) name = name + ".pdf";
+            File dl = new File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), name);
+            java.io.InputStream in = c.getInputStream(); java.io.FileOutputStream fo = new java.io.FileOutputStream(dl);
+            byte[] buf = new byte[8192]; int n; while ((n = in.read(buf)) > 0) fo.write(buf, 0, n); fo.close(); in.close();
+            JSObject r = new JSObject(); r.put("path", dl.getAbsolutePath()); call.resolve(r);
+        } catch (Exception e) { call.reject(e.getMessage()); }
+    }
+
     @PluginMethod
     public void pathSize(final PluginCall call) {
         String uriStr = call.getString("uri");
