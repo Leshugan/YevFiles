@@ -1087,6 +1087,84 @@ public class AppsPlugin extends Plugin {
         }).start();
     }
 
+    // ===== WebDAV (аккаунты в приватном getFilesDir — data/data, без рута недоступно) =====
+    private File wdFile() { return new File(getContext().getFilesDir(), "webdav.json"); }
+    private static String wdAuth(String u, String p) { return "Basic " + android.util.Base64.encodeToString((u + ":" + p).getBytes(), android.util.Base64.NO_WRAP); }
+    private static void wdMethod(java.net.HttpURLConnection c, String m) {
+        try { c.setRequestMethod(m); return; } catch (Exception e) {}
+        try {
+            Object t = c;
+            try { java.lang.reflect.Field d = c.getClass().getDeclaredField("delegate"); d.setAccessible(true); Object dv = d.get(c); if (dv instanceof java.net.HttpURLConnection) t = dv; } catch (Exception ig) {}
+            Class<?> k = t.getClass();
+            while (k != null) { try { java.lang.reflect.Field mf = k.getDeclaredField("method"); mf.setAccessible(true); mf.set(t, m); return; } catch (Exception ig) { k = k.getSuperclass(); } }
+        } catch (Exception e) {}
+    }
+    @PluginMethod
+    public void webdavGetAccounts(PluginCall call) {
+        JSObject o = new JSObject();
+        try { File f = wdFile(); o.put("json", f.exists() ? new String(readAll(new java.io.FileInputStream(f)), "UTF-8") : "[]"); } catch (Exception e) { o.put("json", "[]"); }
+        call.resolve(o);
+    }
+    @PluginMethod
+    public void webdavSetAccounts(PluginCall call) {
+        try { java.io.FileOutputStream fo = new java.io.FileOutputStream(wdFile()); fo.write(call.getString("json", "[]").getBytes("UTF-8")); fo.close(); call.resolve(); } catch (Exception e) { call.reject(e.getMessage()); }
+    }
+    @PluginMethod
+    public void webdavList(PluginCall call) {
+        try {
+            String url = call.getString("url"), user = call.getString("user", ""), pass = call.getString("pass", "");
+            java.net.HttpURLConnection c = (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
+            wdMethod(c, "PROPFIND");
+            c.setRequestProperty("Depth", "1");
+            c.setRequestProperty("Authorization", wdAuth(user, pass));
+            c.setRequestProperty("Content-Type", "text/xml; charset=utf-8");
+            c.setDoOutput(true); c.setConnectTimeout(15000); c.setReadTimeout(20000);
+            byte[] body = "<?xml version=\"1.0\"?><d:propfind xmlns:d=\"DAV:\"><d:prop><d:resourcetype/><d:getcontentlength/></d:prop></d:propfind>".getBytes("UTF-8");
+            c.getOutputStream().write(body); c.getOutputStream().close();
+            int code = c.getResponseCode();
+            if (code >= 400) { call.reject("HTTP " + code); return; }
+            String xml = new String(readAll(c.getInputStream()), "UTF-8");
+            com.getcapacitor.JSArray arr = new com.getcapacitor.JSArray();
+            java.net.URL base = new java.net.URL(url);
+            java.util.regex.Matcher rm = java.util.regex.Pattern.compile("(?is)<[a-z0-9]*:?response[ >](.*?)</[a-z0-9]*:?response>").matcher(xml);
+            boolean first = true;
+            while (rm.find()) {
+                String blk = rm.group(1);
+                java.util.regex.Matcher hm = java.util.regex.Pattern.compile("(?is)<[a-z0-9]*:?href[^>]*>(.*?)</[a-z0-9]*:?href>").matcher(blk);
+                if (!hm.find()) continue;
+                String href = hm.group(1).trim();
+                boolean coll = java.util.regex.Pattern.compile("(?is)<[a-z0-9]*:?collection").matcher(blk).find();
+                long size = 0;
+                java.util.regex.Matcher sm = java.util.regex.Pattern.compile("(?is)<[a-z0-9]*:?getcontentlength[^>]*>(\\d+)").matcher(blk);
+                if (sm.find()) size = Long.parseLong(sm.group(1));
+                String full = href.startsWith("http") ? href : new java.net.URL(base, href).toString();
+                String dec = java.net.URLDecoder.decode(href, "UTF-8").replaceAll("/+$", "");
+                String name = dec.substring(dec.lastIndexOf('/') + 1);
+                if (first) { first = false; continue; }
+                if (name.isEmpty()) continue;
+                JSObject o = new JSObject(); o.put("name", name); o.put("url", full); o.put("type", coll ? "directory" : "file"); o.put("size", size);
+                arr.put(o);
+            }
+            JSObject r = new JSObject(); r.put("files", arr); call.resolve(r);
+        } catch (Exception e) { call.reject(e.getMessage()); }
+    }
+    @PluginMethod
+    public void webdavGet(PluginCall call) {
+        try {
+            String url = call.getString("url"), user = call.getString("user", ""), pass = call.getString("pass", ""), name = call.getString("name", "file");
+            java.net.HttpURLConnection c = (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
+            c.setRequestProperty("Authorization", wdAuth(user, pass));
+            c.setConnectTimeout(15000); c.setReadTimeout(30000);
+            int code = c.getResponseCode();
+            if (code >= 400) { call.reject("HTTP " + code); return; }
+            File dl = new File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), name);
+            java.io.InputStream in = c.getInputStream(); java.io.FileOutputStream fo = new java.io.FileOutputStream(dl);
+            byte[] buf = new byte[8192]; int n; while ((n = in.read(buf)) > 0) fo.write(buf, 0, n);
+            fo.close(); in.close();
+            JSObject r = new JSObject(); r.put("path", dl.getAbsolutePath()); call.resolve(r);
+        } catch (Exception e) { call.reject(e.getMessage()); }
+    }
+
     @PluginMethod
     public void pathSize(final PluginCall call) {
         String uriStr = call.getString("uri");
