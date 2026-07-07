@@ -320,6 +320,27 @@ export default function App() {
   const openWebdav = async (acc) => { setDrawer(false); showToast("Подключение…"); try { const r = await Apps.webdavList({ url: acc.url, user: acc.user, pass: acc.pass }); setWd({ acc, stack: [{ url: acc.url, name: acc.name }], entries: r.files || [] }); } catch (e) { showToast("WebDAV: " + (e?.message || "")); } };
   const wdEnter = async (e) => { if (e.type === "directory") { try { const r = await Apps.webdavList({ url: e.url, user: wd.acc.user, pass: wd.acc.pass }); setWd((v) => ({ ...v, stack: [...v.stack, { url: e.url, name: e.name }], entries: r.files || [] })); } catch (er) { showToast("Ошибка: " + (er?.message || "")); } } else { showToast("Загрузка…"); try { await Apps.webdavGet({ url: e.url, user: wd.acc.user, pass: wd.acc.pass, name: e.name }); showToast("Скачано → Download/" + e.name); } catch (er) { showToast("Ошибка: " + (er?.message || "")); } } };
   const wdBack = async () => { if (!wd) return; if (wd.stack.length <= 1) { setWd(null); return; } const st = wd.stack.slice(0, -1); const top = st[st.length - 1]; try { const r = await Apps.webdavList({ url: top.url, user: wd.acc.user, pass: wd.acc.pass }); setWd({ ...wd, stack: st, entries: r.files || [] }); } catch {} };
+  const [gdIn, setGdIn] = useState(false);
+  const [gd, setGd] = useState(null);
+  const b64url = (buf) => btoa(String.fromCharCode.apply(null, new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  const googleLogin = async () => {
+    setDrawer(false);
+    const verifier = b64url(crypto.getRandomValues(new Uint8Array(32)));
+    const chal = b64url(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier)));
+    localStorage.setItem("gd_verifier", verifier);
+    const url = "https://accounts.google.com/o/oauth2/v2/auth?client_id=" + encodeURIComponent("589335091963-6n9ss077f7htshue4vd288eb2t2jduhb.apps.googleusercontent.com") + "&redirect_uri=" + encodeURIComponent("com.googleusercontent.apps.589335091963-6n9ss077f7htshue4vd288eb2t2jduhb:/oauth") + "&response_type=code&scope=" + encodeURIComponent("https://www.googleapis.com/auth/drive.readonly") + "&code_challenge=" + chal + "&code_challenge_method=S256&access_type=offline&prompt=consent";
+    try { await Apps.openExternalUrl({ url }); } catch { showToast("Не открыть браузер"); }
+  };
+  useEffect(() => {
+    const consume = async () => { try { const r = await Apps.oauthConsume(); if (r.code) { const v = localStorage.getItem("gd_verifier") || ""; await Apps.gdriveToken({ code: r.code, verifier: v }); localStorage.removeItem("gd_verifier"); setGdIn(true); showToast("Google Drive подключён"); } } catch (e) { if (e?.message) showToast("Google: " + e.message); } };
+    Apps.gdriveLoggedIn().then((r) => setGdIn(!!r.yes)).catch(() => {});
+    consume();
+    const h = CapApp.addListener("resume", consume);
+    return () => { h.then((x) => x.remove()).catch(() => {}); };
+  }, []);
+  const openGDrive = async () => { setDrawer(false); showToast("Google Drive…"); try { const r = await Apps.gdriveList({ folder: "root" }); setGd({ stack: [{ id: "root", name: "Google Drive" }], entries: r.files || [] }); } catch (e) { showToast("Drive: " + (e?.message || "")); } };
+  const gdEnter = async (e) => { if (e.type === "directory") { try { const r = await Apps.gdriveList({ folder: e.id }); setGd((v) => ({ ...v, stack: [...v.stack, { id: e.id, name: e.name }], entries: r.files || [] })); } catch (er) { showToast("Ошибка: " + (er?.message || "")); } } else { showToast("Загрузка…"); try { await Apps.gdriveGet({ id: e.id, name: e.name, mime: e.mime || "" }); showToast("Скачано → Download/" + e.name); } catch (er) { showToast("Ошибка: " + (er?.message || "")); } } };
+  const gdBack = async () => { if (!gd) return; if (gd.stack.length <= 1) { setGd(null); return; } const st = gd.stack.slice(0, -1); const top = st[st.length - 1]; try { const r = await Apps.gdriveList({ folder: top.id }); setGd({ ...gd, stack: st, entries: r.files || [] }); } catch {} };
   const [settings, setSettings] = useState(false);
   const [settingsPage, setSettingsPage] = useState(null); // null=список, "theme"/"fonts"/"sort"/"icons"
   const [iconDB, setIconDB] = useState(() => loadMap(ICONKEY));
@@ -644,6 +665,7 @@ export default function App() {
     if (viewerDel) { setViewerDel(false); return; }
     if (viewer) { setViewer(null); return; }
     if (sheet) { setSheet(null); return; }
+    if (gd) { gdBack(); return; }
     if (wd) { wdBack(); return; }
     if (drawer) { setDrawer(false); return; }
     if (selMenu) { setSelMenu(false); return; }
@@ -1475,6 +1497,14 @@ export default function App() {
           <div onClick={() => setDrawer(false)} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,.5)" }} />
           <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: "82%", maxWidth: 330, background: BAR, borderRight: "1px solid " + LINE, boxShadow: "6px 0 26px rgba(0,0,0,.5)", display: "flex", flexDirection: "column", animation: "drawerIn .24s cubic-bezier(.2,.8,.3,1)" }}>
             <div style={{ overflow: "auto", flex: 1, paddingTop: "calc(10px + env(safe-area-inset-top))" }}>
+              <div onClick={() => (gdIn ? openGDrive() : googleLogin())} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", borderBottom: "1px solid " + LINE }}>
+                <span style={{ width: 40, height: 40, borderRadius: 20, background: "#EA433522", color: "#EA4335", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Svg d={I.dl} size={22} /></span>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ color: TXT, fontSize: 16, fontWeight: 600 }}>Google Drive</div>
+                  <div style={{ color: SUB, fontSize: 12 }}>{gdIn ? "Подключён" : "Войти"}</div>
+                </div>
+                {gdIn && <button onClick={(ev) => { ev.stopPropagation(); Apps.gdriveLogout().catch(() => {}); setGdIn(false); }} aria-label="Выйти" style={{ background: "none", border: "none", color: RED, display: "flex", padding: 6, flexShrink: 0 }}><Svg d={I.x} size={18} /></button>}
+              </div>
               {webdavs.map((a, i) => (
                 <div key={"wd" + i} onClick={() => openWebdav(a)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", borderBottom: "1px solid " + LINE }}>
                   <span style={{ width: 40, height: 40, borderRadius: 20, background: "#5AA9E622", color: "#5AA9E6", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Svg d={I.dl} size={22} /></span>
@@ -1485,6 +1515,8 @@ export default function App() {
                   <button onClick={(ev) => { ev.stopPropagation(); delWebdav(i); }} aria-label="Удалить" style={{ background: "none", border: "none", color: RED, display: "flex", padding: 6, flexShrink: 0 }}><Svg d={I.x} size={18} /></button>
                 </div>
               ))}
+            </div>
+            <div style={{ borderTop: "1px solid " + LINE }}>
               {[{ n: "Data", sub: "data", d: I.android, c: "#8FB84A", p: "Android/data" }, { n: "OBB", sub: "obb", d: I.android, c: "#E3B14F", p: "Android/obb" }, { n: "Storage", sub: "/storage/emulated/0", d: I.folder, c: "#4FC3D9", p: "" }].map((s) => (
                 <div key={s.n} onClick={() => { setDrawer(false); setTabPath(s.p); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", borderBottom: "1px solid " + LINE }}>
                   <span style={{ width: 40, height: 40, borderRadius: 20, background: s.c + "22", color: s.c, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Svg d={s.d} size={22} /></span>
@@ -1515,6 +1547,26 @@ export default function App() {
               <button onClick={saveWebdav} style={{ flex: 1, padding: 11, borderRadius: 10, border: "none", background: ACC, color: "#fff", fontSize: 15, fontWeight: 600 }}>Сохранить</button>
             </div>
           </div>
+        </div>
+      )}
+      {gd && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 1450, background: BG, display: "flex", flexDirection: "column" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "calc(10px + env(safe-area-inset-top)) 12px 10px", background: BAR }}>
+            <button onClick={gdBack} style={{ background: "none", border: "none", color: ACC, display: "flex", padding: 4 }}><Svg d={I.back} size={22} /></button>
+            <span style={{ flex: 1, minWidth: 0, color: TXT, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{gd.stack[gd.stack.length - 1].name}</span>
+            <button onClick={() => setGd(null)} style={{ background: "none", border: "none", color: RED, display: "flex", padding: 4 }}><Svg d={I.x} size={22} /></button>
+          </div>
+          <div style={{ flex: 1, overflow: "auto" }}>
+            {gd.entries.length === 0 && <div style={S.note}>Пусто</div>}
+            {gd.entries.map((e, i) => (
+              <div key={i} onClick={() => gdEnter(e)} style={{ ...S.row, ...(e.type === "directory" ? S.rowDir : {}) }}>
+                <span style={{ ...S.iconWrap, color: e.type === "directory" ? ACC : GOLD }}><Svg d={e.type === "directory" ? I.folder : fileIcon(e.name).d} size={24} /></span>
+                <span style={S.rowMid}><span style={{ ...S.name, fontWeight: e.type === "directory" ? 600 : 400 }}>{e.name}</span></span>
+                <span style={S.rowSize}>{e.type === "directory" ? "" : fmtSizeShort(e.size)}</span>
+              </div>
+            ))}
+          </div>
+          <div style={{ padding: "8px 12px calc(8px + env(safe-area-inset-bottom))", background: BAR, fontSize: 12, color: SUB, textAlign: "center" }}>Тап по файлу — скачать в Download</div>
         </div>
       )}
       {wd && (
