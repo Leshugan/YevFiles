@@ -105,6 +105,7 @@ const I = {
   home: <><path d="M3 11l9-7 9 7" /><path d="M5 10v9a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-9" /><path d="M10 20v-6h4v6" /></>,
   selectAll: <><rect x="4" y="4" width="16" height="16" rx="4" /><path d="M8.5 12l2.5 2.5 4.5-5" /></>,
   chev: <path d="M6 9l6 6 6-6" />,
+  bars: <path d="M4 6h16M4 12h16M4 18h16" />,
   refresh: <><path d="M21 12a9 9 0 1 1-2.6-6.4" /><path d="M21 4v5h-5" /></>,
   plus: <><path d="M12 5v14" /><path d="M5 12h14" /></>,
   x: <><path d="M6 6l12 12" /><path d="M18 6L6 18" /></>,
@@ -309,6 +310,7 @@ export default function App() {
   };
   const toggleTheme = () => { const t = theme === "dark" ? "light" : "dark"; setTheme(t); ls.set("fm_theme_v1", t); };
   const [headMenu, setHeadMenu] = useState(false);
+  const [drawer, setDrawer] = useState(false);
   const [settings, setSettings] = useState(false);
   const [settingsPage, setSettingsPage] = useState(null); // null=список, "theme"/"fonts"/"sort"/"icons"
   const [iconDB, setIconDB] = useState(() => loadMap(ICONKEY));
@@ -427,6 +429,14 @@ export default function App() {
   const [pendingExtract, setPendingExtract] = useState(null); // { uri, names|null, label }
   const [menuArmed, setMenuArmed] = useState(false);
   useEffect(() => { if (openMenu) { setMenuArmed(false); const t = setTimeout(() => setMenuArmed(true), 320); return () => clearTimeout(t); } setMenuArmed(false); }, [openMenu && openMenu.file]);
+  const omSheetRef = useRef(null);
+  useLayoutEffect(() => {
+    if (!openMenu || !omSheetRef.current) return;
+    const r = omSheetRef.current.getBoundingClientRect();
+    const ox = (openMenu.originX != null ? openMenu.originX : window.innerWidth / 2) - r.left;
+    const oy = (openMenu.originY != null ? openMenu.originY : r.top) - r.top;
+    omSheetRef.current.style.transformOrigin = ox + "px " + oy + "px";
+  }, [openMenu && openMenu.file]);
   const [arcSel, setArcSel] = useState(new Set());
   const arcLp = useRef(false), arcLpT = useRef(null), arcPX = useRef(0), arcPY = useRef(0);
   const arcListRef = useRef(null), arcSpacerRef = useRef(null);
@@ -625,7 +635,7 @@ export default function App() {
     if (viewerDel) { setViewerDel(false); return; }
     if (viewer) { setViewer(null); return; }
     if (sheet) { setSheet(null); return; }
-    if (tabsMenu) { setTabsMenu(false); return; }
+    if (drawer) { setDrawer(false); return; }
     if (selMenu) { setSelMenu(false); return; }
     if (headMenu) { setHeadMenu(false); return; }
     if (confirmDel) { setConfirmDel(null); return; }
@@ -669,7 +679,7 @@ export default function App() {
     const cat = OPEN_AS.some(([m]) => m === mime) ? mime : defaultOpenAs(e.name);
     let apps = [];
     if (!split) { try { const r = await Apps.query({ uri: e.uri, mime, action: edit ? "edit" : "view" }); apps = (r.apps || []).filter((a) => a.packageName !== "leshugan.fm"); } catch {} }
-    setOpenMenu({ file: e, mime: cat, apps, useDefault: false, editHide: false, edit, split });
+    setOpenMenu({ file: e, mime: cat, apps, useDefault: false, editHide: false, edit, split, originX: pX.current, originY: pY.current });
     if (/\.(apk|apks|xapk|apkm|apkx)$/i.test(e.name)) { Apps.apkInfo({ uri: e.uri }).then((info) => setOpenMenu((m) => (m && m.file === e ? { ...m, apkInfo: info } : m))).catch(() => {}); }
   };
   const pickApp = async (app) => {
@@ -1085,23 +1095,7 @@ export default function App() {
       {/* ВКЛАДКИ + действия шапки */}
       <div style={S.tabsbar}>
         <div style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "center", height: "100%", padding: "0 6px" }}>
-          <button style={{ ...S.hbtn, width: 28, height: 28 }} onClick={() => setTabsMenu((v) => !v)}><Svg d={I.chev} size={18} /></button>
-          {tabsMenu && (
-            <>
-              <div style={S.overlay} onClick={() => setTabsMenu(false)} />
-              <div style={{ ...S.menu, position: "fixed", top: 46, left: 4, zIndex: 1200, transformOrigin: "top left" }}>
-                <div style={S.menuItem} onClick={saveAllTabs}><span style={{ color: ACC, display: "flex" }}><Svg d={I.pin} size={20} /></span>Сохранить вкладки</div>
-                <div style={{ height: 1, background: LINE }} />
-                <div style={S.menuItem} onClick={startupHere}><span style={{ color: GOLD, display: "flex" }}><Svg d={I.home} size={20} /></span>Запуск при открытии</div>
-                <div style={{ height: 1, background: LINE }} />
-                <div style={S.menuItem} onClick={resetTabs}><span style={{ color: SUB, display: "flex" }}><Svg d={I.x} size={20} /></span>Сбросить вкладки</div>
-                {tabs.length > 1 && <>
-                  <div style={{ height: 1, background: LINE }} />
-                  <div style={S.menuItem} onClick={() => { setTabsMenu(false); closeTab(active); }}><span style={{ color: RED, display: "flex" }}><Svg d={I.x} size={20} /></span>Закрыть вкладку</div>
-                </>}
-              </div>
-            </>
-          )}
+          <button style={{ ...S.hbtn, width: 32, height: 32 }} onClick={() => setDrawer(true)}><Svg d={I.bars} size={22} /></button>
         </div>
         <div style={S.tabs}>
           {tabs.map((t, i) => (
@@ -1121,6 +1115,16 @@ export default function App() {
                 <div style={S.menuItem} onClick={() => { setHeadMenu(false); addTab(); }}>
                   <span style={{ color: ACC, display: "flex" }}><Svg d={I.plus} size={20} /></span>Новая вкладка
                 </div>
+                <div style={{ height: 1, background: LINE }} />
+                <div style={S.menuItem} onClick={() => { setHeadMenu(false); saveAllTabs(); }}><span style={{ color: ACC, display: "flex" }}><Svg d={I.pin} size={20} /></span>Сохранить вкладки</div>
+                <div style={{ height: 1, background: LINE }} />
+                <div style={S.menuItem} onClick={() => { setHeadMenu(false); startupHere(); }}><span style={{ color: GOLD, display: "flex" }}><Svg d={I.home} size={20} /></span>Запуск при открытии</div>
+                <div style={{ height: 1, background: LINE }} />
+                <div style={S.menuItem} onClick={() => { setHeadMenu(false); resetTabs(); }}><span style={{ color: SUB, display: "flex" }}><Svg d={I.x} size={20} /></span>Сбросить вкладки</div>
+                {tabs.length > 1 && <>
+                  <div style={{ height: 1, background: LINE }} />
+                  <div style={S.menuItem} onClick={() => { setHeadMenu(false); closeTab(active); }}><span style={{ color: RED, display: "flex" }}><Svg d={I.x} size={20} /></span>Закрыть вкладку</div>
+                </>}
                 <div style={{ height: 1, background: LINE }} />
                 <div style={S.menuItem} onClick={() => { setHeadMenu(false); setSheet({ kind: "sort" }); }}>
                   <span style={{ color: ACC, display: "flex" }}><Svg d={I.sort} size={20} /></span>Сортировка
@@ -1441,7 +1445,6 @@ export default function App() {
               <button onClick={() => setPlayerMenu((v) => !v)} aria-label="Меню" style={{ background: ROW2, border: "1px solid " + LINE, borderRadius: 11, color: ACC, display: "flex", alignItems: "center", justifyContent: "center", width: 32, height: 32 }}><Svg d={I.dots} size={20} /></button>
               {playerMenu && (
                 <div style={{ position: "absolute", right: 0, bottom: "calc(100% + 6px)", background: BAR, border: "1px solid " + LINE, borderRadius: 14, overflow: "hidden", minWidth: 210, boxShadow: "0 8px 24px rgba(0,0,0,.5)", zIndex: 5 }}>
-                  <div style={S.menuItem} onClick={() => playerSetAs("alarm")}><span style={{ color: ACC, display: "flex" }}><Svg d={I.alarm} size={20} /></span>Установить будильник</div>
                   <div style={S.menuItem} onClick={() => playerSetAs("ringtone")}><span style={{ color: ACC, display: "flex" }}><Svg d={I.bell} size={20} /></span>Установить на звонок</div>
                 </div>
               )}
@@ -1454,6 +1457,22 @@ export default function App() {
             <button onClick={playerPrev} aria-label="Назад" style={{ background: ROW2, border: "1px solid " + LINE, borderRadius: 16, color: TXT, display: "flex", alignItems: "center", justifyContent: "center", width: 50, height: 44 }}><Svg d={I.prev} size={26} /></button>
             <button onClick={playerToggle} aria-label="Плей/Пауза" style={{ background: ACC, border: "none", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", width: 56, height: 56, borderRadius: 28 }}><Svg d={player.playing ? I.pause : I.play} size={27} /></button>
             <button onClick={playerNext} aria-label="Вперёд" style={{ background: ROW2, border: "1px solid " + LINE, borderRadius: 16, color: TXT, display: "flex", alignItems: "center", justifyContent: "center", width: 50, height: 44 }}><Svg d={I.next} size={26} /></button>
+          </div>
+        </div>
+      )}
+      {drawer && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 1500 }}>
+          <div onClick={() => setDrawer(false)} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,.5)" }} />
+          <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: "80%", maxWidth: 320, background: BAR, borderRight: "1px solid " + LINE, boxShadow: "6px 0 26px rgba(0,0,0,.5)", display: "flex", flexDirection: "column", animation: "drawerIn .24s cubic-bezier(.2,.8,.3,1)" }}>
+            <div style={{ padding: "calc(16px + env(safe-area-inset-top)) 18px 12px", fontSize: 18, fontWeight: 700, color: TXT }}>YevFiles</div>
+            <div style={{ flex: 1 }} />
+            <div style={{ padding: "0 8px calc(14px + env(safe-area-inset-bottom))", display: "flex", flexDirection: "column-reverse", gap: 2 }}>
+              {[{ n: "Storage", d: I.folder, c: ACC, p: "" }, { n: "obb", d: I.android, c: "#E3B14F", p: "Android/obb" }, { n: "data", d: I.android, c: "#8FB84A", p: "Android/data" }].map((s) => (
+                <div key={s.n} style={{ ...S.menuItem, borderRadius: 12 }} onClick={() => { setDrawer(false); setTabPath(s.p); }}>
+                  <span style={{ color: s.c, display: "flex" }}><Svg d={s.d} size={22} /></span>{s.n}
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}
@@ -1723,7 +1742,7 @@ export default function App() {
       {openMenu && (() => {
         return (
           <div style={{ ...S.backdrop, pointerEvents: menuArmed ? "auto" : "none" }} onClick={() => setOpenMenu(null)}>
-            <div style={S.sheet} onClick={(e) => e.stopPropagation()}>
+            <div ref={omSheetRef} style={{ ...S.sheet, animation: "growSheet .26s cubic-bezier(.2,.8,.3,1.05)" }} onClick={(e) => e.stopPropagation()}>
               {/\.(apk|apks|xapk|apkm|apkx)$/i.test(openMenu.file.name) && openMenu.apkInfo && (
                 <div style={{ padding: "10px 12px", margin: "0 0 12px", background: ROW2, borderRadius: 12, fontSize: 13, lineHeight: 1.7, color: SUB }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
@@ -1965,6 +1984,8 @@ export default function App() {
         @keyframes fm-in-r{from{transform:translateX(100%)}to{transform:translateX(0)}}
         @keyframes fm-in-l{from{transform:translateX(-100%)}to{transform:translateX(0)}}
         @keyframes dropGrow{from{opacity:0;transform:scale(.88)}to{opacity:1;transform:scale(1)}}
+        @keyframes growSheet{from{opacity:0;transform:scale(.35)}to{opacity:1;transform:scale(1)}}
+        @keyframes drawerIn{from{transform:translateX(-100%)}to{transform:translateX(0)}}
         @keyframes sUp{from{transform:translateY(60px);opacity:0}to{transform:translateY(0);opacity:1}}
         @keyframes fS{from{opacity:0}to{opacity:1}}
         @keyframes cbPop{0%{transform:scale(0);opacity:0}60%{transform:scale(1.25)}100%{transform:scale(1);opacity:1}}
