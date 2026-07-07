@@ -106,6 +106,7 @@ const I = {
   selectAll: <><rect x="4" y="4" width="16" height="16" rx="4" /><path d="M8.5 12l2.5 2.5 4.5-5" /></>,
   chev: <path d="M6 9l6 6 6-6" />,
   bars: <path d="M4 6h16M4 12h16M4 18h16" />,
+  gdrive: <g stroke="none"><path fill="#2684FC" d="M7.7 20.5h9.9l-2.6-4.5H10.3z" /><path fill="#00AC47" d="M9.6 3.5L2 16.7l2.5 4.3 7.6-13.2z" /><path fill="#FFBA00" d="M14.4 3.5H9.6l7.6 13.2h4.8z" /></g>,
   refresh: <><path d="M21 12a9 9 0 1 1-2.6-6.4" /><path d="M21 4v5h-5" /></>,
   plus: <><path d="M12 5v14" /><path d="M5 12h14" /></>,
   x: <><path d="M6 6l12 12" /><path d="M18 6L6 18" /></>,
@@ -311,6 +312,7 @@ export default function App() {
   const toggleTheme = () => { const t = theme === "dark" ? "light" : "dark"; setTheme(t); ls.set("fm_theme_v1", t); };
   const [headMenu, setHeadMenu] = useState(false);
   const [drawer, setDrawer] = useState(false);
+  const [plusMenu, setPlusMenu] = useState(false);
   const [webdavs, setWebdavs] = useState([]);
   const [wdForm, setWdForm] = useState(null);
   const [wd, setWd] = useState(null);
@@ -1494,19 +1496,12 @@ export default function App() {
       )}
       {drawer && (
         <div style={{ position: "fixed", inset: 0, zIndex: 1500 }}>
-          <div onClick={() => setDrawer(false)} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,.5)" }} />
+          <div onClick={() => { setDrawer(false); setPlusMenu(false); }} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,.5)" }} />
           <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: "82%", maxWidth: 330, background: BAR, borderRight: "1px solid " + LINE, boxShadow: "6px 0 26px rgba(0,0,0,.5)", display: "flex", flexDirection: "column", animation: "drawerIn .24s cubic-bezier(.2,.8,.3,1)" }}>
-            <div style={{ overflow: "auto", flex: 1, paddingTop: "calc(10px + env(safe-area-inset-top))" }}>
-              <div onClick={() => (gdIn ? openGDrive() : googleLogin())} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", borderBottom: "1px solid " + LINE }}>
-                <span style={{ width: 40, height: 40, borderRadius: 20, background: "#EA433522", color: "#EA4335", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Svg d={I.dl} size={22} /></span>
-                <div style={{ minWidth: 0, flex: 1 }}>
-                  <div style={{ color: TXT, fontSize: 16, fontWeight: 600 }}>Google Drive</div>
-                  <div style={{ color: SUB, fontSize: 12 }}>{gdIn ? "Подключён" : "Войти"}</div>
-                </div>
-                {gdIn && <button onClick={(ev) => { ev.stopPropagation(); Apps.gdriveLogout().catch(() => {}); setGdIn(false); }} aria-label="Выйти" style={{ background: "none", border: "none", color: RED, display: "flex", padding: 6, flexShrink: 0 }}><Svg d={I.x} size={18} /></button>}
-              </div>
+            <div style={{ flex: 1, minHeight: "env(safe-area-inset-top)" }} />
+            <div style={{ overflow: "auto" }}>
               {webdavs.map((a, i) => (
-                <div key={"wd" + i} onClick={() => openWebdav(a)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", borderBottom: "1px solid " + LINE }}>
+                <div key={"wd" + i} onClick={() => openWebdav(a)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", borderTop: "1px solid " + LINE }}>
                   <span style={{ width: 40, height: 40, borderRadius: 20, background: "#5AA9E622", color: "#5AA9E6", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Svg d={I.dl} size={22} /></span>
                   <div style={{ minWidth: 0, flex: 1 }}>
                     <div style={{ color: TXT, fontSize: 16, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.name}</div>
@@ -1515,10 +1510,18 @@ export default function App() {
                   <button onClick={(ev) => { ev.stopPropagation(); delWebdav(i); }} aria-label="Удалить" style={{ background: "none", border: "none", color: RED, display: "flex", padding: 6, flexShrink: 0 }}><Svg d={I.x} size={18} /></button>
                 </div>
               ))}
-            </div>
-            <div style={{ borderTop: "1px solid " + LINE }}>
+              {gdIn && (
+                <div onClick={openGDrive} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", borderTop: "1px solid " + LINE }}>
+                  <span style={{ width: 40, height: 40, borderRadius: 20, background: "#ffffff", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Svg d={I.gdrive} size={24} /></span>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ color: TXT, fontSize: 16, fontWeight: 600 }}>Google Drive</div>
+                    <div style={{ color: SUB, fontSize: 12 }}>Подключён</div>
+                  </div>
+                  <button onClick={(ev) => { ev.stopPropagation(); Apps.gdriveLogout().catch(() => {}); setGdIn(false); }} aria-label="Выйти" style={{ background: "none", border: "none", color: RED, display: "flex", padding: 6, flexShrink: 0 }}><Svg d={I.x} size={18} /></button>
+                </div>
+              )}
               {[{ n: "Data", sub: "data", d: I.android, c: "#8FB84A", p: "Android/data" }, { n: "OBB", sub: "obb", d: I.android, c: "#E3B14F", p: "Android/obb" }, { n: "Storage", sub: "/storage/emulated/0", d: I.folder, c: "#4FC3D9", p: "" }].map((s) => (
-                <div key={s.n} onClick={() => { setDrawer(false); setTabPath(s.p); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", borderBottom: "1px solid " + LINE }}>
+                <div key={s.n} onClick={() => { setDrawer(false); setTabPath(s.p); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", borderTop: "1px solid " + LINE }}>
                   <span style={{ width: 40, height: 40, borderRadius: 20, background: s.c + "22", color: s.c, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Svg d={s.d} size={22} /></span>
                   <div style={{ minWidth: 0 }}>
                     <div style={{ color: TXT, fontSize: 16, fontWeight: 600 }}>{s.n}</div>
@@ -1527,9 +1530,15 @@ export default function App() {
                 </div>
               ))}
             </div>
-            <div style={{ display: "flex", alignItems: "center", padding: "10px 12px calc(12px + env(safe-area-inset-bottom))", borderTop: "1px solid " + LINE }}>
+            <div style={{ position: "relative", display: "flex", alignItems: "center", padding: "10px 12px calc(12px + env(safe-area-inset-bottom))", borderTop: "1px solid " + LINE }}>
               <span style={{ flex: 1, fontSize: 18, fontWeight: 700, color: TXT, paddingLeft: 6 }}>YevFiles</span>
-              <button onClick={() => { setDrawer(false); setWdForm({ name: "", url: "", user: "", pass: "" }); }} aria-label="Добавить WebDAV" style={{ width: 34, height: 34, borderRadius: 17, background: ROW2, border: "1px solid " + LINE, color: ACC, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Svg d={I.plus} size={22} /></button>
+              <button onClick={() => setPlusMenu((v) => !v)} aria-label="Добавить" style={{ width: 34, height: 34, borderRadius: 17, background: ROW2, border: "1px solid " + LINE, color: ACC, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Svg d={I.plus} size={22} /></button>
+              {plusMenu && (
+                <div style={{ position: "absolute", right: 10, bottom: "calc(100% + 4px)", background: BAR, border: "1px solid " + LINE, borderRadius: 12, overflow: "hidden", minWidth: 190, boxShadow: "0 8px 24px rgba(0,0,0,.5)" }}>
+                  {!gdIn && <div style={S.menuItem} onClick={() => { setPlusMenu(false); googleLogin(); }}><span style={{ background: "#fff", borderRadius: 6, display: "flex", padding: 1 }}><Svg d={I.gdrive} size={18} /></span>Google Drive</div>}
+                  <div style={S.menuItem} onClick={() => { setPlusMenu(false); setDrawer(false); setWdForm({ name: "", url: "", user: "", pass: "" }); }}><span style={{ color: "#5AA9E6", display: "flex" }}><Svg d={I.dl} size={20} /></span>WebDAV</div>
+                </div>
+              )}
             </div>
           </div>
         </div>
