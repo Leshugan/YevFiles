@@ -11,6 +11,7 @@ public class MainActivity extends BridgeActivity {
     // Файлы из "Поделиться"/"Открыть", ждут обработки. Читаются плагином AppsPlugin.getShared().
     public static final ArrayList<Uri> pendingShared = new ArrayList<>();
     public static String pendingMode = null; // "save" (Сохранить в...) или "open" (Открыть)
+    public static String oauthCode = null; // код возврата OAuth из браузера
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -38,7 +39,8 @@ public class MainActivity extends BridgeActivity {
             if (list != null && !list.isEmpty()) { pendingShared.clear(); pendingShared.addAll(list); pendingMode = "save"; }
         } else if (Intent.ACTION_VIEW.equals(action) || Intent.ACTION_EDIT.equals(action)) {
             Uri u = intent.getData();
-            if (u != null && "content".equals(u.getScheme())) { pendingShared.clear(); pendingShared.add(u); pendingMode = "ask"; }
+            if (u != null && u.getScheme() != null && u.getScheme().startsWith("com.googleusercontent.apps")) { oauthCode = u.getQueryParameter("code"); }
+            else if (u != null && "content".equals(u.getScheme())) { pendingShared.clear(); pendingShared.add(u); pendingMode = "ask"; }
         }
     }
 }
