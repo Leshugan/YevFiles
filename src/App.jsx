@@ -311,6 +311,15 @@ export default function App() {
   const toggleTheme = () => { const t = theme === "dark" ? "light" : "dark"; setTheme(t); ls.set("fm_theme_v1", t); };
   const [headMenu, setHeadMenu] = useState(false);
   const [drawer, setDrawer] = useState(false);
+  const [webdavs, setWebdavs] = useState([]);
+  const [wdForm, setWdForm] = useState(null);
+  const [wd, setWd] = useState(null);
+  useEffect(() => { Apps.webdavGetAccounts().then((r) => { try { setWebdavs(JSON.parse(r.json || "[]")); } catch {} }).catch(() => {}); }, []);
+  const saveWebdav = async () => { const f = wdForm; if (!f || !f.url) { setWdForm(null); return; } const list = [...webdavs, { name: (f.name || f.url).trim(), url: f.url.trim().replace(/\/?$/, "/"), user: (f.user || "").trim(), pass: f.pass || "" }]; setWebdavs(list); setWdForm(null); try { await Apps.webdavSetAccounts({ json: JSON.stringify(list) }); } catch {} };
+  const delWebdav = async (i) => { const list = webdavs.filter((_, j) => j !== i); setWebdavs(list); try { await Apps.webdavSetAccounts({ json: JSON.stringify(list) }); } catch {} };
+  const openWebdav = async (acc) => { setDrawer(false); showToast("Подключение…"); try { const r = await Apps.webdavList({ url: acc.url, user: acc.user, pass: acc.pass }); setWd({ acc, stack: [{ url: acc.url, name: acc.name }], entries: r.files || [] }); } catch (e) { showToast("WebDAV: " + (e?.message || "")); } };
+  const wdEnter = async (e) => { if (e.type === "directory") { try { const r = await Apps.webdavList({ url: e.url, user: wd.acc.user, pass: wd.acc.pass }); setWd((v) => ({ ...v, stack: [...v.stack, { url: e.url, name: e.name }], entries: r.files || [] })); } catch (er) { showToast("Ошибка: " + (er?.message || "")); } } else { showToast("Загрузка…"); try { await Apps.webdavGet({ url: e.url, user: wd.acc.user, pass: wd.acc.pass, name: e.name }); showToast("Скачано → Download/" + e.name); } catch (er) { showToast("Ошибка: " + (er?.message || "")); } } };
+  const wdBack = async () => { if (!wd) return; if (wd.stack.length <= 1) { setWd(null); return; } const st = wd.stack.slice(0, -1); const top = st[st.length - 1]; try { const r = await Apps.webdavList({ url: top.url, user: wd.acc.user, pass: wd.acc.pass }); setWd({ ...wd, stack: st, entries: r.files || [] }); } catch {} };
   const [settings, setSettings] = useState(false);
   const [settingsPage, setSettingsPage] = useState(null); // null=список, "theme"/"fonts"/"sort"/"icons"
   const [iconDB, setIconDB] = useState(() => loadMap(ICONKEY));
@@ -635,6 +644,7 @@ export default function App() {
     if (viewerDel) { setViewerDel(false); return; }
     if (viewer) { setViewer(null); return; }
     if (sheet) { setSheet(null); return; }
+    if (wd) { wdBack(); return; }
     if (drawer) { setDrawer(false); return; }
     if (selMenu) { setSelMenu(false); return; }
     if (headMenu) { setHeadMenu(false); return; }
@@ -1466,7 +1476,7 @@ export default function App() {
           <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: "82%", maxWidth: 330, background: BAR, borderRight: "1px solid " + LINE, boxShadow: "6px 0 26px rgba(0,0,0,.5)", display: "flex", flexDirection: "column", animation: "drawerIn .24s cubic-bezier(.2,.8,.3,1)" }}>
             <div style={{ display: "flex", alignItems: "center", padding: "calc(14px + env(safe-area-inset-top)) 12px 8px" }}>
               <span style={{ flex: 1, fontSize: 18, fontWeight: 700, color: TXT, paddingLeft: 6 }}>YevFiles</span>
-              <button onClick={() => showToast("WebDAV — скоро")} aria-label="Добавить" style={{ width: 34, height: 34, borderRadius: 17, background: ROW2, border: "1px solid " + LINE, color: ACC, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Svg d={I.plus} size={22} /></button>
+              <button onClick={() => { setDrawer(false); setWdForm({ name: "", url: "", user: "", pass: "" }); }} aria-label="Добавить WebDAV" style={{ width: 34, height: 34, borderRadius: 17, background: ROW2, border: "1px solid " + LINE, color: ACC, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Svg d={I.plus} size={22} /></button>
             </div>
             <div style={{ height: 1, background: LINE, margin: "2px 0 4px" }} />
             <div style={{ overflow: "auto", flex: 1 }}>
@@ -1479,8 +1489,53 @@ export default function App() {
                   </div>
                 </div>
               ))}
+              {webdavs.map((a, i) => (
+                <div key={"wd" + i} onClick={() => openWebdav(a)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", borderBottom: "1px solid " + LINE }}>
+                  <span style={{ width: 40, height: 40, borderRadius: 20, background: "#5AA9E622", color: "#5AA9E6", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Svg d={I.dl} size={22} /></span>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ color: TXT, fontSize: 16, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.name}</div>
+                    <div style={{ color: SUB, fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>WebDAV</div>
+                  </div>
+                  <button onClick={(ev) => { ev.stopPropagation(); delWebdav(i); }} aria-label="Удалить" style={{ background: "none", border: "none", color: RED, display: "flex", padding: 6, flexShrink: 0 }}><Svg d={I.x} size={18} /></button>
+                </div>
+              ))}
             </div>
           </div>
+        </div>
+      )}
+      {wdForm && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 1600, background: "rgba(0,0,0,.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }} onClick={() => setWdForm(null)}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 360, background: BAR, borderRadius: 18, padding: 18, boxShadow: "0 12px 40px rgba(0,0,0,.5)" }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: TXT, marginBottom: 14 }}>WebDAV</div>
+            {[["name", "Название"], ["url", "https://…/dav/"], ["user", "Логин"], ["pass", "Пароль"]].map(([k, ph]) => (
+              <input key={k} value={wdForm[k]} placeholder={ph} type={k === "pass" ? "password" : "text"} autoCapitalize="none" autoCorrect="off" onChange={(e) => setWdForm((f) => ({ ...f, [k]: e.target.value }))}
+                style={{ width: "100%", boxSizing: "border-box", marginBottom: 10, padding: "11px 12px", borderRadius: 10, border: "1px solid " + LINE, background: ROW2, color: TXT, fontSize: 15, outline: "none" }} />
+            ))}
+            <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
+              <button onClick={() => setWdForm(null)} style={{ ...S.sheetGhost, flex: 1, borderColor: LINE }}>Отмена</button>
+              <button onClick={saveWebdav} style={{ flex: 1, padding: 11, borderRadius: 10, border: "none", background: ACC, color: "#fff", fontSize: 15, fontWeight: 600 }}>Сохранить</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {wd && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 1450, background: BG, display: "flex", flexDirection: "column" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "calc(10px + env(safe-area-inset-top)) 12px 10px", background: BAR }}>
+            <button onClick={wdBack} style={{ background: "none", border: "none", color: ACC, display: "flex", padding: 4 }}><Svg d={I.back} size={22} /></button>
+            <span style={{ flex: 1, minWidth: 0, color: TXT, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{wd.stack[wd.stack.length - 1].name}</span>
+            <button onClick={() => setWd(null)} style={{ background: "none", border: "none", color: RED, display: "flex", padding: 4 }}><Svg d={I.x} size={22} /></button>
+          </div>
+          <div style={{ flex: 1, overflow: "auto" }}>
+            {wd.entries.length === 0 && <div style={S.note}>Пусто</div>}
+            {wd.entries.map((e, i) => (
+              <div key={i} onClick={() => wdEnter(e)} style={{ ...S.row, ...(e.type === "directory" ? S.rowDir : {}) }}>
+                <span style={{ ...S.iconWrap, color: e.type === "directory" ? ACC : GOLD }}><Svg d={e.type === "directory" ? I.folder : fileIcon(e.name).d} size={24} /></span>
+                <span style={S.rowMid}><span style={{ ...S.name, fontWeight: e.type === "directory" ? 600 : 400 }}>{e.name}</span></span>
+                <span style={S.rowSize}>{e.type === "directory" ? "" : fmtSizeShort(e.size)}</span>
+              </div>
+            ))}
+          </div>
+          <div style={{ padding: "8px 12px calc(8px + env(safe-area-inset-bottom))", background: BAR, fontSize: 12, color: SUB, textAlign: "center" }}>Тап по файлу — скачать в Download</div>
         </div>
       )}
       {pdf && (
