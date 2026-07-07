@@ -1463,13 +1463,20 @@ export default function App() {
       {drawer && (
         <div style={{ position: "fixed", inset: 0, zIndex: 1500 }}>
           <div onClick={() => setDrawer(false)} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,.5)" }} />
-          <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: "80%", maxWidth: 320, background: BAR, borderRight: "1px solid " + LINE, boxShadow: "6px 0 26px rgba(0,0,0,.5)", display: "flex", flexDirection: "column", animation: "drawerIn .24s cubic-bezier(.2,.8,.3,1)" }}>
-            <div style={{ padding: "calc(16px + env(safe-area-inset-top)) 18px 12px", fontSize: 18, fontWeight: 700, color: TXT }}>YevFiles</div>
-            <div style={{ flex: 1 }} />
-            <div style={{ padding: "0 8px calc(14px + env(safe-area-inset-bottom))", display: "flex", flexDirection: "column-reverse", gap: 2 }}>
-              {[{ n: "Storage", d: I.folder, c: ACC, p: "" }, { n: "obb", d: I.android, c: "#E3B14F", p: "Android/obb" }, { n: "data", d: I.android, c: "#8FB84A", p: "Android/data" }].map((s) => (
-                <div key={s.n} style={{ ...S.menuItem, borderRadius: 12 }} onClick={() => { setDrawer(false); setTabPath(s.p); }}>
-                  <span style={{ color: s.c, display: "flex" }}><Svg d={s.d} size={22} /></span>{s.n}
+          <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: "82%", maxWidth: 330, background: BAR, borderRight: "1px solid " + LINE, boxShadow: "6px 0 26px rgba(0,0,0,.5)", display: "flex", flexDirection: "column", animation: "drawerIn .24s cubic-bezier(.2,.8,.3,1)" }}>
+            <div style={{ display: "flex", alignItems: "center", padding: "calc(14px + env(safe-area-inset-top)) 12px 8px" }}>
+              <span style={{ flex: 1, fontSize: 18, fontWeight: 700, color: TXT, paddingLeft: 6 }}>YevFiles</span>
+              <button onClick={() => showToast("WebDAV — скоро")} aria-label="Добавить" style={{ width: 34, height: 34, borderRadius: 17, background: ROW2, border: "1px solid " + LINE, color: ACC, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Svg d={I.plus} size={22} /></button>
+            </div>
+            <div style={{ height: 1, background: LINE, margin: "2px 0 4px" }} />
+            <div style={{ overflow: "auto", flex: 1 }}>
+              {[{ n: "Internal", sub: "/storage/emulated/0", d: I.folder, c: "#4FC3D9", p: "" }, { n: "Android/Obb", sub: "obb", d: I.android, c: "#E3B14F", p: "Android/obb" }, { n: "data", sub: "data", d: I.android, c: "#8FB84A", p: "Android/data" }].map((s) => (
+                <div key={s.n} onClick={() => { setDrawer(false); setTabPath(s.p); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", borderBottom: "1px solid " + LINE }}>
+                  <span style={{ width: 40, height: 40, borderRadius: 20, background: s.c + "22", color: s.c, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Svg d={s.d} size={22} /></span>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ color: TXT, fontSize: 16, fontWeight: 600 }}>{s.n}</div>
+                    <div style={{ color: SUB, fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.sub}</div>
+                  </div>
                 </div>
               ))}
             </div>
