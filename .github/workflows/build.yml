@@ -81,6 +81,10 @@ jobs:
           if ! grep -q "leshugan.fm.OpenSave" "$MAN"; then
             sed -i 's#</application>#<activity-alias android:name="leshugan.fm.OpenSave" android:targetActivity="leshugan.fm.MainActivity" android:exported="true" android:label="Взаимодействовать"><intent-filter><action android:name="android.intent.action.VIEW" /><action android:name="android.intent.action.EDIT" /><category android:name="android.intent.category.DEFAULT" /><data android:scheme="content" /><data android:mimeType="*/*" /></intent-filter></activity-alias></application>#' "$MAN"
           fi
+          # OAuth redirect (Google) → MainActivity
+          if ! grep -q "com.googleusercontent.apps.589335091963" "$MAN"; then
+            sed -i 's#</activity>#<intent-filter><action android:name="android.intent.action.VIEW" /><category android:name="android.intent.category.DEFAULT" /><category android:name="android.intent.category.BROWSABLE" /><data android:scheme="com.googleusercontent.apps.589335091963-6n9ss077f7htshue4vd288eb2t2jduhb" /></intent-filter></activity>#' "$MAN"
+          fi
           echo "----- manifest -----"
           grep -E "uses-permission|requestLegacy|appsfp|YevDocuments|action.SEND|yevview" "$MAN" || true
 
