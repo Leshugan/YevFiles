@@ -13,7 +13,7 @@ const THEMES = {
   light: { "--bg": "#EEF1F4", "--bar": "#FFFFFF", "--row2": "#E4E8EC", "--acc": "#2F80ED", "--accbg": "rgba(47,128,237,.14)", "--gold": "#2F80ED", "--red": "#D14343", "--txt": "#1E2329", "--ink": "#3D4754", "--sub": "#6B7280", "--line": "#D3D8DE", "--chip": "rgba(0,0,0,.05)", "--hair": "rgba(0,0,0,.08)", "--tgloff": "#C2C8D0" },
 };
 const DIR = Directory.ExternalStorage;
-const APP_VERSION = "fm-2026.07.08-ios";
+const APP_VERSION = "fm-2026.07.08-ios2";
 const TKEY = "fm_tabs_v1", SKEY = "fm_startup_v1", METAKEY = "fm_meta_v1", SORTKEY = "fm_sort_v1";
 const DEFKEY = "fm_defaults_v1", HIDEKEY = "fm_hideapps_v1", ICONKEY = "fm_foldericons_v1", ORDERKEY = "fm_menuorder_v1";
 const loadMap = (k) => { try { return JSON.parse(ls.get(k)) || {}; } catch { return {}; } };
@@ -1224,7 +1224,7 @@ export default function App() {
       <style>{`html,body{background:${(THEMES[theme] || THEMES.dark)["--bg"]}}@import url('https://fonts.googleapis.com/css2?family=Comfortaa:wght@400;600;700&family=Roboto:wght@400;500;700&display=swap');`}</style>
       {/* ВКЛАДКИ + действия шапки */}
       <div style={S.tabsbar}>
-        <div style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "center", height: "100%", padding: "0 6px" }}>
+        <div style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "center", height: "100%", padding: "0 12px" }}>
           <button style={{ ...S.hbtn }} onClick={() => setDrawer(true)}><Svg d={I.bars} size={20} /></button>
         </div>
         <div style={{ ...S.tabs, overflowX: tabDragId ? "visible" : "auto" }}>
@@ -1236,7 +1236,7 @@ export default function App() {
             </div>
           ))}
         </div>
-        <div style={{ position: "relative" }}>
+        <div style={{ position: "relative", display: "flex", alignItems: "center", height: "100%", padding: "0 12px" }}>
           <button style={S.hbtn} onClick={() => setHeadMenu((v) => !v)}><Svg d={I.dots} size={20} /></button>
           {headMenu && (
             <>
@@ -2255,7 +2255,7 @@ function Btn({ onClick, icon, text, label, accent, red, flexNone, disabled }) {
 
 const S = {
   app: { position: "relative", display: "flex", flexDirection: "column", height: "100vh", background: BG, color: TXT, fontFamily: "system-ui,-apple-system,Roboto,sans-serif", overflow: "hidden" },
-  tabsbar: { display: "flex", alignItems: "center", background: "var(--bar)", flexShrink: 0, height: 50, margin: "8px 8px 6px", borderRadius: 22, border: "1px solid var(--hair)", boxShadow: "inset 0 0.5px 0 rgba(255,255,255,.14), 0 6px 20px rgba(0,0,0,.18)" },
+  tabsbar: { display: "flex", alignItems: "center", background: "var(--bar)", flexShrink: 0, height: 50, margin: "8px 8px 6px", borderRadius: 26, border: "1px solid var(--hair)", boxShadow: "inset 0 0.5px 0 rgba(255,255,255,.14), 0 6px 20px rgba(0,0,0,.18)" },
   tabs: { display: "flex", overflowX: "auto", flex: 1, alignItems: "center", justifyContent: "center", gap: 6, padding: "0 4px", height: "100%" },
   tab: { display: "flex", alignItems: "center", gap: 6, padding: "0 12px", height: 34, borderRadius: 17, fontSize: 13.5, color: SUB, whiteSpace: "nowrap", background: "var(--chip)", flexShrink: 0, border: "1px solid transparent" },
   tabActive: { color: ACC, background: "var(--accbg)", border: "1px solid " + ACC, fontWeight: 600, boxShadow: "0 0 0 1px var(--accbg), 0 2px 8px var(--accbg)" },
@@ -2289,7 +2289,7 @@ const S = {
   searchBar: { display: "flex", alignItems: "center", background: ROW2, padding: 8, gap: 8, flexShrink: 0 },
   searchInput: { flex: 1, padding: "10px 12px", borderRadius: 8, border: "1px solid " + LINE, background: BAR, color: TXT, fontSize: 15, outline: "none" },
   searchClose: { border: "none", background: "transparent", color: SUB, fontSize: 24, width: 40 },
-  bottom: { display: "flex", alignItems: "center", background: "var(--bar)", flexShrink: 0, borderRadius: 24, margin: "4px 8px calc(8px + env(safe-area-inset-bottom))", border: "1px solid var(--hair)", boxShadow: "inset 0 0.5px 0 rgba(255,255,255,.14), 0 6px 20px rgba(0,0,0,.18)" },
+  bottom: { display: "flex", alignItems: "center", background: "var(--bar)", flexShrink: 0, borderRadius: 30, margin: "4px 8px calc(8px + env(safe-area-inset-bottom))", border: "1px solid var(--hair)", boxShadow: "inset 0 0.5px 0 rgba(255,255,255,.14), 0 6px 20px rgba(0,0,0,.18)" },
   btn: { border: "none", background: "transparent", padding: "6px 6px 7px", display: "flex", flexDirection: "column", alignItems: "center", gap: 2 },
   selCount: { width: 22, height: 22, borderRadius: 11, background: ACC, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0, lineHeight: 0 },
   btnLabel: { fontSize: 10, color: SUB, whiteSpace: "nowrap" },
