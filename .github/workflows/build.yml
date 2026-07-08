@@ -37,6 +37,15 @@ jobs:
       - name: Add Android platform
         run: |
           rm -rf android            # снести любую закоммиченную/старую платформу — иначе cap add пропустит свежую сборку
+          rm -f capacitor.config.ts # TS-конфиг ломается на раннере (ts.ModuleKind undefined) — используем JSON
+          cat > capacitor.config.json <<'JSON'
+          {
+            "appId": "leshugan.fm",
+            "appName": "YevFiles",
+            "webDir": "dist",
+            "android": { "allowMixedContent": false }
+          }
+          JSON
           npx cap add android
           npx cap copy android      # принудительно скопировать свежий web-бандл (dist) в ассеты
           # zip4j — для архивов с паролем
