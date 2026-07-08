@@ -2,7 +2,10 @@ package leshugan.fm;
 
 import android.content.Intent;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
+import android.view.Display;
+import android.view.WindowManager;
 import com.getcapacitor.BridgeActivity;
 
 import java.util.ArrayList;
@@ -17,7 +20,33 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(AppsPlugin.class);
         super.onCreate(savedInstanceState);
+        applyHighRefresh();
         handleShare(getIntent());
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        applyHighRefresh();
+    }
+
+    // Запросить максимальную частоту обновления экрана (120/144 Гц вместо 60)
+    private void applyHighRefresh() {
+        try {
+            if (Build.VERSION.SDK_INT < 23) return;
+            Display display = (Build.VERSION.SDK_INT >= 30) ? getDisplay() : getWindowManager().getDefaultDisplay();
+            if (display == null) return;
+            Display.Mode cur = display.getMode();
+            Display.Mode best = cur;
+            for (Display.Mode m : display.getSupportedModes()) {
+                if (m.getPhysicalWidth() == cur.getPhysicalWidth() && m.getPhysicalHeight() == cur.getPhysicalHeight()
+                        && m.getRefreshRate() > best.getRefreshRate()) best = m;
+            }
+            WindowManager.LayoutParams lp = getWindow().getAttributes();
+            lp.preferredDisplayModeId = best.getModeId();
+            if (Build.VERSION.SDK_INT >= 31) lp.preferredRefreshRate = best.getRefreshRate();
+            getWindow().setAttributes(lp);
+        } catch (Exception ignored) {}
     }
 
     @Override

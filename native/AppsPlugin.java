@@ -1151,17 +1151,19 @@ public class AppsPlugin extends Plugin {
     @PluginMethod
     public void webdavGet(PluginCall call) {
         try {
-            String url = call.getString("url"), user = call.getString("user", ""), pass = call.getString("pass", ""), name = call.getString("name", "file");
+            String url = call.getString("url"), user = call.getString("user", ""), pass = call.getString("pass", ""), name = call.getString("name", "file"), dest = call.getString("dest", "");
             java.net.HttpURLConnection c = (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
             c.setRequestProperty("Authorization", wdAuth(user, pass));
             c.setConnectTimeout(15000); c.setReadTimeout(30000);
             int code = c.getResponseCode();
             if (code >= 400) { call.reject("HTTP " + code); return; }
-            File dl = new File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), name);
+            File dl;
+            if ("temp".equals(dest)) { File dir = new File(android.os.Environment.getExternalStorageDirectory(), "Download/.yevtmp"); if (!dir.exists()) dir.mkdirs(); dl = new File(dir, name); }
+            else dl = new File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), name);
             java.io.InputStream in = c.getInputStream(); java.io.FileOutputStream fo = new java.io.FileOutputStream(dl);
             byte[] buf = new byte[8192]; int n; while ((n = in.read(buf)) > 0) fo.write(buf, 0, n);
             fo.close(); in.close();
-            JSObject r = new JSObject(); r.put("path", dl.getAbsolutePath()); call.resolve(r);
+            JSObject r = new JSObject(); r.put("path", dl.getAbsolutePath()); r.put("uri", "file://" + dl.getAbsolutePath()); call.resolve(r);
         } catch (Exception e) { call.reject(e.getMessage()); }
     }
 
@@ -1244,17 +1246,39 @@ public class AppsPlugin extends Plugin {
     public void gdriveGet(PluginCall call) {
         try {
             gdEnsure();
-            String id = call.getString("id"), name = call.getString("name", "file"), mime = call.getString("mime", "");
+            String id = call.getString("id"), name = call.getString("name", "file"), mime = call.getString("mime", ""), dest = call.getString("dest", "");
             boolean gdoc = mime.startsWith("application/vnd.google-apps");
-            String url = gdoc ? "https://www.googleapis.com/drive/v3/files/" + id + "/export?mimeType=application%2Fpdf" : "https://www.googleapis.com/drive/v3/files/" + id + "?alt=media";
+            String url = gdoc ? "https://www.googleapis.com/drive/v3/files/" + id + "/export?mimeType=application%2Fpdf" : "https://www.googleapis.com/drive/v3/files/" + id + "?alt=media&acknowledgeAbuse=true";
             java.net.HttpURLConnection c = (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
             c.setRequestProperty("Authorization", "Bearer " + gdToken); c.setConnectTimeout(15000); c.setReadTimeout(60000);
             int code = c.getResponseCode(); if (code >= 400) { call.reject("HTTP " + code); return; }
             if (gdoc && !name.toLowerCase().endsWith(".pdf")) name = name + ".pdf";
-            File dl = new File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), name);
+            File dl;
+            if ("temp".equals(dest)) { File dir = new File(android.os.Environment.getExternalStorageDirectory(), "Download/.yevtmp"); if (!dir.exists()) dir.mkdirs(); dl = new File(dir, name); }
+            else dl = new File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), name);
             java.io.InputStream in = c.getInputStream(); java.io.FileOutputStream fo = new java.io.FileOutputStream(dl);
             byte[] buf = new byte[8192]; int n; while ((n = in.read(buf)) > 0) fo.write(buf, 0, n); fo.close(); in.close();
-            JSObject r = new JSObject(); r.put("path", dl.getAbsolutePath()); call.resolve(r);
+            JSObject r = new JSObject(); r.put("path", dl.getAbsolutePath()); r.put("uri", "file://" + dl.getAbsolutePath()); call.resolve(r);
+        } catch (Exception e) { call.reject(e.getMessage()); }
+    }
+
+    @PluginMethod
+    public void gdriveLink(PluginCall call) {
+        try {
+            gdEnsure();
+            String id = call.getString("id");
+            String url = "https://www.googleapis.com/drive/v3/files/" + id + "?alt=media&acknowledgeAbuse=true&access_token=" + gdToken;
+            JSObject r = new JSObject(); r.put("url", url); call.resolve(r);
+        } catch (Exception e) { call.reject(e.getMessage()); }
+    }
+
+    @PluginMethod
+    public void copyText(PluginCall call) {
+        try {
+            String text = call.getString("text", "");
+            android.content.ClipboardManager cm = (android.content.ClipboardManager) getContext().getSystemService(android.content.Context.CLIPBOARD_SERVICE);
+            cm.setPrimaryClip(android.content.ClipData.newPlainText("text", text));
+            call.resolve();
         } catch (Exception e) { call.reject(e.getMessage()); }
     }
 
