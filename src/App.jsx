@@ -13,7 +13,7 @@ const THEMES = {
   light: { "--bg": "#EEF1F4", "--bar": "#FFFFFF", "--row2": "#E4E8EC", "--acc": "#2F80ED", "--accbg": "rgba(47,128,237,.14)", "--gold": "#2F80ED", "--red": "#D14343", "--txt": "#1E2329", "--ink": "#3D4754", "--sub": "#6B7280", "--line": "#D3D8DE", "--chip": "rgba(0,0,0,.05)", "--hair": "rgba(0,0,0,.08)", "--tgloff": "#C2C8D0" },
 };
 const DIR = Directory.ExternalStorage;
-const APP_VERSION = "fm-2026.07.08-gdrive";
+const APP_VERSION = "fm-2026.07.08-gdcache";
 const TKEY = "fm_tabs_v1", SKEY = "fm_startup_v1", METAKEY = "fm_meta_v1", SORTKEY = "fm_sort_v1";
 const DEFKEY = "fm_defaults_v1", HIDEKEY = "fm_hideapps_v1", ICONKEY = "fm_foldericons_v1", ORDERKEY = "fm_menuorder_v1";
 const loadMap = (k) => { try { return JSON.parse(ls.get(k)) || {}; } catch { return {}; } };
@@ -577,19 +577,31 @@ export default function App() {
   const applyMeta = (m) => { setMeta({ ...m }); saveMeta(m); };
 
   const reqRef = useRef(0);
+  const forceRef = useRef(false);
+  const GDC_KEY = "fm_gd_cache_v1", GDPT_KEY = "fm_gd_ptoken_v1";
+  const gdCacheAll = () => { try { return JSON.parse(localStorage.getItem(GDC_KEY) || "{}"); } catch { return {}; } };
+  const gdCacheGet = (fid) => gdCacheAll()[fid];
+  const gdCacheSet = (fid, files) => { try { const a = gdCacheAll(); a[fid] = files; localStorage.setItem(GDC_KEY, JSON.stringify(a)); } catch {} };
+  const gdCacheClear = () => { try { localStorage.removeItem(GDC_KEY); } catch {} };
   const list = useCallback(async () => {
     const my = ++reqRef.current;
     const src0 = srcRef.current;
     if (src0) {
-      setLoading(true); setError(null);
-      try {
-        let files;
-        if (src0.kind === "gdrive") { const r = await Apps.gdriveList({ folder: src0.folder }); files = (r.files || []).map((f) => ({ name: f.name, type: f.type, size: f.size, remote: "gdrive", uri: f.id, id: f.id, mime: f.mime })); }
-        else { const r = await Apps.webdavList({ url: src0.url, user: src0.acc.user, pass: src0.acc.pass }); files = (r.files || []).map((f) => ({ name: f.name, type: f.type, size: f.size, remote: "webdav", uri: f.url, url: f.url })); }
-        if (my !== reqRef.current) return;
-        setEntries(files);
-      } catch (e) { if (my !== reqRef.current) return; setError((e && e.message) || "Ошибка"); setEntries([]); }
-      if (my === reqRef.current) { setLoading(false); switchingRef.current = false; }
+      setError(null);
+      if (src0.kind === "gdrive") {
+        const fid = src0.folder;
+        const cached = gdCacheGet(fid);
+        if (cached && !forceRef.current) { setEntries(cached); setLoading(false); switchingRef.current = false; return; }
+        setEntries([]); setLoading(true);
+        try { const r = await Apps.gdriveList({ folder: fid }); const files = (r.files || []).map((f) => ({ name: f.name, type: f.type, size: f.size, remote: "gdrive", uri: f.id, id: f.id, mime: f.mime })); if (my !== reqRef.current) return; setEntries(files); gdCacheSet(fid, files); }
+        catch (e) { if (my !== reqRef.current) return; setError((e && e.message) || "Ошибка"); setEntries([]); }
+        if (my === reqRef.current) { setLoading(false); switchingRef.current = false; forceRef.current = false; }
+        return;
+      }
+      setEntries([]); setLoading(true);
+      try { const r = await Apps.webdavList({ url: src0.url, user: src0.acc.user, pass: src0.acc.pass }); const files = (r.files || []).map((f) => ({ name: f.name, type: f.type, size: f.size, remote: "webdav", uri: f.url, url: f.url })); if (my !== reqRef.current) return; setEntries(files); }
+      catch (e) { if (my !== reqRef.current) return; setError((e && e.message) || "Ошибка"); setEntries([]); }
+      if (my === reqRef.current) { setLoading(false); switchingRef.current = false; forceRef.current = false; }
       return;
     }
     setLoading(true); setError(null);
@@ -604,7 +616,7 @@ export default function App() {
       setEntries(files || []);
       if ((files || []).some((f) => f.name === ".icon" && f.type === "directory")) scanIconFolder(path);
     } catch (e) { if (my !== reqRef.current) return; setError(e.message || "Нет доступа к хранилищу"); setEntries([]); }
-    if (my === reqRef.current) { setLoading(false); switchingRef.current = false; }
+    if (my === reqRef.current) { setLoading(false); switchingRef.current = false; forceRef.current = false; }
   }, [path]);
   const scanIconFolder = async (folderPath) => {
     try {
@@ -698,7 +710,7 @@ export default function App() {
     return () => { clearTimeout(t); h && h.remove(); };
   }, [silentRefresh]);
   useEffect(() => { if (curUri) Apps.watch({ uri: curUri }).catch(() => {}); }, [curUri]);
-  useEffect(() => { switchingRef.current = true; list(); exitSel(); setQuery(null); /* eslint-disable-next-line */ }, [active, path, srcKey]);
+  useLayoutEffect(() => { switchingRef.current = true; list(); exitSel(); setQuery(null); /* eslint-disable-next-line */ }, [active, path, srcKey]);
   useEffect(() => { let h; CapApp.addListener("resume", () => list()).then((l) => (h = l)); return () => h && h.remove(); }, [list]);
   useEffect(() => {
     const onVis = () => { if (document.visibilityState === "visible") { checkAccess(); list(); } };
@@ -707,6 +719,13 @@ export default function App() {
     return () => { document.removeEventListener("visibilitychange", onVis); window.removeEventListener("focus", onVis); };
   }, [list]);
   useEffect(() => { ls.set(SORTKEY, sortMode); }, [sortMode]);
+  useEffect(() => {
+    if (!gdIn) return;
+    let dead = false;
+    const tok = localStorage.getItem(GDPT_KEY) || "";
+    Apps.gdriveChanges({ token: tok }).then((r) => { if (dead || !r) return; if (r.token) localStorage.setItem(GDPT_KEY, r.token); if (r.changed) gdCacheClear(); }).catch(() => {});
+    return () => { dead = true; };
+  }, [gdIn]);
   const [propApkIcon, setPropApkIcon] = useState(null);
   useEffect(() => {
     setPropApkIcon(null);
@@ -987,12 +1006,19 @@ export default function App() {
   };
   const remoteTempOpen = (e, src) => {
     setSheet(null); showToast("Загрузка…");
-    const mime = mimeOf(e.name) || "*/*";
     const p = src.kind === "gdrive"
       ? Apps.gdriveGet({ id: e.id, name: e.name, mime: e.mime || "", dest: "temp" })
       : Apps.webdavGet({ url: e.url, user: src.acc.user, pass: src.acc.pass, name: e.name, dest: "temp" });
-    p.then((r) => { const uri = r.uri || ("file://" + r.path); Apps.open({ uri, mime }).catch((er) => showToast("Открытие: " + (er?.message || ""))); })
-      .catch((er) => showToast("Ошибка: " + (er?.message || "")));
+    p.then((r) => {
+      const uri = r.uri || ("file://" + r.path);
+      const te = { name: e.name, uri, type: "file" };
+      const ext = (e.name.split(".").pop() || "").toLowerCase();
+      if (isImg(e.name)) { setViewer({ items: [te], idx: 0 }); setViewerBar(true); setDragX(0); setDragY(0); setZoom(1); setPan({ x: 0, y: 0 }); setViewerDel(false); }
+      else if (isPdf(e.name)) openPdf(te);
+      else if (isAudio(e.name)) { playerList.current = { uris: [uri], names: [e.name] }; Apps.audioOpen({ uris: [uri], names: [e.name], index: 0, autoNext: false }).catch((er) => showToast("Плеер: " + (er?.message || ""))); setPlayer({ idx: 0, count: 1, name: e.name, playing: true, pos: 0, dur: 0 }); setPlayerMenu(false); }
+      else if (EXT.archive.includes(ext)) openArchive(te);
+      else Apps.open({ uri, mime: mimeOf(e.name) || "*/*" }).catch((er) => showToast("Открытие: " + (er?.message || "")));
+    }).catch((er) => showToast("Ошибка: " + (er?.message || "")));
   };
   const remoteCopyLink = (e, src) => {
     setSheet(null);
@@ -1100,7 +1126,7 @@ export default function App() {
   const resetTabs = () => { setTabsMenu(false); setTabs((arr) => { const t = arr.map((x) => ({ ...x, saved: false, startup: false })); saveTabs(t); return t; }); showToast("Вкладки сброшены"); };
 
   /* операции через .uri */
-  const refresh = () => list();
+  const refresh = () => { forceRef.current = true; list(); };
   const targetUri = (name) => (curUri ? curUri + "/" + name : null);
   const doCreateFolder = async (name) => { setSheet(null); if (!name) return; try { await Filesystem.mkdir({ path: targetUri(name) }); refresh(); } catch (e) { showToast("Ошибка: " + e.message); } };
   const doCreateTxt = async (name) => { setSheet(null); if (!name) return; if (!/\.txt$/i.test(name)) name += ".txt"; try { await Filesystem.writeFile({ path: targetUri(name), data: "", encoding: Encoding.UTF8 }); refresh(); } catch (e) { showToast("Ошибка: " + e.message); } };
