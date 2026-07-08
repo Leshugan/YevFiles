@@ -13,7 +13,7 @@ const THEMES = {
   light: { "--bg": "#EEF1F4", "--bar": "#FFFFFF", "--row2": "#E4E8EC", "--acc": "#2F80ED", "--accbg": "rgba(47,128,237,.14)", "--gold": "#2F80ED", "--red": "#D14343", "--txt": "#1E2329", "--ink": "#3D4754", "--sub": "#6B7280", "--line": "#D3D8DE", "--chip": "rgba(0,0,0,.05)", "--hair": "rgba(0,0,0,.08)", "--tgloff": "#C2C8D0" },
 };
 const DIR = Directory.ExternalStorage;
-const APP_VERSION = "fm-2026.07.08-ios2";
+const APP_VERSION = "fm-2026.07.08-drawer";
 const TKEY = "fm_tabs_v1", SKEY = "fm_startup_v1", METAKEY = "fm_meta_v1", SORTKEY = "fm_sort_v1";
 const DEFKEY = "fm_defaults_v1", HIDEKEY = "fm_hideapps_v1", ICONKEY = "fm_foldericons_v1", ORDERKEY = "fm_menuorder_v1";
 const loadMap = (k) => { try { return JSON.parse(ls.get(k)) || {}; } catch { return {}; } };
@@ -319,19 +319,56 @@ export default function App() {
   const dItemRefs = useRef({});
   const dRenderedRef = useRef([]);
   const dLp = useRef(); const dMovedR = useRef(false); const dLpFired = useRef(false); const dStartY = useRef(0);
+  const dRects = useRef([]); const dTo = useRef(-1); const dDragPid = useRef(null); const dDragIdRef = useRef(null);
+  const clearDDrag = () => { Object.values(dItemRefs.current).forEach((el) => { if (el) el.style.transform = ""; }); };
   const persistDOrder = (list) => { const ids = list.map((x) => x.id); localStorage.setItem(DORDERKEY, JSON.stringify(ids)); setDrawerOrder(ids); };
-  const dDown = (ev, id) => { dMovedR.current = false; dLpFired.current = false; dStartY.current = ev.clientY; dLp.current = setTimeout(() => { dLpFired.current = true; setDDragId(id); buzz(15); }, 350); };
-  const dMove = (ev) => {
-    if (!dDragId && Math.abs(ev.clientY - dStartY.current) > 8) { dMovedR.current = true; clearTimeout(dLp.current); }
-    if (!dDragId) return;
-    ev.preventDefault();
-    const list = dRenderedRef.current, y = ev.clientY;
-    let over = list.findIndex((it) => { const el = dItemRefs.current[it.id]; if (!el) return false; const r = el.getBoundingClientRect(); return y < r.top + r.height / 2; });
-    if (over < 0) over = list.length - 1;
-    const from = list.findIndex((it) => it.id === dDragId);
-    if (from !== -1 && over !== -1 && from !== over) { const nl = [...list]; const [m] = nl.splice(from, 1); nl.splice(over, 0, m); persistDOrder(nl); }
+  const dDown = (ev, id) => {
+    dMovedR.current = false; dLpFired.current = false; dStartY.current = ev.clientY;
+    const pid = ev.pointerId, tgt = ev.currentTarget;
+    clearTimeout(dLp.current);
+    dLp.current = setTimeout(() => {
+      if (dMovedR.current) return;
+      const list = dRenderedRef.current;
+      dRects.current = list.map((it) => { const el = dItemRefs.current[it.id]; return el ? el.getBoundingClientRect() : null; });
+      dLpFired.current = true; dDragPid.current = pid; dDragIdRef.current = id; dTo.current = list.findIndex((it) => it.id === id);
+      setDDragId(id); buzz(15);
+      try { tgt.setPointerCapture(pid); } catch {}
+    }, 250);
   };
-  const dUp = (item) => { clearTimeout(dLp.current); if (dDragId) { setDDragId(null); return; } if (dLpFired.current || dMovedR.current) return; if (item.kind === "wd") openWebdav(item.a); else if (item.kind === "gd") openGDrive(); else { setDrawer(false); setTabPath(item.p); } };
+  const dMove = (ev) => {
+    if (!dLpFired.current) { if (Math.abs(ev.clientY - dStartY.current) > 8) { dMovedR.current = true; clearTimeout(dLp.current); } return; }
+    ev.preventDefault();
+    const list = dRenderedRef.current;
+    const from = list.findIndex((it) => it.id === dDragIdRef.current);
+    const rf = dRects.current[from]; if (!rf) return;
+    const dy = ev.clientY - dStartY.current;
+    const fingerY = rf.top + rf.height / 2 + dy;
+    let count = 0;
+    for (let j = 0; j < dRects.current.length; j++) { const r = dRects.current[j]; if (!r || j === from) continue; if (r.top + r.height / 2 < fingerY) count++; }
+    let to = count; if (to < 0) to = 0; if (to > list.length - 1) to = list.length - 1;
+    dTo.current = to;
+    const span = rf.height;
+    for (let j = 0; j < list.length; j++) {
+      const el = dItemRefs.current[list[j].id]; if (!el) continue;
+      if (j === from) { el.style.transform = "translateY(" + dy + "px)"; continue; }
+      let t = 0;
+      if (from < to && j > from && j <= to) t = -span;
+      else if (to < from && j >= to && j < from) t = span;
+      el.style.transform = t ? "translateY(" + t + "px)" : "translateY(0)";
+    }
+  };
+  const dUp = (item) => {
+    clearTimeout(dLp.current);
+    try { if (dDragPid.current != null) { const el = dItemRefs.current[dDragIdRef.current]; el && el.releasePointerCapture(dDragPid.current); } } catch {}
+    if (dLpFired.current) {
+      const list = dRenderedRef.current, from = list.findIndex((it) => it.id === dDragIdRef.current), to = dTo.current;
+      dLpFired.current = false; dDragIdRef.current = null; clearDDrag(); setDDragId(null);
+      if (from !== -1 && to !== -1 && from !== to) { const nl = [...list]; const [m] = nl.splice(from, 1); nl.splice(to, 0, m); persistDOrder(nl); }
+      return;
+    }
+    if (dMovedR.current) return;
+    if (item.kind === "wd") openWebdav(item.a); else if (item.kind === "gd") openGDrive(); else { setDrawer(false); setTabPath(item.p); }
+  };
   const [webdavs, setWebdavs] = useState([]);
   const [wdForm, setWdForm] = useState(null);
   const [wd, setWd] = useState(null);
@@ -1612,8 +1649,8 @@ export default function App() {
                 dRenderedRef.current = rendered;
                 return rendered.map((it) => (
                   <div key={it.id} ref={(el) => (dItemRefs.current[it.id] = el)}
-                    onPointerDown={(ev) => dDown(ev, it.id)} onPointerMove={dMove} onPointerUp={() => dUp(it)} onPointerCancel={() => { clearTimeout(dLp.current); setDDragId(null); }}
-                    style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", borderTop: "1px solid " + LINE, background: dDragId === it.id ? ROW2 : "transparent", opacity: dDragId && dDragId !== it.id ? 0.6 : 1, boxShadow: dDragId === it.id ? "0 6px 18px rgba(0,0,0,.5)" : "none", touchAction: "none" }}>
+                    onPointerDown={(ev) => dDown(ev, it.id)} onPointerMove={dMove} onPointerUp={() => dUp(it)} onPointerCancel={() => { clearTimeout(dLp.current); dLpFired.current = false; dDragIdRef.current = null; clearDDrag(); setDDragId(null); }}
+                    style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", borderTop: "1px solid " + LINE, background: dDragId === it.id ? ROW2 : "transparent", opacity: dDragId && dDragId !== it.id ? 0.6 : 1, boxShadow: dDragId === it.id ? "0 6px 18px rgba(0,0,0,.5)" : "none", touchAction: "none", transition: dDragId === it.id ? "none" : (dDragId ? "transform .18s cubic-bezier(.2,.8,.2,1)" : "none"), ...(dDragId === it.id ? { position: "relative", zIndex: 3 } : {}) }}>
                     {it.kind === "wd" && <>
                       <span style={{ width: 40, height: 40, borderRadius: 20, background: "#5AA9E622", color: "#5AA9E6", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Svg d={I.dl} size={22} /></span>
                       <div style={{ minWidth: 0, flex: 1 }}><div style={{ color: TXT, fontSize: 16, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.a.name}</div><div style={{ color: SUB, fontSize: 12 }}>WebDAV</div></div>
