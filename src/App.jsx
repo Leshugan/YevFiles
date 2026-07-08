@@ -13,7 +13,7 @@ const THEMES = {
   light: { "--bg": "#EEF1F4", "--bar": "#FFFFFF", "--row2": "#E4E8EC", "--acc": "#2F80ED", "--accbg": "rgba(47,128,237,.14)", "--gold": "#2F80ED", "--red": "#D14343", "--txt": "#1E2329", "--ink": "#3D4754", "--sub": "#6B7280", "--line": "#D3D8DE", "--chip": "rgba(0,0,0,.05)", "--hair": "rgba(0,0,0,.08)", "--tgloff": "#C2C8D0" },
 };
 const DIR = Directory.ExternalStorage;
-const APP_VERSION = "fm-2026.07.02-sort";
+const APP_VERSION = "fm-2026.07.08-ui";
 const TKEY = "fm_tabs_v1", SKEY = "fm_startup_v1", METAKEY = "fm_meta_v1", SORTKEY = "fm_sort_v1";
 const DEFKEY = "fm_defaults_v1", HIDEKEY = "fm_hideapps_v1", ICONKEY = "fm_foldericons_v1", ORDERKEY = "fm_menuorder_v1";
 const loadMap = (k) => { try { return JSON.parse(ls.get(k)) || {}; } catch { return {}; } };
@@ -106,7 +106,7 @@ const I = {
   selectAll: <><rect x="4" y="4" width="16" height="16" rx="4" /><path d="M8.5 12l2.5 2.5 4.5-5" /></>,
   chev: <path d="M6 9l6 6 6-6" />,
   bars: <path d="M4 6h16M4 12h16M4 18h16" />,
-  gdrive: <g stroke="none"><path fill="#2684FC" d="M7.7 20.5h9.9l-2.6-4.5H10.3z" /><path fill="#00AC47" d="M9.6 3.5L2 16.7l2.5 4.3 7.6-13.2z" /><path fill="#FFBA00" d="M14.4 3.5H9.6l7.6 13.2h4.8z" /></g>,
+  gdrive: <g stroke="none" fill="currentColor"><path d="M7.7 20.5h9.9l-2.6-4.5H10.3z" opacity=".55" /><path d="M9.6 3.5L2 16.7l2.5 4.3 7.6-13.2z" /><path d="M14.4 3.5H9.6l7.6 13.2h4.8z" opacity=".8" /></g>,
   refresh: <><path d="M21 12a9 9 0 1 1-2.6-6.4" /><path d="M21 4v5h-5" /></>,
   plus: <><path d="M12 5v14" /><path d="M5 12h14" /></>,
   x: <><path d="M6 6l12 12" /><path d="M18 6L6 18" /></>,
@@ -118,7 +118,7 @@ const I = {
   info: <><circle cx="12" cy="12" r="9" /><path d="M12 11v5M12 8h.01" /></>,
   share: <><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4" /></>,
   openext: <><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /><path d="M15 3h6v6" /><path d="M10 14L21 3" /></>,
-  dots: <><circle cx="12" cy="5" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="12" cy="19" r="1.6" /></>,
+  dots: <g fill="currentColor" stroke="none"><circle cx="12" cy="5" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="12" cy="19" r="2" /></g>,
   sun: <><circle cx="12" cy="12" r="4.5" /><path d="M12 2v2M12 20v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M2 12h2M20 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4" /></>,
   moon: <><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" /></>,
   sort: <><path d="M7 4v16M7 20l-3-3M7 4l3 3" /><path d="M17 20V4M17 4l3 3M17 20l-3-3" /></>,
@@ -982,20 +982,58 @@ export default function App() {
   const onTS = (e) => { sx.current = e.touches[0].clientX; sy.current = e.touches[0].clientY; swiped.current = false; };
   const onTM = (e) => { const dx = e.touches[0].clientX - sx.current, dy = e.touches[0].clientY - sy.current; if (!swiped.current && Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy) * 1.3) { swiped.current = true; switchTab(dx > 0 ? -1 : 1); } };
   const tabRefs = useRef([]);
-  const tabDrag = useRef({ from: -1, x0: 0, active: false });
-  const moveTab = (from, to) => { setTabs((arr) => { const a = [...arr]; const [m] = a.splice(from, 1); a.splice(to, 0, m); return a; }); setActive(to); };
-  const persistCurrent = () => setTabs((cur) => { saveTabs(cur); return cur; });
-  const onTabDown = (ev, i) => { const d = tabDrag.current; d.from = i; d.x0 = ev.clientX; d.active = false; };
+  const [tabDragId, setTabDragId] = useState(null);
+  const tabDrag = useRef({ pid: null, from: -1, to: -1, startX: 0, startY: 0, rects: [], gap: 6, active: false, moved: false });
+  const tabLp = useRef(null);
+  const clearTabDrag = () => { tabRefs.current.forEach((el) => { if (el) el.style.transform = ""; }); };
+  const onTabDown = (ev, i) => {
+    const d = tabDrag.current;
+    d.pid = ev.pointerId; d.from = i; d.to = i; d.startX = ev.clientX; d.startY = ev.clientY; d.active = false; d.moved = false;
+    const tgt = ev.currentTarget;
+    clearTimeout(tabLp.current);
+    tabLp.current = setTimeout(() => {
+      if (d.moved || d.from < 0) return;
+      d.rects = tabRefs.current.map((el) => (el ? el.getBoundingClientRect() : null));
+      d.active = true; d.to = i; buzz(15); setTabDragId(tabs[i].id);
+      try { tgt.setPointerCapture(d.pid); } catch {}
+    }, 300);
+  };
   const onTabMove = (ev) => {
     const d = tabDrag.current; if (d.from < 0) return;
-    if (!d.active && Math.abs(ev.clientX - d.x0) > 12) d.active = true;
-    if (d.active) {
-      let target = d.from;
-      for (let j = 0; j < tabRefs.current.length; j++) { const el = tabRefs.current[j]; if (!el) continue; const r = el.getBoundingClientRect(); if (ev.clientX >= r.left && ev.clientX <= r.right) { target = j; break; } }
-      if (target !== d.from && target >= 0) { moveTab(d.from, target); d.from = target; }
+    if (!d.active) { if (Math.abs(ev.clientX - d.startX) > 8 || Math.abs(ev.clientY - d.startY) > 8) { d.moved = true; clearTimeout(tabLp.current); } return; }
+    ev.preventDefault();
+    const rf = d.rects[d.from]; if (!rf) return;
+    const dx = ev.clientX - d.startX;
+    const fingerX = rf.left + rf.width / 2 + dx;
+    let count = 0;
+    for (let j = 0; j < d.rects.length; j++) { const r = d.rects[j]; if (!r || j === d.from) continue; if (r.left + r.width / 2 < fingerX) count++; }
+    let to = count; if (to < 0) to = 0; if (to > d.rects.length - 1) to = d.rects.length - 1;
+    d.to = to;
+    const span = rf.width + d.gap;
+    for (let j = 0; j < d.rects.length; j++) {
+      const el = tabRefs.current[j]; if (!el) continue;
+      if (j === d.from) { el.style.transform = "translateX(" + dx + "px) scale(1.06)"; continue; }
+      let t = 0;
+      if (d.from < to && j > d.from && j <= to) t = -span;
+      else if (to < d.from && j >= to && j < d.from) t = span;
+      el.style.transform = t ? "translateX(" + t + "px)" : "translateX(0)";
     }
   };
-  const onTabUp = (i) => { const d = tabDrag.current; if (d.active) { d.active = false; persistCurrent(); } else { const dir = i > active ? 1 : i < active ? -1 : 0; if (dir) { setSlide(dir); setTimeout(() => setSlide(0), 300); } setActive(i); } d.from = -1; };
+  const onTabUp = (i) => {
+    const d = tabDrag.current;
+    clearTimeout(tabLp.current);
+    try { if (d.pid != null && tabRefs.current[d.from]) tabRefs.current[d.from].releasePointerCapture(d.pid); } catch {}
+    if (d.active) {
+      const from = d.from, to = d.to;
+      d.active = false; d.from = -1; clearTabDrag(); setTabDragId(null);
+      if (to !== from && to >= 0) { setTabs((arr) => { const a = [...arr]; const [m] = a.splice(from, 1); a.splice(to, 0, m); saveTabs(a); return a; }); setActive(to); }
+      return;
+    }
+    d.from = -1; clearTabDrag(); setTabDragId(null);
+    const dir = i > active ? 1 : i < active ? -1 : 0; if (dir) { setSlide(dir); setTimeout(() => setSlide(0), 300); }
+    setActive(i);
+  };
+  const onTabCancel = () => { const d = tabDrag.current; clearTimeout(tabLp.current); d.active = false; d.from = -1; clearTabDrag(); setTabDragId(null); };
 
   const saveAllTabs = () => { setTabsMenu(false); const t = tabs.map((x) => ({ ...x, saved: true })); persist(t); showToast("Вкладки сохранены"); };
   const startupHere = () => { setTabsMenu(false); const t = tabs.map((x, i) => ({ ...x, startup: i === active, startupPath: i === active ? path : x.startupPath, saved: i === active ? true : x.saved })); persist(t); showToast("Запуск при открытии: " + (path ? baseName(path) : "Storage")); };
@@ -1135,17 +1173,18 @@ export default function App() {
   const cmp = (a, b) => {
     if (sortMode === "az") return nameCmp(a.name, b.name);
     if (sortMode === "za") return nameCmp(b.name, a.name);
-    if (sortMode === "sizeA") return (a.size || 0) - (b.size || 0);
-    if (sortMode === "sizeD") return (b.size || 0) - (a.size || 0);
-    if (sortMode === "dateN") return (b.mtime || 0) - (a.mtime || 0);
-    if (sortMode === "dateO") return (a.mtime || 0) - (b.mtime || 0);
-    return 0;
+    if (sortMode === "sizeA") return ((a.size || 0) - (b.size || 0)) || nameCmp(a.name, b.name);
+    if (sortMode === "sizeD") return ((b.size || 0) - (a.size || 0)) || nameCmp(a.name, b.name);
+    if (sortMode === "dateN") return ((b.mtime || 0) - (a.mtime || 0)) || nameCmp(a.name, b.name);
+    if (sortMode === "dateO") return ((a.mtime || 0) - (b.mtime || 0)) || nameCmp(a.name, b.name);
+    return nameCmp(a.name, b.name);
   };
   let visible = entries.filter((e) => showHidden || !isHidden(e));
   const dq = useDeferredValue((query || "").toLowerCase());
   if (dq) visible = visible.filter((e) => e.name.toLowerCase().includes(dq));
-  const isSysFolder = (e) => path === "" && e.type === "directory" && REAL_SYS.has(e.name.toLowerCase());
-  const rank = (e) => (meta.pinTop.has(keyOf(e.name)) ? -1 : meta.pinBot.has(keyOf(e.name)) ? 1 : 0);
+  const isRemote = !!(cur && cur.src);
+  const isSysFolder = (e) => !isRemote && path === "" && e.type === "directory" && REAL_SYS.has(e.name.toLowerCase());
+  const rank = (e) => (isRemote ? 0 : meta.pinTop.has(keyOf(e.name)) ? -1 : meta.pinBot.has(keyOf(e.name)) ? 1 : 0);
   visible = [...visible].sort((a, b) => {
     // 1) закреплённые сверху/снизу
     const ra = rank(a), rb = rank(b);
@@ -1185,19 +1224,19 @@ export default function App() {
       {/* ВКЛАДКИ + действия шапки */}
       <div style={S.tabsbar}>
         <div style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "center", height: "100%", padding: "0 6px" }}>
-          <button style={{ ...S.hbtn, width: 32, height: 32 }} onClick={() => setDrawer(true)}><Svg d={I.bars} size={22} /></button>
+          <button style={{ ...S.hbtn }} onClick={() => setDrawer(true)}><Svg d={I.bars} size={20} /></button>
         </div>
-        <div style={S.tabs}>
+        <div style={{ ...S.tabs, overflowX: tabDragId ? "visible" : "auto" }}>
           {tabs.map((t, i) => (
             <div key={t.id} ref={(el) => (tabRefs.current[i] = el)}
-              onPointerDown={(ev) => onTabDown(ev, i)} onPointerMove={onTabMove} onPointerUp={() => onTabUp(i)} onPointerCancel={() => onTabUp(i)}
-              style={{ ...S.tab, ...(i === active ? S.tabActive : {}) }}>
+              onPointerDown={(ev) => onTabDown(ev, i)} onPointerMove={onTabMove} onPointerUp={() => onTabUp(i)} onPointerCancel={onTabCancel}
+              style={{ ...S.tab, ...(i === active ? S.tabActive : {}), touchAction: tabDragId ? "none" : "auto", transition: t.id === tabDragId ? "none" : (tabDragId ? "transform .16s cubic-bezier(.2,.9,.3,1)" : "box-shadow .15s"), ...(t.id === tabDragId ? { zIndex: 6, position: "relative", boxShadow: "0 10px 24px rgba(0,0,0,.5)" } : (tabDragId ? { opacity: 0.5 } : {})) }}>
               <span style={{ overflow: "hidden", textOverflow: "ellipsis", maxWidth: 130 }}>{t.src ? t.src.stack[t.src.stack.length - 1].name : (t.path ? baseName(t.path) : "Storage")}</span>
             </div>
           ))}
         </div>
         <div style={{ position: "relative" }}>
-          <button style={S.hbtn} onClick={() => setHeadMenu((v) => !v)}><Svg d={I.dots} size={22} /></button>
+          <button style={S.hbtn} onClick={() => setHeadMenu((v) => !v)}><Svg d={I.dots} size={20} /></button>
           {headMenu && (
             <>
               <div style={S.overlay} onClick={() => setHeadMenu(false)} />
@@ -1580,7 +1619,7 @@ export default function App() {
                       <button onPointerDown={(ev) => ev.stopPropagation()} onClick={(ev) => { ev.stopPropagation(); delWebdav(webdavs.indexOf(it.a)); }} aria-label="Удалить" style={{ background: "none", border: "none", color: RED, display: "flex", padding: 6, flexShrink: 0 }}><Svg d={I.x} size={18} /></button>
                     </>}
                     {it.kind === "gd" && <>
-                      <span style={{ width: 40, height: 40, borderRadius: 20, background: "#fff", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Svg d={I.gdrive} size={24} /></span>
+                      <span style={{ width: 40, height: 40, borderRadius: 20, background: "var(--accbg)", color: ACC, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Svg d={I.gdrive} size={24} /></span>
                       <div style={{ minWidth: 0, flex: 1 }}><div style={{ color: TXT, fontSize: 16, fontWeight: 600 }}>Google Drive</div><div style={{ color: SUB, fontSize: 12 }}>Подключён</div></div>
                       <button onPointerDown={(ev) => ev.stopPropagation()} onClick={(ev) => { ev.stopPropagation(); Apps.gdriveLogout().catch(() => {}); setGdIn(false); }} aria-label="Выйти" style={{ background: "none", border: "none", color: RED, display: "flex", padding: 6, flexShrink: 0 }}><Svg d={I.x} size={18} /></button>
                     </>}
@@ -1597,7 +1636,7 @@ export default function App() {
               <button onClick={() => setPlusMenu((v) => !v)} aria-label="Добавить" style={{ width: 34, height: 34, borderRadius: 17, background: ROW2, border: "1px solid " + LINE, color: ACC, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Svg d={I.plus} size={22} /></button>
               {plusMenu && (
                 <div style={{ position: "absolute", right: 10, bottom: "calc(100% + 4px)", background: BAR, border: "1px solid " + LINE, borderRadius: 12, overflow: "hidden", minWidth: 190, boxShadow: "0 8px 24px rgba(0,0,0,.5)" }}>
-                  {!gdIn && <div style={S.menuItem} onClick={() => { setPlusMenu(false); googleLogin(); }}><span style={{ background: "#fff", borderRadius: 6, display: "flex", padding: 1 }}><Svg d={I.gdrive} size={18} /></span>Google Drive</div>}
+                  {!gdIn && <div style={S.menuItem} onClick={() => { setPlusMenu(false); googleLogin(); }}><span style={{ background: "var(--accbg)", color: ACC, borderRadius: 8, display: "flex", padding: 4 }}><Svg d={I.gdrive} size={18} /></span>Google Drive</div>}
                   <div style={S.menuItem} onClick={() => { setPlusMenu(false); setDrawer(false); setWdForm({ name: "", url: "", user: "", pass: "" }); }}><span style={{ color: "#5AA9E6", display: "flex" }}><Svg d={I.dl} size={20} /></span>WebDAV</div>
                 </div>
               )}
@@ -2215,12 +2254,12 @@ function Btn({ onClick, icon, text, label, accent, red, flexNone, disabled }) {
 
 const S = {
   app: { position: "relative", display: "flex", flexDirection: "column", height: "100vh", background: BG, color: TXT, fontFamily: "system-ui,-apple-system,Roboto,sans-serif", overflow: "hidden" },
-  tabsbar: { display: "flex", alignItems: "center", background: BAR, flexShrink: 0, height: 50, margin: "8px 8px 6px", borderRadius: 24, boxShadow: "0 1px 0 rgba(255,255,255,.06) inset, 0 8px 22px -10px rgba(0,0,0,.6)" },
+  tabsbar: { display: "flex", alignItems: "center", background: "linear-gradient(180deg, rgba(255,255,255,.06), rgba(0,0,0,.05)), var(--bar)", flexShrink: 0, height: 50, margin: "8px 8px 6px", borderRadius: 24, border: "1px solid var(--hair)", boxShadow: "0 1px 0 rgba(255,255,255,.1) inset, 0 -1px 0 rgba(0,0,0,.15) inset, 0 10px 24px -12px rgba(0,0,0,.7)" },
   tabs: { display: "flex", overflowX: "auto", flex: 1, alignItems: "center", justifyContent: "center", gap: 6, padding: "0 4px", height: "100%" },
   tab: { display: "flex", alignItems: "center", gap: 6, padding: "0 12px", height: 34, borderRadius: 17, fontSize: 13.5, color: SUB, whiteSpace: "nowrap", background: "var(--chip)", flexShrink: 0, border: "1px solid transparent" },
   tabActive: { color: ACC, background: "var(--accbg)", border: "1px solid " + ACC, fontWeight: 600, boxShadow: "0 0 0 1px var(--accbg), 0 2px 8px var(--accbg)" },
   tabX: { fontSize: 17, color: SUB, padding: "0 2px" },
-  hbtn: { border: "none", background: "transparent", color: TXT, width: 40, height: 48, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" },
+  hbtn: { border: "1px solid var(--hair)", background: "linear-gradient(180deg, rgba(255,255,255,.08), rgba(0,0,0,.06)), var(--chip)", color: TXT, width: 36, height: 36, borderRadius: 18, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: 0, boxShadow: "0 1px 0 rgba(255,255,255,.12) inset, 0 2px 6px rgba(0,0,0,.28)" },
   crumb: { position: "relative", zIndex: 6, height: 30, display: "flex", alignItems: "center", padding: "0 16px", fontSize: 12.5, background: "transparent", flexShrink: 0, overflow: "visible", whiteSpace: "nowrap" },
   list: { flex: 1, overflowY: "auto", overflowX: "hidden", display: "flex", flexDirection: "column" },
   slideWrap: { display: "flex", flexDirection: "column" },
@@ -2249,7 +2288,7 @@ const S = {
   searchBar: { display: "flex", alignItems: "center", background: ROW2, padding: 8, gap: 8, flexShrink: 0 },
   searchInput: { flex: 1, padding: "10px 12px", borderRadius: 8, border: "1px solid " + LINE, background: BAR, color: TXT, fontSize: 15, outline: "none" },
   searchClose: { border: "none", background: "transparent", color: SUB, fontSize: 24, width: 40 },
-  bottom: { display: "flex", alignItems: "center", background: BAR, flexShrink: 0, borderRadius: 26, margin: "4px 8px calc(8px + env(safe-area-inset-bottom))", boxShadow: "0 1px 0 rgba(255,255,255,.06) inset, 0 8px 24px -10px rgba(0,0,0,.6)" },
+  bottom: { display: "flex", alignItems: "center", background: "linear-gradient(180deg, rgba(255,255,255,.06), rgba(0,0,0,.05)), var(--bar)", flexShrink: 0, borderRadius: 26, margin: "4px 8px calc(8px + env(safe-area-inset-bottom))", border: "1px solid var(--hair)", boxShadow: "0 1px 0 rgba(255,255,255,.1) inset, 0 -1px 0 rgba(0,0,0,.15) inset, 0 10px 26px -12px rgba(0,0,0,.7)" },
   btn: { border: "none", background: "transparent", padding: "6px 6px 7px", display: "flex", flexDirection: "column", alignItems: "center", gap: 2 },
   selCount: { width: 22, height: 22, borderRadius: 11, background: ACC, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0, lineHeight: 0 },
   btnLabel: { fontSize: 10, color: SUB, whiteSpace: "nowrap" },
