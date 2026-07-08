@@ -13,7 +13,7 @@ const THEMES = {
   light: { "--bg": "#EEF1F4", "--bar": "#FFFFFF", "--row2": "#E4E8EC", "--acc": "#2F80ED", "--accbg": "rgba(47,128,237,.14)", "--gold": "#2F80ED", "--red": "#D14343", "--txt": "#1E2329", "--ink": "#3D4754", "--sub": "#6B7280", "--line": "#D3D8DE", "--chip": "rgba(0,0,0,.05)", "--hair": "rgba(0,0,0,.08)", "--tgloff": "#C2C8D0" },
 };
 const DIR = Directory.ExternalStorage;
-const APP_VERSION = "fm-2026.07.08-drawer";
+const APP_VERSION = "fm-2026.07.08-gdrive";
 const TKEY = "fm_tabs_v1", SKEY = "fm_startup_v1", METAKEY = "fm_meta_v1", SORTKEY = "fm_sort_v1";
 const DEFKEY = "fm_defaults_v1", HIDEKEY = "fm_hideapps_v1", ICONKEY = "fm_foldericons_v1", ORDERKEY = "fm_menuorder_v1";
 const loadMap = (k) => { try { return JSON.parse(ls.get(k)) || {}; } catch { return {}; } };
@@ -576,7 +576,9 @@ export default function App() {
 
   const applyMeta = (m) => { setMeta({ ...m }); saveMeta(m); };
 
+  const reqRef = useRef(0);
   const list = useCallback(async () => {
+    const my = ++reqRef.current;
     const src0 = srcRef.current;
     if (src0) {
       setLoading(true); setError(null);
@@ -584,22 +586,25 @@ export default function App() {
         let files;
         if (src0.kind === "gdrive") { const r = await Apps.gdriveList({ folder: src0.folder }); files = (r.files || []).map((f) => ({ name: f.name, type: f.type, size: f.size, remote: "gdrive", uri: f.id, id: f.id, mime: f.mime })); }
         else { const r = await Apps.webdavList({ url: src0.url, user: src0.acc.user, pass: src0.acc.pass }); files = (r.files || []).map((f) => ({ name: f.name, type: f.type, size: f.size, remote: "webdav", uri: f.url, url: f.url })); }
+        if (my !== reqRef.current) return;
         setEntries(files);
-      } catch (e) { setError((e && e.message) || "Ошибка"); setEntries([]); }
-      setLoading(false); switchingRef.current = false;
+      } catch (e) { if (my !== reqRef.current) return; setError((e && e.message) || "Ошибка"); setEntries([]); }
+      if (my === reqRef.current) { setLoading(false); switchingRef.current = false; }
       return;
     }
     setLoading(true); setError(null);
     try {
       const u = await Filesystem.getUri({ path, directory: DIR });
+      if (my !== reqRef.current) return;
       setCurUri(u.uri);
       let files;
       try { const r = await Apps.list({ uri: u.uri }); files = r.files; }
       catch (er) { showToast("Системное чтение недоступно: " + (er?.message || "ошибка плагина")); const r = await Filesystem.readdir({ path, directory: DIR }); files = r.files; }
+      if (my !== reqRef.current) return;
       setEntries(files || []);
       if ((files || []).some((f) => f.name === ".icon" && f.type === "directory")) scanIconFolder(path);
-    } catch (e) { setError(e.message || "Нет доступа к хранилищу"); setEntries([]); }
-    setLoading(false); switchingRef.current = false;
+    } catch (e) { if (my !== reqRef.current) return; setError(e.message || "Нет доступа к хранилищу"); setEntries([]); }
+    if (my === reqRef.current) { setLoading(false); switchingRef.current = false; }
   }, [path]);
   const scanIconFolder = async (folderPath) => {
     try {
@@ -977,11 +982,28 @@ export default function App() {
       setSlide(1); setTimeout(() => setSlide(0), 300);
       setTabs((ts) => ts.map((t, i) => (i === active ? { ...t, src: src.kind === "gdrive" ? { ...src, folder: e.id, stack: [...src.stack, { id: e.id, name: e.name }] } : { ...src, url: e.url, stack: [...src.stack, { url: e.url, name: e.name }] } } : t)));
     } else {
-      showToast("Загрузка…");
-      const done = () => showToast("Скачано → Download/" + e.name), fail = (er) => showToast("Ошибка: " + (er?.message || ""));
-      if (src.kind === "gdrive") Apps.gdriveGet({ id: e.id, name: e.name, mime: e.mime || "" }).then(done).catch(fail);
-      else Apps.webdavGet({ url: e.url, user: src.acc.user, pass: src.acc.pass, name: e.name }).then(done).catch(fail);
+      setSheet({ kind: "remote", file: e, src });
     }
+  };
+  const remoteTempOpen = (e, src) => {
+    setSheet(null); showToast("Загрузка…");
+    const mime = mimeOf(e.name) || "*/*";
+    const p = src.kind === "gdrive"
+      ? Apps.gdriveGet({ id: e.id, name: e.name, mime: e.mime || "", dest: "temp" })
+      : Apps.webdavGet({ url: e.url, user: src.acc.user, pass: src.acc.pass, name: e.name, dest: "temp" });
+    p.then((r) => { const uri = r.uri || ("file://" + r.path); Apps.open({ uri, mime }).catch((er) => showToast("Открытие: " + (er?.message || ""))); })
+      .catch((er) => showToast("Ошибка: " + (er?.message || "")));
+  };
+  const remoteCopyLink = (e, src) => {
+    setSheet(null);
+    if (src.kind === "gdrive") Apps.gdriveLink({ id: e.id }).then((r) => { Apps.copyText({ text: r.url }); showToast("Прямая ссылка скопирована"); }).catch((er) => showToast("Ошибка: " + (er?.message || "")));
+    else { Apps.copyText({ text: e.url }); showToast("Прямая ссылка скопирована"); }
+  };
+  const remoteDownload = (e, src) => {
+    setSheet(null); showToast("Загрузка…");
+    const done = () => showToast("Скачано → Download/" + e.name), fail = (er) => showToast("Ошибка: " + (er?.message || ""));
+    if (src.kind === "gdrive") Apps.gdriveGet({ id: e.id, name: e.name, mime: e.mime || "" }).then(done).catch(fail);
+    else Apps.webdavGet({ url: e.url, user: src.acc.user, pass: src.acc.pass, name: e.name }).then(done).catch(fail);
   };
   const open = (e, ev) => {
     if (selMode) { toggle(e.name); return; }
@@ -1228,8 +1250,8 @@ export default function App() {
     const ra = rank(a), rb = rank(b);
     if (ra !== rb) return ra - rb;
     const ad = a.type === "directory", bd = b.type === "directory";
-    // 2) системные папки сверху → весь список по алфавиту (не конфликтует с активной сортировкой)
-    if (sysTop) {
+    // 2) системные папки сверху → весь список по алфавиту (только локально, не для Drive/WebDAV)
+    if (sysTop && !isRemote) {
       const sa = isSysFolder(a) ? 0 : 1, sb = isSysFolder(b) ? 0 : 1;
       if (sa !== sb) return sa - sb;
       if (ad !== bd) return ad ? -1 : 1;
@@ -1599,11 +1621,17 @@ export default function App() {
                 ))}
               </>
             )}
+            {sheet.kind === "remote" && (
+              <>
+                <div style={{ ...S.sheetTitle, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sheet.file.name}</div>
+                <div style={S.sortRow} onClick={() => remoteTempOpen(sheet.file, sheet.src)}>Сохранить во временной папке</div>
+                <div style={S.sortRow} onClick={() => remoteCopyLink(sheet.file, sheet.src)}>Прямая ссылка</div>
+                <div style={S.sortRow} onClick={() => remoteDownload(sheet.file, sheet.src)}>Скачать в Download</div>
+              </>
+            )}
           </div>
         </div>
       )}
-
-      {/* СВОЙСТВА */}
       {/* ПРОСМОТРЩИК ИЗОБРАЖЕНИЙ */}
       {player && (
         <div style={{ position: "fixed", left: 8, right: 8, bottom: "calc(78px + env(safe-area-inset-bottom))", zIndex: 70, background: BAR, borderRadius: 20, padding: "10px 12px 10px", boxShadow: "0 8px 28px rgba(0,0,0,.55)", border: "1px solid " + LINE }}>
