@@ -1262,6 +1262,39 @@ public class AppsPlugin extends Plugin {
         } catch (Exception e) { call.reject(e.getMessage()); }
     }
 
+    private org.json.JSONObject gdJson(String url) throws Exception {
+        java.net.HttpURLConnection c = (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
+        c.setRequestProperty("Authorization", "Bearer " + gdToken); c.setConnectTimeout(15000); c.setReadTimeout(30000);
+        int code = c.getResponseCode();
+        java.io.InputStream is = code >= 400 ? c.getErrorStream() : c.getInputStream();
+        String body = new String(readAll(is), "UTF-8");
+        if (code >= 400) throw new Exception("HTTP " + code);
+        return new org.json.JSONObject(body);
+    }
+
+    @PluginMethod
+    public void gdriveChanges(PluginCall call) {
+        try {
+            gdEnsure();
+            String token = call.getString("token", "");
+            JSObject res = new JSObject();
+            if (token == null || token.isEmpty()) {
+                org.json.JSONObject o = gdJson("https://www.googleapis.com/drive/v3/changes/startPageToken");
+                res.put("changed", false); res.put("token", o.optString("startPageToken", "")); call.resolve(res); return;
+            }
+            boolean changed = false; String page = token, next = token;
+            for (int guard = 0; guard < 50 && page != null && !page.isEmpty(); guard++) {
+                org.json.JSONObject o = gdJson("https://www.googleapis.com/drive/v3/changes?pageToken=" + page + "&pageSize=200&fields=newStartPageToken,nextPageToken,changes(fileId)");
+                org.json.JSONArray ch = o.optJSONArray("changes");
+                if (ch != null && ch.length() > 0) changed = true;
+                String np = o.optString("nextPageToken", "");
+                if (!np.isEmpty()) page = np;
+                else { next = o.optString("newStartPageToken", token); page = null; }
+            }
+            res.put("changed", changed); res.put("token", next); call.resolve(res);
+        } catch (Exception e) { call.reject(e.getMessage()); }
+    }
+
     @PluginMethod
     public void gdriveLink(PluginCall call) {
         try {
