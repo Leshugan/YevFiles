@@ -13,7 +13,7 @@ const THEMES = {
   light: { "--bg": "#EEF1F4", "--bar": "#FFFFFF", "--row2": "#E4E8EC", "--acc": "#2F80ED", "--accbg": "rgba(47,128,237,.14)", "--gold": "#2F80ED", "--red": "#D14343", "--txt": "#1E2329", "--ink": "#3D4754", "--sub": "#6B7280", "--line": "#D3D8DE", "--chip": "rgba(0,0,0,.05)", "--hair": "rgba(0,0,0,.08)", "--tgloff": "#C2C8D0" },
 };
 const DIR = Directory.ExternalStorage;
-const APP_VERSION = "fm-2026.07.08-ui";
+const APP_VERSION = "fm-2026.07.08-ios";
 const TKEY = "fm_tabs_v1", SKEY = "fm_startup_v1", METAKEY = "fm_meta_v1", SORTKEY = "fm_sort_v1";
 const DEFKEY = "fm_defaults_v1", HIDEKEY = "fm_hideapps_v1", ICONKEY = "fm_foldericons_v1", ORDERKEY = "fm_menuorder_v1";
 const loadMap = (k) => { try { return JSON.parse(ls.get(k)) || {}; } catch { return {}; } };
@@ -983,24 +983,26 @@ export default function App() {
   const onTM = (e) => { const dx = e.touches[0].clientX - sx.current, dy = e.touches[0].clientY - sy.current; if (!swiped.current && Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy) * 1.3) { swiped.current = true; switchTab(dx > 0 ? -1 : 1); } };
   const tabRefs = useRef([]);
   const [tabDragId, setTabDragId] = useState(null);
-  const tabDrag = useRef({ pid: null, from: -1, to: -1, startX: 0, startY: 0, rects: [], gap: 6, active: false, moved: false });
-  const tabLp = useRef(null);
+  const tabDrag = useRef({ pid: null, from: -1, to: -1, startX: 0, startY: 0, rects: [], gap: 6, active: false });
   const clearTabDrag = () => { tabRefs.current.forEach((el) => { if (el) el.style.transform = ""; }); };
+  const beginTabDrag = () => {
+    const d = tabDrag.current;
+    d.rects = tabRefs.current.map((el) => (el ? el.getBoundingClientRect() : null));
+    d.active = true; d.to = d.from; buzz(12); setTabDragId(tabs[d.from].id);
+    try { const el = tabRefs.current[d.from]; el && el.setPointerCapture(d.pid); } catch {}
+  };
   const onTabDown = (ev, i) => {
     const d = tabDrag.current;
-    d.pid = ev.pointerId; d.from = i; d.to = i; d.startX = ev.clientX; d.startY = ev.clientY; d.active = false; d.moved = false;
-    const tgt = ev.currentTarget;
-    clearTimeout(tabLp.current);
-    tabLp.current = setTimeout(() => {
-      if (d.moved || d.from < 0) return;
-      d.rects = tabRefs.current.map((el) => (el ? el.getBoundingClientRect() : null));
-      d.active = true; d.to = i; buzz(15); setTabDragId(tabs[i].id);
-      try { tgt.setPointerCapture(d.pid); } catch {}
-    }, 300);
+    d.pid = ev.pointerId; d.from = i; d.to = i; d.startX = ev.clientX; d.startY = ev.clientY; d.active = false;
   };
   const onTabMove = (ev) => {
     const d = tabDrag.current; if (d.from < 0) return;
-    if (!d.active) { if (Math.abs(ev.clientX - d.startX) > 8 || Math.abs(ev.clientY - d.startY) > 8) { d.moved = true; clearTimeout(tabLp.current); } return; }
+    if (!d.active) {
+      const adx = Math.abs(ev.clientX - d.startX), ady = Math.abs(ev.clientY - d.startY);
+      if (adx > 6 && adx >= ady) beginTabDrag();
+      else if (ady > 10 && ady > adx) { d.from = -1; return; }
+      else return;
+    }
     ev.preventDefault();
     const rf = d.rects[d.from]; if (!rf) return;
     const dx = ev.clientX - d.startX;
@@ -1012,7 +1014,7 @@ export default function App() {
     const span = rf.width + d.gap;
     for (let j = 0; j < d.rects.length; j++) {
       const el = tabRefs.current[j]; if (!el) continue;
-      if (j === d.from) { el.style.transform = "translateX(" + dx + "px) scale(1.06)"; continue; }
+      if (j === d.from) { el.style.transform = "translateX(" + dx + "px)"; continue; }
       let t = 0;
       if (d.from < to && j > d.from && j <= to) t = -span;
       else if (to < d.from && j >= to && j < d.from) t = span;
@@ -1021,7 +1023,6 @@ export default function App() {
   };
   const onTabUp = (i) => {
     const d = tabDrag.current;
-    clearTimeout(tabLp.current);
     try { if (d.pid != null && tabRefs.current[d.from]) tabRefs.current[d.from].releasePointerCapture(d.pid); } catch {}
     if (d.active) {
       const from = d.from, to = d.to;
@@ -1033,7 +1034,7 @@ export default function App() {
     const dir = i > active ? 1 : i < active ? -1 : 0; if (dir) { setSlide(dir); setTimeout(() => setSlide(0), 300); }
     setActive(i);
   };
-  const onTabCancel = () => { const d = tabDrag.current; clearTimeout(tabLp.current); d.active = false; d.from = -1; clearTabDrag(); setTabDragId(null); };
+  const onTabCancel = () => { const d = tabDrag.current; d.active = false; d.from = -1; clearTabDrag(); setTabDragId(null); };
 
   const saveAllTabs = () => { setTabsMenu(false); const t = tabs.map((x) => ({ ...x, saved: true })); persist(t); showToast("Вкладки сохранены"); };
   const startupHere = () => { setTabsMenu(false); const t = tabs.map((x, i) => ({ ...x, startup: i === active, startupPath: i === active ? path : x.startupPath, saved: i === active ? true : x.saved })); persist(t); showToast("Запуск при открытии: " + (path ? baseName(path) : "Storage")); };
@@ -1230,7 +1231,7 @@ export default function App() {
           {tabs.map((t, i) => (
             <div key={t.id} ref={(el) => (tabRefs.current[i] = el)}
               onPointerDown={(ev) => onTabDown(ev, i)} onPointerMove={onTabMove} onPointerUp={() => onTabUp(i)} onPointerCancel={onTabCancel}
-              style={{ ...S.tab, ...(i === active ? S.tabActive : {}), touchAction: tabDragId ? "none" : "auto", transition: t.id === tabDragId ? "none" : (tabDragId ? "transform .16s cubic-bezier(.2,.9,.3,1)" : "box-shadow .15s"), ...(t.id === tabDragId ? { zIndex: 6, position: "relative", boxShadow: "0 10px 24px rgba(0,0,0,.5)" } : (tabDragId ? { opacity: 0.5 } : {})) }}>
+              style={{ ...S.tab, ...(i === active ? S.tabActive : {}), touchAction: "pan-y", transition: t.id === tabDragId ? "none" : (tabDragId ? "transform .18s cubic-bezier(.2,.8,.2,1)" : "box-shadow .2s"), ...(t.id === tabDragId ? { zIndex: 6, position: "relative", boxShadow: "0 6px 16px rgba(0,0,0,.28)" } : (tabDragId ? { opacity: 0.6 } : {})) }}>
               <span style={{ overflow: "hidden", textOverflow: "ellipsis", maxWidth: 130 }}>{t.src ? t.src.stack[t.src.stack.length - 1].name : (t.path ? baseName(t.path) : "Storage")}</span>
             </div>
           ))}
@@ -2254,12 +2255,12 @@ function Btn({ onClick, icon, text, label, accent, red, flexNone, disabled }) {
 
 const S = {
   app: { position: "relative", display: "flex", flexDirection: "column", height: "100vh", background: BG, color: TXT, fontFamily: "system-ui,-apple-system,Roboto,sans-serif", overflow: "hidden" },
-  tabsbar: { display: "flex", alignItems: "center", background: "linear-gradient(180deg, rgba(255,255,255,.06), rgba(0,0,0,.05)), var(--bar)", flexShrink: 0, height: 50, margin: "8px 8px 6px", borderRadius: 24, border: "1px solid var(--hair)", boxShadow: "0 1px 0 rgba(255,255,255,.1) inset, 0 -1px 0 rgba(0,0,0,.15) inset, 0 10px 24px -12px rgba(0,0,0,.7)" },
+  tabsbar: { display: "flex", alignItems: "center", background: "var(--bar)", flexShrink: 0, height: 50, margin: "8px 8px 6px", borderRadius: 22, border: "1px solid var(--hair)", boxShadow: "inset 0 0.5px 0 rgba(255,255,255,.14), 0 6px 20px rgba(0,0,0,.18)" },
   tabs: { display: "flex", overflowX: "auto", flex: 1, alignItems: "center", justifyContent: "center", gap: 6, padding: "0 4px", height: "100%" },
   tab: { display: "flex", alignItems: "center", gap: 6, padding: "0 12px", height: 34, borderRadius: 17, fontSize: 13.5, color: SUB, whiteSpace: "nowrap", background: "var(--chip)", flexShrink: 0, border: "1px solid transparent" },
   tabActive: { color: ACC, background: "var(--accbg)", border: "1px solid " + ACC, fontWeight: 600, boxShadow: "0 0 0 1px var(--accbg), 0 2px 8px var(--accbg)" },
   tabX: { fontSize: 17, color: SUB, padding: "0 2px" },
-  hbtn: { border: "1px solid var(--hair)", background: "linear-gradient(180deg, rgba(255,255,255,.08), rgba(0,0,0,.06)), var(--chip)", color: TXT, width: 36, height: 36, borderRadius: 18, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: 0, boxShadow: "0 1px 0 rgba(255,255,255,.12) inset, 0 2px 6px rgba(0,0,0,.28)" },
+  hbtn: { border: "none", background: "rgba(120,120,128,.16)", color: TXT, width: 34, height: 34, borderRadius: 17, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: 0 },
   crumb: { position: "relative", zIndex: 6, height: 30, display: "flex", alignItems: "center", padding: "0 16px", fontSize: 12.5, background: "transparent", flexShrink: 0, overflow: "visible", whiteSpace: "nowrap" },
   list: { flex: 1, overflowY: "auto", overflowX: "hidden", display: "flex", flexDirection: "column" },
   slideWrap: { display: "flex", flexDirection: "column" },
@@ -2288,7 +2289,7 @@ const S = {
   searchBar: { display: "flex", alignItems: "center", background: ROW2, padding: 8, gap: 8, flexShrink: 0 },
   searchInput: { flex: 1, padding: "10px 12px", borderRadius: 8, border: "1px solid " + LINE, background: BAR, color: TXT, fontSize: 15, outline: "none" },
   searchClose: { border: "none", background: "transparent", color: SUB, fontSize: 24, width: 40 },
-  bottom: { display: "flex", alignItems: "center", background: "linear-gradient(180deg, rgba(255,255,255,.06), rgba(0,0,0,.05)), var(--bar)", flexShrink: 0, borderRadius: 26, margin: "4px 8px calc(8px + env(safe-area-inset-bottom))", border: "1px solid var(--hair)", boxShadow: "0 1px 0 rgba(255,255,255,.1) inset, 0 -1px 0 rgba(0,0,0,.15) inset, 0 10px 26px -12px rgba(0,0,0,.7)" },
+  bottom: { display: "flex", alignItems: "center", background: "var(--bar)", flexShrink: 0, borderRadius: 24, margin: "4px 8px calc(8px + env(safe-area-inset-bottom))", border: "1px solid var(--hair)", boxShadow: "inset 0 0.5px 0 rgba(255,255,255,.14), 0 6px 20px rgba(0,0,0,.18)" },
   btn: { border: "none", background: "transparent", padding: "6px 6px 7px", display: "flex", flexDirection: "column", alignItems: "center", gap: 2 },
   selCount: { width: 22, height: 22, borderRadius: 11, background: ACC, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0, lineHeight: 0 },
   btnLabel: { fontSize: 10, color: SUB, whiteSpace: "nowrap" },
