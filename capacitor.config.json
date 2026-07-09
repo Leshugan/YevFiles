@@ -1,8 +1,0 @@
-{
-  "appId": "leshugan.fm",
-  "appName": "YevFiles",
-  "webDir": "dist",
-  "android": {
-    "allowMixedContent": false
-  }
-}
