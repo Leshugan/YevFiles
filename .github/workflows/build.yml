@@ -38,16 +38,23 @@ jobs:
           done
           shopt -u dotglob
           rm -rf _extracted
+          rm -f YevFiles-main.zip
           echo "=== корень после распаковки ===" && ls -la
 
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
+          cache: "npm"
 
       - uses: actions/setup-java@v4
         with:
           distribution: "temurin"
           java-version: "17"
+
+      - name: Кэш Gradle (дистрибутив + зависимости — главный ускоритель)
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
 
       - name: Install dependencies
         run: npm install
@@ -139,7 +146,7 @@ jobs:
         working-directory: android
         run: |
           chmod +x ./gradlew
-          ./gradlew assembleRelease \
+          ./gradlew assembleRelease --build-cache \
             -Pandroid.injected.signing.store.file="$GITHUB_WORKSPACE/uc.jks" \
             -Pandroid.injected.signing.store.password="updatechecker" \
             -Pandroid.injected.signing.key.alias="uc" \
