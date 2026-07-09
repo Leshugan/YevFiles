@@ -44,6 +44,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
+          cache: "npm"
 
       - uses: actions/setup-java@v4
         with:
@@ -54,14 +55,6 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           cache-read-only: false
-
-      - name: Кэш npm
-        uses: actions/cache@v4
-        with:
-          path: ~/.npm
-          key: npm-${{ runner.os }}-${{ hashFiles('package.json') }}
-          restore-keys: |
-            npm-${{ runner.os }}-
 
       - name: Install dependencies
         run: npm install
@@ -75,6 +68,12 @@ jobs:
           rm -f capacitor.config.ts # на всякий случай убрать старый TS-конфиг (в архиве только JSON)
           npx cap add android
           npx cap copy android      # принудительно скопировать свежий web-бандл (dist) в ассеты
+          {
+            echo "org.gradle.caching=true"
+            echo "org.gradle.parallel=true"
+            echo "org.gradle.configureondemand=true"
+            echo "org.gradle.jvmargs=-Xmx3072m -Dfile.encoding=UTF-8"
+          } >> android/gradle.properties
           # zip4j — для архивов с паролем
           GR=android/app/build.gradle
           if ! grep -q "zip4j" "$GR"; then
