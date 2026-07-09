@@ -153,7 +153,7 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: files-apk
+          name: Compiled_YevFiles
           path: android/app/build/outputs/apk/release/*.apk
 
   cleanup:
