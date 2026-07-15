@@ -1,8 +1,12 @@
 name: Build APK
+run-name: "🔨 Сборка APK YevFiles"
 
 on:
   push:
-    branches: [main]
+    branches: [main, master]
+    paths:
+      - '*.zip'
+      - '.github/workflows/build.yml'
   workflow_dispatch:
 
 concurrency:
@@ -22,13 +26,15 @@ jobs:
       - name: Распаковать архив проекта в корень
         run: |
           set -e
-          # В корне репозитория лежит только этот workflow + YevFiles-main.zip.
-          # Распаковываем архив и раскладываем содержимое в корень (кроме .github).
-          if [ ! -f YevFiles-main.zip ]; then
-            echo "ОШИБКА: нет YevFiles-main.zip в корне репозитория."; exit 1
+          # В корне репозитория лежит только этот workflow + архив проекта (*.zip, имя любое).
+          ARCH=$(ls *.zip 2>/dev/null | head -1)
+          if [ -z "$ARCH" ]; then
+            echo "::error::Не найден архив проекта (*.zip) в корне репозитория"; exit 1
           fi
-          unzip -o -q YevFiles-main.zip -d _extracted
-          if [ -d _extracted/YevFiles-main ]; then SRC=_extracted/YevFiles-main; else SRC=_extracted; fi
+          echo "Распаковываю $ARCH"
+          unzip -o -q "$ARCH" -d _extracted
+          INNER=$(find _extracted -maxdepth 1 -mindepth 1 -type d | head -1)
+          if [ -n "$INNER" ] && [ -f "$INNER/package.json" ]; then SRC="$INNER"; else SRC=_extracted; fi
           shopt -s dotglob
           for item in "$SRC"/*; do
             name=$(basename "$item")
@@ -38,7 +44,8 @@ jobs:
           done
           shopt -u dotglob
           rm -rf _extracted
-          rm -f YevFiles-main.zip
+          rm -f "$ARCH"
+          if [ ! -f package.json ]; then echo "::error::В архиве нет package.json — не тот архив?"; exit 1; fi
           echo "=== корень после распаковки ===" && ls -la
 
       - uses: actions/setup-node@v4
@@ -64,6 +71,7 @@ jobs:
 
       - name: Add Android platform
         run: |
+          set -e
           rm -rf android            # снести любую старую платформу — иначе cap add пропустит свежую сборку
           rm -f capacitor.config.ts # на всякий случай убрать старый TS-конфиг (в архиве только JSON)
           npx cap add android
@@ -92,6 +100,7 @@ jobs:
 
       - name: Add Android permissions
         run: |
+          set -e
           MAN=android/app/src/main/AndroidManifest.xml
           if ! grep -q "MANAGE_EXTERNAL_STORAGE" "$MAN"; then
             sed -i 's#<application#<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />\n    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />\n    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />\n    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />\n    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />\n    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />\n    <uses-permission android:name="android.permission.VIBRATE" />\n    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />\n    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />\n    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />\n    <uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.WRITE_SETTINGS" />\n\n    <application#' "$MAN"
@@ -125,6 +134,7 @@ jobs:
 
       - name: Install native Apps plugin
         run: |
+          set -e
           PKG=android/app/src/main/java/leshugan/fm
           mkdir -p "$PKG" android/app/src/main/res/xml
           cp native/AppsPlugin.java "$PKG/AppsPlugin.java"
@@ -150,20 +160,32 @@ jobs:
             -Pandroid.injected.signing.key.alias="uc" \
             -Pandroid.injected.signing.key.password="updatechecker"
 
-      - name: Publish APK to release
+      - name: Upload APK (артефакт)
+        id: upload_artifact
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: YevFiles_Compiled
+          path: android/app/build/outputs/apk/release/*.apk
+          retention-days: 5
+
+      - name: Выложить APK в релиз (если квота артефактов исчерпана)
+        if: steps.upload_artifact.outcome == 'failure'
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
         run: |
+          set -e
           APK=$(ls android/app/build/outputs/apk/release/*.apk | head -1)
-          echo "APK: $APK"
-          TAG="apk-latest"
+          TAG=apk-latest
+          NOTES="Автосборка #${{ github.run_number }} от $(date -u +'%Y-%m-%d %H:%M UTC') — выложено в релиз, т.к. квота артефактов исчерпана."
           if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
-            gh release upload "$TAG" "$APK" --repo "$REPO" --clobber
+            gh release edit "$TAG" --repo "$REPO" --notes "$NOTES"
           else
-            gh release create "$TAG" "$APK" --repo "$REPO" --title "Compiled_YevFiles" --notes "Свежесобранный APK (обновляется каждой сборкой)"
+            gh release create "$TAG" --repo "$REPO" --title "YevFiles_Compiled" --notes "$NOTES"
           fi
-          echo "Готово: релиз '$TAG', ассет $(basename "$APK")"
+          gh release upload "$TAG" "$APK" --repo "$REPO" --clobber
+          echo "::notice::Квота артефактов исчерпана — APK в релизе $TAG"
 
   cleanup:
     needs: build
