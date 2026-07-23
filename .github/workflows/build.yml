@@ -194,14 +194,14 @@ jobs:
     permissions:
       actions: write
     steps:
-      - name: Delete old runs and APKs (keep last 3 successful)
+      - name: Delete old runs and APKs (keep last 10 successful)
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
         run: |
           WF=build.yml
-          echo "Оставляем 3 последних успешных запуска:"
-          KEEP=$(gh run list --repo "$REPO" --workflow "$WF" --status success --limit 3 --json databaseId --jq '.[].databaseId')
+          echo "Оставляем 10 последних успешных запусков:"
+          KEEP=$(gh run list --repo "$REPO" --workflow "$WF" --status success --limit 10 --json databaseId --jq '.[].databaseId')
           echo "$KEEP"
           echo "Удаляем остальные запуски и их APK:"
           gh run list --repo "$REPO" --workflow "$WF" --limit 300 --json databaseId --jq '.[].databaseId' | while read -r id; do
