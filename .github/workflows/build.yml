@@ -82,12 +82,12 @@ jobs:
             echo "org.gradle.configureondemand=true"
             echo "org.gradle.jvmargs=-Xmx3072m -Dfile.encoding=UTF-8"
           } >> android/gradle.properties
-          # zip4j — для архивов с паролем
+          # zip4j — для архивов с паролем, junrar — для RAR
           GR=android/app/build.gradle
           if ! grep -q "zip4j" "$GR"; then
-            sed -i "0,/dependencies {/s//dependencies {\n    implementation 'net.lingala.zip4j:zip4j:2.11.5'/" "$GR"
+            sed -i "0,/dependencies {/s//dependencies {\n    implementation 'net.lingala.zip4j:zip4j:2.11.5'\n    implementation 'com.github.junrar:junrar:7.5.5'/" "$GR"
           fi
-          grep -n "zip4j" "$GR" || true
+          grep -n "zip4j\|junrar" "$GR" || true
 
       - name: Generate app icons
         run: |
