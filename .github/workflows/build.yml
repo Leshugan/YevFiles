@@ -164,10 +164,10 @@ jobs:
           set -e
           PKG=android/app/src/main/java/leshugan/fm
           mkdir -p "$PKG" android/app/src/main/res/xml
-          cp native/AppsPlugin.java "$PKG/AppsPlugin.java"
-          cp native/AppsFileProvider.java "$PKG/AppsFileProvider.java"
-          cp native/MainActivity.java "$PKG/MainActivity.java"
-          cp native/YevDocumentsProvider.java "$PKG/YevDocumentsProvider.java"
+          # копируем ВСЕ java из native/ — чтобы новые файлы не приходилось вписывать сюда руками
+          for f in native/*.java; do
+            cp "$f" "$PKG/$(basename "$f")"
+          done
           cp native/apps_file_paths.xml android/app/src/main/res/xml/apps_file_paths.xml
           # переопределяем пути провайдера Capacitor (.fileprovider) на наши (весь storage),
           # чтобы редактор/шаринг получали доступ к любым путям через уже зарегистрированный провайдер
