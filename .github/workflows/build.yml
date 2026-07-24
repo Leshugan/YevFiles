@@ -85,7 +85,7 @@ jobs:
           # zip4j — для архивов с паролем, junrar — для RAR
           GR=android/app/build.gradle
           if ! grep -q "zip4j" "$GR"; then
-            sed -i "0,/dependencies {/s//dependencies {\n    implementation 'net.lingala.zip4j:zip4j:2.11.5'\n    implementation 'com.github.junrar:junrar:7.5.5'\n    implementation 'androidx.exifinterface:exifinterface:1.3.7'/" "$GR"
+            sed -i "0,/dependencies {/s//dependencies {\n    implementation 'net.lingala.zip4j:zip4j:2.11.5'\n    implementation 'com.github.junrar:junrar:7.5.5'\n    implementation 'androidx.exifinterface:exifinterface:1.3.7'\n    implementation 'dev.rikka.shizuku:api:13.1.5'\n    implementation 'dev.rikka.shizuku:provider:13.1.5'/" "$GR"
           fi
           grep -n "zip4j\|junrar" "$GR" || true
 
@@ -131,6 +131,25 @@ jobs:
           fi
           echo "----- manifest -----"
           grep -E "uses-permission|requestLegacy|appsfp|YevDocuments|action.SEND|yevview" "$MAN" || true
+
+      - name: Wire Shizuku (aidl + провайдер)
+        run: |
+          set -e
+          PKGDIR=android/app/src/main
+          mkdir -p "$PKGDIR/aidl/leshugan/fm"
+          cp native/IYevShizuku.aidl "$PKGDIR/aidl/leshugan/fm/"
+          GR=android/app/build.gradle
+          # AGP 8 требует явного включения AIDL
+          if ! grep -q "aidl true" "$GR"; then
+            sed -i "0,/^android {/{s//android {\n    buildFeatures { aidl true }/}" "$GR"
+          fi
+          # провайдер Shizuku в манифест
+          MAN="$PKGDIR/AndroidManifest.xml"
+          if ! grep -q "ShizukuProvider" "$MAN"; then
+            sed -i "s#</application>#    <provider android:name=\"rikka.shizuku.ShizukuProvider\" android:authorities=\"leshugan.fm.shizuku\" android:multiprocess=\"false\" android:enabled=\"true\" android:exported=\"true\" android:permission=\"android.permission.INTERACT_ACROSS_USERS_FULL\" />\n    </application>#" "$MAN"
+          fi
+          grep -n "aidl true" "$GR" || true
+          grep -n "ShizukuProvider" "$MAN" || true
 
       - name: Install native Apps plugin
         run: |
