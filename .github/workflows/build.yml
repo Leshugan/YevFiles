@@ -85,7 +85,7 @@ jobs:
           # zip4j — для архивов с паролем, junrar — для RAR
           GR=android/app/build.gradle
           if ! grep -q "zip4j" "$GR"; then
-            sed -i "0,/dependencies {/s//dependencies {\n    implementation 'net.lingala.zip4j:zip4j:2.11.5'\n    implementation 'com.github.junrar:junrar:7.5.5'/" "$GR"
+            sed -i "0,/dependencies {/s//dependencies {\n    implementation 'net.lingala.zip4j:zip4j:2.11.5'\n    implementation 'com.github.junrar:junrar:7.5.5'\n    implementation 'androidx.exifinterface:exifinterface:1.3.7'/" "$GR"
           fi
           grep -n "zip4j\|junrar" "$GR" || true
 
