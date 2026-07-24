@@ -151,7 +151,7 @@ jobs:
             sed -i "0,/<manifest /{s##<manifest xmlns:tools=\"http://schemas.android.com/tools\" #}" "$MAN"
           fi
           if ! grep -q "overrideLibrary" "$MAN"; then
-            sed -i "0,/<application/{s##<uses-sdk tools:overrideLibrary=\"rikka.shizuku.provider,rikka.shizuku.api,rikka.shizuku.aidl\" />\n\n    <application#}" "$MAN"
+            sed -i "0,/<application/{s##<uses-sdk tools:overrideLibrary=\"rikka.shizuku.provider,rikka.shizuku.api,rikka.shizuku.shared,rikka.shizuku.aidl,rikka.sui\" />\n\n    <application#}" "$MAN"
           fi
           if ! grep -q "ShizukuProvider" "$MAN"; then
             sed -i "s#</application>#    <provider android:name=\"rikka.shizuku.ShizukuProvider\" android:authorities=\"leshugan.fm.shizuku\" android:multiprocess=\"false\" android:enabled=\"true\" android:exported=\"true\" android:permission=\"android.permission.INTERACT_ACROSS_USERS_FULL\" />\n    </application>#" "$MAN"
