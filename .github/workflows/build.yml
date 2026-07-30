@@ -82,10 +82,12 @@ jobs:
             echo "org.gradle.configureondemand=true"
             echo "org.gradle.jvmargs=-Xmx3072m -Dfile.encoding=UTF-8"
           } >> android/gradle.properties
-          # версия приложения (релиз)
+          # версия приложения из package.json: versionName = X.YYY, versionCode = XYYY
+          VER=$(node -p "require('./package.json').version" 2>/dev/null || echo "1.001")
+          VCODE=$(echo "$VER" | tr -d '.')
           GRV=android/app/build.gradle
-          sed -i -E "s/versionCode [0-9]+/versionCode 100/" "$GRV"
-          sed -i -E "s/versionName \"[^\"]*\"/versionName \"1.0\"/" "$GRV"
+          sed -i -E "s/versionCode [0-9]+/versionCode $VCODE/" "$GRV"
+          sed -i -E "s/versionName \"[^\"]*\"/versionName \"$VER\"/" "$GRV"
           grep -nE "versionCode|versionName" "$GRV" || true
           # zip4j — для архивов с паролем, junrar — для RAR
           GR=android/app/build.gradle
