@@ -82,10 +82,15 @@ jobs:
             echo "org.gradle.configureondemand=true"
             echo "org.gradle.jvmargs=-Xmx3072m -Dfile.encoding=UTF-8"
           } >> android/gradle.properties
+          # версия приложения (релиз)
+          GRV=android/app/build.gradle
+          sed -i -E "s/versionCode [0-9]+/versionCode 100/" "$GRV"
+          sed -i -E "s/versionName \"[^\"]*\"/versionName \"1.0\"/" "$GRV"
+          grep -nE "versionCode|versionName" "$GRV" || true
           # zip4j — для архивов с паролем, junrar — для RAR
           GR=android/app/build.gradle
           if ! grep -q "zip4j" "$GR"; then
-            sed -i "0,/dependencies {/s//dependencies {\n    implementation 'net.lingala.zip4j:zip4j:2.11.5'\n    implementation 'com.github.junrar:junrar:7.5.5'\n    implementation 'androidx.exifinterface:exifinterface:1.3.7'\n    implementation 'dev.rikka.shizuku:api:13.1.5'\n    implementation 'dev.rikka.shizuku:provider:13.1.5'/" "$GR"
+            sed -i "0,/dependencies {/s//dependencies {\n    implementation 'net.lingala.zip4j:zip4j:2.11.5'\n    implementation 'com.github.junrar:junrar:7.5.5'\n    implementation 'androidx.exifinterface:exifinterface:1.3.7'\n    implementation 'androidx.documentfile:documentfile:1.0.1'\n    implementation 'dev.rikka.shizuku:api:13.1.5'\n    implementation 'dev.rikka.shizuku:provider:13.1.5'/" "$GR"
           fi
           grep -n "zip4j\|junrar" "$GR" || true
 
