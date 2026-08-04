@@ -194,6 +194,15 @@ jobs:
             -Pandroid.injected.signing.key.alias="uc" \
             -Pandroid.injected.signing.key.password="updatechecker"
 
+      - name: Переименовать APK по версии
+        run: |
+          set -e
+          VER=$(node -p "require('./package.json').version" 2>/dev/null || echo "dev")
+          DIR=android/app/build/outputs/apk/release
+          SRC=$(ls "$DIR"/*.apk | head -1)
+          mv "$SRC" "$DIR/YevFiles $VER.apk"
+          ls -la "$DIR"
+
       - name: Upload APK (артефакт)
         id: upload_artifact
         continue-on-error: true
