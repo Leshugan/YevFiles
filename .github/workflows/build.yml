@@ -120,6 +120,15 @@ jobs:
           if ! grep -q "appsfp" "$MAN"; then
             sed -i 's#</application>#    <provider android:name="leshugan.fm.AppsFileProvider" android:authorities="${applicationId}.appsfp" android:exported="false" android:grantUriPermissions="true"><meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/apps_file_paths" /></provider>\n    </application>#' "$MAN"
           fi
+          # локальный поток на 127.0.0.1 идёт по http — разрешаем нешифрованный трафик
+          grep -q 'usesCleartextTraffic' "$MAN" || sed -i 's#<application #<application android:usesCleartextTraffic="true" #' "$MAN"
+          # Служба переднего плана для долгих операций
+          if ! grep -q "leshugan.fm.OpService" "$MAN"; then
+            sed -i 's#</application>#    <service android:name="leshugan.fm.OpService" android:exported="false" android:foregroundServiceType="dataSync" />\n    </application>#' "$MAN"
+          fi
+          for P in FOREGROUND_SERVICE FOREGROUND_SERVICE_DATA_SYNC; do
+            grep -q "android.permission.$P" "$MAN" || sed -i "s#<application#<uses-permission android:name=\"android.permission.$P\" />\n    <application#" "$MAN"
+          done
           # DocumentsProvider — приложение в системных пикерах "Сохранить в..." / "Открыть"
           if ! grep -q "YevDocumentsProvider" "$MAN"; then
             sed -i 's#</application>#    <provider android:name="leshugan.fm.YevDocumentsProvider" android:authorities="${applicationId}.documents" android:exported="true" android:grantUriPermissions="true" android:permission="android.permission.MANAGE_DOCUMENTS"><intent-filter><action android:name="android.content.action.DOCUMENTS_PROVIDER" /></intent-filter></provider>\n    </application>#' "$MAN"
