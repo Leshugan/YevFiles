@@ -173,6 +173,10 @@ jobs:
           if ! grep -q "overrideLibrary" "$MAN"; then
             sed -i "0,/<application/{s##<uses-sdk tools:overrideLibrary=\"rikka.shizuku.provider,rikka.shizuku.api,rikka.shizuku.shared,rikka.shizuku.aidl,rikka.sui\" />\n\n    <application#}" "$MAN"
           fi
+          # приложение должно предлагаться как «выбрать файл» в чужих приложениях
+          if ! grep -q "android.intent.action.GET_CONTENT" "$MAN"; then
+            sed -i "s#</activity>#    <intent-filter><action android:name=\"android.intent.action.GET_CONTENT\" /><category android:name=\"android.intent.category.DEFAULT\" /><category android:name=\"android.intent.category.OPENABLE\" /><data android:mimeType=\"*/*\" /></intent-filter>\n            <intent-filter><action android:name=\"android.intent.action.PICK\" /><category android:name=\"android.intent.category.DEFAULT\" /><data android:mimeType=\"*/*\" /></intent-filter>\n        </activity>#" "$MAN"
+          fi
           # без этого разрешения Shizuku всегда отвечает «не разрешено», и запрос не показывается
           if ! grep -q "moe.shizuku.manager.permission.API_V23" "$MAN"; then
             sed -i "0,/<application/{s##<uses-permission android:name=\"moe.shizuku.manager.permission.API_V23\" />\n\n    <application#}" "$MAN"
