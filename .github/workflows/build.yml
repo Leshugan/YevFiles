@@ -173,6 +173,10 @@ jobs:
           if ! grep -q "overrideLibrary" "$MAN"; then
             sed -i "0,/<application/{s##<uses-sdk tools:overrideLibrary=\"rikka.shizuku.provider,rikka.shizuku.api,rikka.shizuku.shared,rikka.shizuku.aidl,rikka.sui\" />\n\n    <application#}" "$MAN"
           fi
+          # без этого разрешения Shizuku всегда отвечает «не разрешено», и запрос не показывается
+          if ! grep -q "moe.shizuku.manager.permission.API_V23" "$MAN"; then
+            sed -i "0,/<application/{s##<uses-permission android:name=\"moe.shizuku.manager.permission.API_V23\" />\n\n    <application#}" "$MAN"
+          fi
           if ! grep -q "ShizukuProvider" "$MAN"; then
             sed -i "s#</application>#    <provider android:name=\"rikka.shizuku.ShizukuProvider\" android:authorities=\"leshugan.fm.shizuku\" android:multiprocess=\"false\" android:enabled=\"true\" android:exported=\"true\" android:permission=\"android.permission.INTERACT_ACROSS_USERS_FULL\" />\n    </application>#" "$MAN"
           fi
