@@ -137,6 +137,10 @@ jobs:
           if ! grep -q "android.intent.action.SEND" "$MAN"; then
             sed -i 's#</activity>#<intent-filter android:label="Сохранить в..."><action android:name="android.intent.action.SEND" /><category android:name="android.intent.category.DEFAULT" /><data android:mimeType="*/*" /></intent-filter><intent-filter android:label="Сохранить в..."><action android:name="android.intent.action.SEND_MULTIPLE" /><category android:name="android.intent.category.DEFAULT" /><data android:mimeType="*/*" /></intent-filter></activity>#' "$MAN"
           fi
+          # Пункт "Выбрать файл": приложение появляется в чужих окнах выбора файла
+          if ! grep -q "leshugan.fm.PickFile" "$MAN"; then
+            sed -i 's#</application>#<activity-alias android:name="leshugan.fm.PickFile" android:targetActivity="leshugan.fm.MainActivity" android:exported="true" android:label="Выбрать файл"><intent-filter><action android:name="android.intent.action.GET_CONTENT" /><category android:name="android.intent.category.DEFAULT" /><category android:name="android.intent.category.OPENABLE" /><data android:mimeType="*/*" /></intent-filter><intent-filter><action android:name="android.intent.action.PICK" /><category android:name="android.intent.category.DEFAULT" /><data android:mimeType="*/*" /></intent-filter></activity-alias></application>#' "$MAN"
+          fi
           # Один пункт "Открыть с помощью": иконка приложения + метка "Сохранить/Открыть"
           if ! grep -q "leshugan.fm.OpenSave" "$MAN"; then
             sed -i 's#</application>#<activity-alias android:name="leshugan.fm.OpenSave" android:targetActivity="leshugan.fm.MainActivity" android:exported="true" android:label="Взаимодействовать"><intent-filter><action android:name="android.intent.action.VIEW" /><action android:name="android.intent.action.EDIT" /><category android:name="android.intent.category.DEFAULT" /><data android:scheme="content" /><data android:mimeType="*/*" /></intent-filter></activity-alias></application>#' "$MAN"
@@ -150,7 +154,7 @@ jobs:
             sed -i 's#</activity>#<intent-filter><action android:name="android.intent.action.VIEW" /><category android:name="android.intent.category.DEFAULT" /><category android:name="android.intent.category.BROWSABLE" /><data android:scheme="com.googleusercontent.apps.589335091963-6n9ss077f7htshue4vd288eb2t2jduhb" /></intent-filter></activity>#' "$MAN"
           fi
           echo "----- manifest -----"
-          grep -E "uses-permission|requestLegacy|appsfp|YevDocuments|action.SEND|yevview" "$MAN" || true
+          grep -E "uses-permission|requestLegacy|appsfp|YevDocuments|action.SEND|PickFile|GET_CONTENT|yevview" "$MAN" || true
 
       - name: Wire Shizuku (aidl + провайдер)
         run: |
@@ -172,10 +176,6 @@ jobs:
           fi
           if ! grep -q "overrideLibrary" "$MAN"; then
             sed -i "0,/<application/{s##<uses-sdk tools:overrideLibrary=\"rikka.shizuku.provider,rikka.shizuku.api,rikka.shizuku.shared,rikka.shizuku.aidl,rikka.sui\" />\n\n    <application#}" "$MAN"
-          fi
-          # приложение должно предлагаться как «выбрать файл» в чужих приложениях
-          if ! grep -q "android.intent.action.GET_CONTENT" "$MAN"; then
-            sed -i "s#</activity>#    <intent-filter><action android:name=\"android.intent.action.GET_CONTENT\" /><category android:name=\"android.intent.category.DEFAULT\" /><category android:name=\"android.intent.category.OPENABLE\" /><data android:mimeType=\"*/*\" /></intent-filter>\n            <intent-filter><action android:name=\"android.intent.action.PICK\" /><category android:name=\"android.intent.category.DEFAULT\" /><data android:mimeType=\"*/*\" /></intent-filter>\n        </activity>#" "$MAN"
           fi
           # без этого разрешения Shizuku всегда отвечает «не разрешено», и запрос не показывается
           if ! grep -q "moe.shizuku.manager.permission.API_V23" "$MAN"; then
