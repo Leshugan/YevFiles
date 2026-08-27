@@ -161,6 +161,8 @@ jobs:
           fi
           echo "----- manifest -----"
           grep -E "uses-permission|requestLegacy|appsfp|YevDocuments|action.SEND|PickFile|GET_CONTENT|yevview" "$MAN" || true
+          echo "----- activity block -----"
+          sed -n '/<activity/,/<\/application>/p' "$MAN" | head -40
 
       - name: Wire Shizuku (aidl + провайдер)
         run: |
