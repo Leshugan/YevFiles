@@ -32,6 +32,7 @@ jobs:
             echo "::error::Не найден архив проекта (*.zip) в корне репозитория"; exit 1
           fi
           echo "Распаковываю $ARCH"
+          rm -f RELEASE.md          # признак релиза берём только из нового архива
           unzip -o -q "$ARCH" -d _extracted
           INNER=$(find _extracted -maxdepth 1 -mindepth 1 -type d | head -1)
           if [ -n "$INNER" ] && [ -f "$INNER/package.json" ]; then SRC="$INNER"; else SRC=_extracted; fi
@@ -235,6 +236,25 @@ jobs:
           SRC=$(ls "$DIR"/*.apk | head -1)
           mv "$SRC" "$DIR/YevFiles $VER.apk"
           ls -la "$DIR"
+
+      - name: Выложить релиз (если в архиве есть RELEASE.md)
+        if: hashFiles('RELEASE.md') != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -e
+          VER=$(node -p "require('./package.json').version" 2>/dev/null || echo "dev")
+          APK=$(ls android/app/build/outputs/apk/release/*.apk | head -1)
+          TAG="v$VER"
+          NOTES="Версия $VER · сборка #${{ github.run_number }} от $(date -u +'%Y-%m-%d %H:%M UTC')"
+          if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
+            gh release edit "$TAG" --repo "$REPO" --title "YevFiles $VER" --notes "$NOTES"
+          else
+            gh release create "$TAG" --repo "$REPO" --title "YevFiles $VER" --notes "$NOTES"
+          fi
+          gh release upload "$TAG" "$APK" --repo "$REPO" --clobber
+          echo "::notice::Релиз $TAG опубликован"
 
       - name: Upload APK (артефакт)
         id: upload_artifact
